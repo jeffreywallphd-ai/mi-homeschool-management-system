@@ -1,13 +1,30 @@
-﻿@page "/"
+@page "/"
+@rendermode InteractiveServer
+@using HomeschoolManager.Web.Services
+@inject NavigationManager Navigation
+@inject SessionState Session
 
 <PageTitle>Home</PageTitle>
 
-<h1>Homeschool Manager</h1>
+@if (Session.IsAuthenticated)
+{
+    <h1>Homeschool Manager</h1>
 
-<p class="lead">Local, parent-owned records for planning, evidence, grades, credits, and family-issued credentials.</p>
+    <p class="lead">Local, parent-owned records for planning, evidence, grades, credits, and family-issued credentials.</p>
 
-<section class="status-panel">
-    <h2>First setup slice</h2>
-    <p>Start by signing in as the parent/admin, then complete household, school, student, and school-year setup.</p>
-    <p>The Michigan checklist shows selected subject-area coverage areas. It does not certify legal compliance.</p>
-</section>
+    <section class="status-panel">
+        <h2>First setup slice</h2>
+        <p>Complete household, school, student, and school-year setup.</p>
+        <p>The Michigan checklist shows selected subject-area coverage areas. It does not certify legal compliance.</p>
+    </section>
+}
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && !Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+        }
+    }
+}

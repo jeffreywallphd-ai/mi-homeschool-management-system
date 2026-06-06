@@ -34,9 +34,20 @@ public sealed class RequirementService
     {
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
         return areas
-            .OrderBy(area => area.View)
+            .OrderBy(area => SourceOrder(area.View))
             .ThenBy(area => area.Name)
             .Select(area => new RequirementChecklistItem(area.Id, area.View, area.Name, area.GradeBand, area.RequiredOrRecommended))
             .ToArray();
+    }
+
+    private static int SourceOrder(string source)
+    {
+        return source switch
+        {
+            "Statutory" => 0,
+            "MDE Summary" => 1,
+            "MMC Reference" => 2,
+            _ => 99
+        };
     }
 }

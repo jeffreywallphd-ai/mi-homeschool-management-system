@@ -47,6 +47,7 @@ Domain behavior is defined by:
 - [Glossary](domain/glossary.md)
 - [Homeschool Record Lifecycle](domain/homeschool-record-lifecycle.md)
 - [Curriculum Planning Rules](domain/curriculum-planning-rules.md)
+- [Course Pack Rules](domain/course-pack-rules.md)
 - [Instruction and Activity Record Rules](domain/instruction-and-activity-record-rules.md)
 - [Assessment and Grading Rules](domain/assessment-and-grading-rules.md)
 - [Credits and Graduation Rules](domain/credits-and-graduation-rules.md)

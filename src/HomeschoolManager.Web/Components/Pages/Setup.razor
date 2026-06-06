@@ -38,61 +38,81 @@ else
 
     <section class="form-section">
         <h2>Household</h2>
-        <label class="form-label" for="household-name">Household name</label>
+        <label class="form-label" for="household-name">Household name <span class="required-marker">*</span></label>
         <input id="household-name" class="form-control" @bind="household.HouseholdName" />
-        <label class="form-label" for="parent-name">Parent/guardian name</label>
+        @ValidationFor("household.HouseholdName")
+        <label class="form-label" for="parent-name">Parent/guardian name <span class="required-marker">*</span></label>
         <input id="parent-name" class="form-control" @bind="household.ParentGuardianName" />
+        @ValidationFor("household.ParentGuardianName")
         <button class="btn btn-primary mt-2" @onclick="SaveHousehold">Save household</button>
     </section>
 
     <section class="form-section">
         <h2>School profile</h2>
-        <label class="form-label" for="school-name">School name</label>
+        <label class="form-label" for="school-name">School name <span class="required-marker">*</span></label>
         <input id="school-name" class="form-control" @bind="school.SchoolName" />
-        <label class="form-label" for="administrator-name">Administrator parent name</label>
+        @ValidationFor("school.SchoolName")
+        <label class="form-label" for="administrator-name">Administrator parent name <span class="required-marker">*</span></label>
         <input id="administrator-name" class="form-control" @bind="school.AdministratorParentName" />
-        <label class="form-label" for="jurisdiction">Jurisdiction</label>
+        @ValidationFor("school.AdministratorParentName")
+        <label class="form-label" for="jurisdiction">Jurisdiction <span class="required-marker">*</span></label>
         <input id="jurisdiction" class="form-control" @bind="school.Jurisdiction" />
-        <label class="form-label" for="start-date">Homeschool start date</label>
+        @ValidationFor("school.Jurisdiction")
+        <label class="form-label" for="start-date">Homeschool start date <span class="required-marker">*</span></label>
         <input id="start-date" class="form-control" type="date" @bind="school.HomeschoolStartDate" />
-        <label class="form-label" for="basis">Operating basis</label>
+        @ValidationFor("school.HomeschoolStartDate")
+        <label class="form-label" for="basis">Operating basis <span class="required-marker">*</span></label>
         <input id="basis" class="form-control" @bind="school.OperatingBasis" />
-        <label class="form-label" for="signature">Diploma signature name</label>
+        @ValidationFor("school.OperatingBasis")
+        <label class="form-label" for="signature">Diploma signature name <span class="required-marker">*</span></label>
         <input id="signature" class="form-control" @bind="school.DiplomaSignatureName" />
-        <label class="form-label" for="city">Diploma issue city</label>
+        @ValidationFor("school.DiplomaSignatureName")
+        <label class="form-label" for="city">Diploma issue city <span class="required-marker">*</span></label>
         <input id="city" class="form-control" @bind="school.DiplomaIssueCity" />
-        <label class="form-label" for="state">Diploma issue state</label>
+        @ValidationFor("school.DiplomaIssueCity")
+        <label class="form-label" for="state">Diploma issue state <span class="required-marker">*</span></label>
         <input id="state" class="form-control" @bind="school.DiplomaIssueState" />
+        @ValidationFor("school.DiplomaIssueState")
         <button class="btn btn-primary mt-2" @onclick="SaveSchool">Save school profile</button>
     </section>
 
     <section class="form-section">
         <h2>Student</h2>
-        <label class="form-label" for="first-name">First name</label>
+        <label class="form-label" for="first-name">First name <span class="required-marker">*</span></label>
         <input id="first-name" class="form-control" @bind="student.FirstName" />
-        <label class="form-label" for="last-name">Last name</label>
+        @ValidationFor("student.FirstName")
+        <label class="form-label" for="last-name">Last name <span class="required-marker">*</span></label>
         <input id="last-name" class="form-control" @bind="student.LastName" />
-        <label class="form-label" for="grade-level">Grade level</label>
+        @ValidationFor("student.LastName")
+        <label class="form-label" for="grade-level">Grade level <span class="required-marker">*</span></label>
         <input id="grade-level" class="form-control" type="number" min="0" max="12" @bind="student.GradeLevel" />
+        @ValidationFor("student.GradeLevel")
         <button class="btn btn-primary mt-2" @onclick="SaveStudent">Save student</button>
     </section>
 
     <section class="form-section">
         <h2>School year</h2>
-        <label class="form-label" for="year-name">School year name</label>
+        <label class="form-label" for="year-name">School year name <span class="required-marker">*</span></label>
         <input id="year-name" class="form-control" @bind="year.Name" />
-        <label class="form-label" for="start-year">Start year</label>
+        @ValidationFor("year.Name")
+        <label class="form-label" for="start-year">Start year <span class="required-marker">*</span></label>
         <input id="start-year" class="form-control" type="number" @bind="year.StartYear" />
-        <label class="form-label" for="end-year">End year</label>
+        @ValidationFor("year.StartYear")
+        <label class="form-label" for="end-year">End year <span class="required-marker">*</span></label>
         <input id="end-year" class="form-control" type="number" @bind="year.EndYear" />
-        <label class="form-label" for="term1-start">Semester 1 start</label>
+        @ValidationFor("year.EndYear")
+        <label class="form-label" for="term1-start">Semester 1 start <span class="required-marker">*</span></label>
         <input id="term1-start" class="form-control" type="date" @bind="year.FirstTermStart" />
-        <label class="form-label" for="term1-end">Semester 1 end</label>
+        @ValidationFor("year.FirstTermStart")
+        <label class="form-label" for="term1-end">Semester 1 end <span class="required-marker">*</span></label>
         <input id="term1-end" class="form-control" type="date" @bind="year.FirstTermEnd" />
-        <label class="form-label" for="term2-start">Semester 2 start</label>
+        @ValidationFor("year.FirstTermEnd")
+        <label class="form-label" for="term2-start">Semester 2 start <span class="required-marker">*</span></label>
         <input id="term2-start" class="form-control" type="date" @bind="year.SecondTermStart" />
-        <label class="form-label" for="term2-end">Semester 2 end</label>
+        @ValidationFor("year.SecondTermStart")
+        <label class="form-label" for="term2-end">Semester 2 end <span class="required-marker">*</span></label>
         <input id="term2-end" class="form-control" type="date" @bind="year.SecondTermEnd" />
+        @ValidationFor("year.SecondTermEnd")
         <button class="btn btn-primary mt-2" @onclick="SaveSchoolYear">Save school year</button>
     </section>
 
@@ -116,6 +136,7 @@ else
 @code {
     private SetupSummary? summary;
     private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
     private HouseholdModel household = new();
     private SchoolModel school = new();
     private StudentModel student = new();
@@ -128,11 +149,21 @@ else
 
     private async Task SaveHousehold()
     {
+        if (!ValidateHousehold())
+        {
+            return;
+        }
+
         await Run(() => SetupService.CreateHouseholdAsync(ParentUser(), new CreateHouseholdCommand(household.HouseholdName, household.ParentGuardianName)));
     }
 
     private async Task SaveSchool()
     {
+        if (!ValidateSchool())
+        {
+            return;
+        }
+
         await Run(() => SetupService.ConfigureSchoolProfileAsync(
             ParentUser(),
             new ConfigureSchoolProfileCommand(
@@ -148,11 +179,21 @@ else
 
     private async Task SaveStudent()
     {
+        if (!ValidateStudent())
+        {
+            return;
+        }
+
         await Run(() => SetupService.CreateStudentAsync(ParentUser(), new CreateStudentCommand(student.FirstName, student.LastName, student.GradeLevel)));
     }
 
     private async Task SaveSchoolYear()
     {
+        if (!ValidateSchoolYear())
+        {
+            return;
+        }
+
         await Run(() => SetupService.ConfigureSchoolYearAsync(
             ParentUser(),
             new ConfigureSchoolYearCommand(
@@ -173,6 +214,7 @@ else
     private async Task Run(Func<Task<OperationResult>> action)
     {
         messages.Clear();
+        fieldErrors.Clear();
         var result = await action();
         if (result.Succeeded)
         {
@@ -187,6 +229,39 @@ else
     private async Task RefreshSummary()
     {
         summary = await SetupService.GetSummaryAsync();
+        var detail = await SetupService.GetDetailAsync();
+        household = new HouseholdModel
+        {
+            HouseholdName = detail.HouseholdName,
+            ParentGuardianName = detail.ParentGuardianName
+        };
+        school = new SchoolModel
+        {
+            SchoolName = detail.SchoolName,
+            AdministratorParentName = detail.AdministratorParentName,
+            Jurisdiction = detail.Jurisdiction,
+            HomeschoolStartDate = detail.HomeschoolStartDate,
+            OperatingBasis = detail.OperatingBasis,
+            DiplomaSignatureName = detail.DiplomaSignatureName,
+            DiplomaIssueCity = detail.DiplomaIssueCity,
+            DiplomaIssueState = detail.DiplomaIssueState
+        };
+        student = new StudentModel
+        {
+            FirstName = detail.StudentFirstName,
+            LastName = detail.StudentLastName,
+            GradeLevel = detail.StudentGradeLevel
+        };
+        year = new SchoolYearModel
+        {
+            Name = detail.SchoolYearName,
+            StartYear = detail.StartYear,
+            EndYear = detail.EndYear,
+            FirstTermStart = detail.FirstTermStart,
+            FirstTermEnd = detail.FirstTermEnd,
+            SecondTermStart = detail.SecondTermStart,
+            SecondTermEnd = detail.SecondTermEnd
+        };
     }
 
     private UserContext ParentUser()
@@ -197,6 +272,117 @@ else
     private static string Display(bool exists, string value)
     {
         return exists ? value : "Not set";
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private bool ValidateHousehold()
+    {
+        BeginValidation();
+        RequireField("household.HouseholdName", household.HouseholdName, "Household name is required.");
+        RequireField("household.ParentGuardianName", household.ParentGuardianName, "Parent/guardian name is required.");
+        return EndValidation();
+    }
+
+    private bool ValidateSchool()
+    {
+        BeginValidation();
+        RequireField("school.SchoolName", school.SchoolName, "School name is required.");
+        RequireField("school.AdministratorParentName", school.AdministratorParentName, "Administrator parent name is required.");
+        RequireField("school.Jurisdiction", school.Jurisdiction, "Jurisdiction is required.");
+        RequireDate("school.HomeschoolStartDate", school.HomeschoolStartDate, "Homeschool start date is required.");
+        RequireField("school.OperatingBasis", school.OperatingBasis, "Operating basis is required.");
+        RequireField("school.DiplomaSignatureName", school.DiplomaSignatureName, "Diploma signature name is required.");
+        RequireField("school.DiplomaIssueCity", school.DiplomaIssueCity, "Diploma issue city is required.");
+        RequireField("school.DiplomaIssueState", school.DiplomaIssueState, "Diploma issue state is required.");
+        return EndValidation();
+    }
+
+    private bool ValidateStudent()
+    {
+        BeginValidation();
+        RequireField("student.FirstName", student.FirstName, "First name is required.");
+        RequireField("student.LastName", student.LastName, "Last name is required.");
+        if (student.GradeLevel is < 0 or > 12)
+        {
+            fieldErrors["student.GradeLevel"] = "Grade level must be between 0 and 12.";
+        }
+
+        return EndValidation();
+    }
+
+    private bool ValidateSchoolYear()
+    {
+        BeginValidation();
+        RequireField("year.Name", year.Name, "School year name is required.");
+        RequireYear("year.StartYear", year.StartYear, "Start year is required.");
+        RequireYear("year.EndYear", year.EndYear, "End year is required.");
+        RequireDate("year.FirstTermStart", year.FirstTermStart, "Semester 1 start is required.");
+        RequireDate("year.FirstTermEnd", year.FirstTermEnd, "Semester 1 end is required.");
+        RequireDate("year.SecondTermStart", year.SecondTermStart, "Semester 2 start is required.");
+        RequireDate("year.SecondTermEnd", year.SecondTermEnd, "Semester 2 end is required.");
+        if (year.EndYear < year.StartYear)
+        {
+            fieldErrors["year.EndYear"] = "End year cannot be before start year.";
+        }
+
+        if (year.FirstTermEnd < year.FirstTermStart)
+        {
+            fieldErrors["year.FirstTermEnd"] = "Semester 1 end cannot be before its start.";
+        }
+
+        if (year.SecondTermEnd < year.SecondTermStart)
+        {
+            fieldErrors["year.SecondTermEnd"] = "Semester 2 end cannot be before its start.";
+        }
+
+        return EndValidation();
+    }
+
+    private void BeginValidation()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+    }
+
+    private bool EndValidation()
+    {
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required fields.", "alert alert-danger"));
+        return false;
+    }
+
+    private void RequireField(string key, string value, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            fieldErrors[key] = message;
+        }
+    }
+
+    private void RequireDate(string key, DateOnly value, string message)
+    {
+        if (value == default)
+        {
+            fieldErrors[key] = message;
+        }
+    }
+
+    private void RequireYear(string key, int value, string message)
+    {
+        if (value < 1900)
+        {
+            fieldErrors[key] = message;
+        }
     }
 
     private sealed record PageMessage(string Text, string CssClass);

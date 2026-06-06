@@ -28,17 +28,33 @@ Seed a related planning/checklist view with:
 
 - Mathematics.
 - Reading.
-- English.
+- English Language Arts.
 - Science.
 - Social Studies.
 - U.S. Constitution.
 - Michigan Constitution.
-- Civil Government / History, grades 10-12.
+- Civics, grades 10-12.
+
+## MMC Reference Areas
+
+Seed a separate high-school transcript-planning reference view with:
+
+- English Language Arts.
+- Mathematics.
+- Online Learning Experience.
+- Personal Finance.
+- Physical Education and Health.
+- Science.
+- Social Studies.
+- Visual, Performing, and Applied Arts.
+- World Language.
 
 ## Modeling Rule
 
-The statutory subject areas and MDE summary areas are related but distinct. The system should allow a parent to view coverage through either lens.
+The statutory subject areas, MDE summary areas, and MMC reference areas are related but distinct source views. Where the sources use different terms for the same practical coverage area, seed the shared parent-facing area name so one course can show coverage across multiple views.
+
+Statutory areas should be listed first in requirement lists and coverage summaries.
 
 ## Naming Rule
 
-Use clear display labels for parents. Preserve source-backed terms in seeded data, but allow parent-facing grouping such as English / Language Arts or Social Studies where the UI explains the underlying areas.
+Use clear display labels for parents. Preserve the source view, but normalize overlapping labels such as English / English Language Arts and Civil Government / Civics so coverage is understandable.

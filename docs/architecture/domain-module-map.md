@@ -15,7 +15,7 @@
 | Household | Household, parent/legal guardian, school profile |
 | Students | Student identity, enrollment, school years, grade levels |
 | LegalRequirements | Jurisdictions, requirement sets, requirement areas, mappings, legal notes |
-| Curriculum | Subjects, courses, descriptions, plans, resources, lessons, objectives |
+| Curriculum | Subjects, course packs, courses, descriptions, plans, resources, lessons, objectives |
 | InstructionRecords | Instruction sessions, activity logs, attendance/activity summaries, reading, projects, fieldwork |
 | Assignments | Assignments, attachments, submissions, submission files, resubmissions |
 | Assessment | Assessments, rubrics, grades, grade scales, tests, progress evaluations |

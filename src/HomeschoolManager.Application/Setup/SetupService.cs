@@ -36,6 +36,39 @@ public sealed class SetupService
             schoolYear?.Name ?? "");
     }
 
+    public async Task<SetupDetail> GetDetailAsync(CancellationToken cancellationToken = default)
+    {
+        var household = await repository.GetHouseholdAsync(cancellationToken);
+        var schoolProfile = await repository.GetSchoolProfileAsync(cancellationToken);
+        var student = await repository.GetStudentAsync(cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        var terms = schoolYear?.Terms.OrderBy(term => term.StartDate).ToArray() ?? [];
+        var firstTerm = terms.ElementAtOrDefault(0);
+        var secondTerm = terms.ElementAtOrDefault(1);
+
+        return new SetupDetail(
+            household?.Name ?? "Family Household",
+            household?.ParentGuardianName ?? "",
+            schoolProfile?.SchoolName ?? "Family Homeschool",
+            schoolProfile?.AdministratorParentName ?? "",
+            schoolProfile?.Jurisdiction ?? "Michigan",
+            schoolProfile?.HomeschoolStartDate ?? new DateOnly(2026, 8, 24),
+            schoolProfile?.OperatingBasis ?? "Michigan Exemption 3(f)",
+            schoolProfile?.DiplomaSignatureName ?? "",
+            schoolProfile?.DiplomaIssueCity ?? "",
+            schoolProfile?.DiplomaIssueState ?? "Michigan",
+            student?.FirstName ?? "",
+            student?.LastName ?? "",
+            student?.GradeLevel ?? 12,
+            schoolYear?.Name ?? "2026-2027",
+            schoolYear?.StartYear ?? 2026,
+            schoolYear?.EndYear ?? 2027,
+            firstTerm?.StartDate ?? new DateOnly(2026, 8, 24),
+            firstTerm?.EndDate ?? new DateOnly(2026, 12, 18),
+            secondTerm?.StartDate ?? new DateOnly(2027, 1, 11),
+            secondTerm?.EndDate ?? new DateOnly(2027, 5, 28));
+    }
+
     public async Task<OperationResult> CreateHouseholdAsync(
         UserContext user,
         CreateHouseholdCommand command,

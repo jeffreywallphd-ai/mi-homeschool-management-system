@@ -37,7 +37,9 @@ Farm Business Accounting:
 ## Mapping Rules
 
 - A course may map to multiple areas.
+- A course may also carry multiple subject labels.
 - A requirement area may be covered by multiple courses.
 - Coverage is parent-selected and should be editable.
 - Generated coverage summaries should say "records show coverage" rather than "compliant."
 - Missing mappings must be visible, not silently inferred.
+- Parent-facing coverage summaries may group matching area names across source views and combine source labels while preserving source traceability.

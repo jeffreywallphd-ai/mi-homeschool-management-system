@@ -8,8 +8,12 @@ public sealed record Course
     public Guid StudentId { get; init; }
     public Guid SchoolYearId { get; init; }
     public string Title { get; init; }
-    public string SubjectArea { get; init; }
+    public IReadOnlyList<string> SubjectAreas { get; init; }
+    public string SubjectArea => string.Join(", ", SubjectAreas);
+    public CourseDuration Duration { get; init; }
     public decimal PlannedCreditValue { get; init; }
+    public string? SourcePackId { get; init; }
+    public string? SourceTemplateId { get; init; }
     public CourseDescription Description { get; init; }
     public CurriculumPlan CurriculumPlan { get; init; }
     public IReadOnlyList<RequirementMapping> RequirementMappings { get; init; }
@@ -19,8 +23,11 @@ public sealed record Course
         Guid studentId,
         Guid schoolYearId,
         string title,
-        string subjectArea,
+        IReadOnlyList<string> subjectAreas,
+        CourseDuration duration,
         decimal plannedCreditValue,
+        string? sourcePackId,
+        string? sourceTemplateId,
         CourseDescription? description,
         CurriculumPlan? curriculumPlan,
         IReadOnlyList<RequirementMapping>? requirementMappings)
@@ -40,12 +47,31 @@ public sealed record Course
             throw new DomainException("Planned credit value must be greater than 0 and no more than 3.");
         }
 
+        if (!Enum.IsDefined(duration))
+        {
+            throw new DomainException("Course duration is not recognized.");
+        }
+
+        var normalizedSubjects = subjectAreas
+            .Select(subject => subject.Trim())
+            .Where(subject => subject.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedSubjects.Length == 0)
+        {
+            throw new DomainException("At least one subject area is required for a course.");
+        }
+
         Id = id == Guid.Empty ? Guid.NewGuid() : id;
         StudentId = studentId;
         SchoolYearId = schoolYearId;
         Title = Require.Text(title, nameof(title));
-        SubjectArea = Require.Text(subjectArea, nameof(subjectArea));
+        SubjectAreas = normalizedSubjects;
+        Duration = duration;
         PlannedCreditValue = plannedCreditValue;
+        SourcePackId = string.IsNullOrWhiteSpace(sourcePackId) ? null : sourcePackId.Trim();
+        SourceTemplateId = string.IsNullOrWhiteSpace(sourceTemplateId) ? null : sourceTemplateId.Trim();
         Description = description ?? CourseDescription.Empty;
         CurriculumPlan = curriculumPlan ?? CurriculumPlan.Empty;
         RequirementMappings = requirementMappings ?? [];

@@ -20,7 +20,7 @@
 else
 {
     <h1>@detail.Title</h1>
-    <p>@detail.SubjectArea, @detail.PlannedCreditValue planned credit(s)</p>
+    <p>@string.Join(", ", detail.SubjectAreas), @DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
 
     @if (!Session.IsParentAdmin)
     {
@@ -30,12 +30,21 @@ else
     {
         <section class="form-section">
             <h2>Course identity</h2>
-            <label class="form-label" for="title">Title</label>
+            <label class="form-label" for="title">Title <span class="required-marker">*</span></label>
             <input id="title" class="form-control" @bind="courseForm.Title" />
-            <label class="form-label" for="subject">Subject area</label>
-            <input id="subject" class="form-control" @bind="courseForm.SubjectArea" />
-            <label class="form-label" for="credit">Planned credit value</label>
+            @ValidationFor("course.Title")
+            <label class="form-label" for="subject">Subject areas <span class="required-marker">*</span></label>
+            <input id="subject" class="form-control" @bind="courseForm.SubjectAreasText" />
+            @ValidationFor("course.SubjectAreas")
+            <label class="form-label" for="duration">Duration <span class="required-marker">*</span></label>
+            <select id="duration" class="form-select" @bind="courseForm.Duration">
+                <option value="@CourseDuration.OneSemester">One semester</option>
+                <option value="@CourseDuration.TwoSemesters">Two semesters</option>
+            </select>
+            @ValidationFor("course.Duration")
+            <label class="form-label" for="credit">Planned credit value <span class="required-marker">*</span></label>
             <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" />
+            @ValidationFor("course.PlannedCreditValue")
             <button class="btn btn-primary mt-2" @onclick="SaveCourse">Save course</button>
         </section>
 
@@ -43,14 +52,35 @@ else
             <h2>Course description</h2>
             <label class="form-label" for="description">Description</label>
             <textarea id="description" class="form-control" rows="3" @bind="descriptionForm.Description"></textarea>
+            <label class="form-label" for="methods-preset">Instructional methods preset</label>
+            <select id="methods-preset" class="form-select" value="@selectedInstructionalMethodId" @onchange="ChangeInstructionalMethod">
+                @foreach (var option in InstructionalMethodOptions)
+                {
+                    <option value="@option.Id">@option.Name</option>
+                }
+            </select>
             <label class="form-label" for="methods">Instructional methods</label>
             <textarea id="methods" class="form-control" rows="2" @bind="descriptionForm.InstructionalMethods"></textarea>
             <label class="form-label" for="topics">Major topics</label>
             <textarea id="topics" class="form-control" rows="2" @bind="descriptionForm.MajorTopics"></textarea>
             <label class="form-label" for="resources">Texts and resources</label>
             <textarea id="resources" class="form-control" rows="2" @bind="descriptionForm.TextsAndResources"></textarea>
+            <label class="form-label" for="assessment-preset">Assessment methods preset</label>
+            <select id="assessment-preset" class="form-select" value="@selectedAssessmentMethodId" @onchange="ChangeAssessmentMethod">
+                @foreach (var option in AssessmentMethodOptions)
+                {
+                    <option value="@option.Id">@option.Name</option>
+                }
+            </select>
             <label class="form-label" for="assessment">Assessment methods</label>
             <textarea id="assessment" class="form-control" rows="2" @bind="descriptionForm.AssessmentMethods"></textarea>
+            <label class="form-label" for="grading-preset">Grading basis preset</label>
+            <select id="grading-preset" class="form-select" value="@selectedGradingBasisId" @onchange="ChangeGradingBasis">
+                @foreach (var option in GradingBasisOptions)
+                {
+                    <option value="@option.Id">@option.Name</option>
+                }
+            </select>
             <label class="form-label" for="grading">Grading basis</label>
             <input id="grading" class="form-control" @bind="descriptionForm.GradingBasis" />
             <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
@@ -144,10 +174,17 @@ else
     private HomeschoolManager.Application.Courses.CourseDetail? detail;
     private IReadOnlyList<RequirementChecklistItem> requirementAreas = [];
     private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
     private CourseFormModel courseForm = new();
     private DescriptionFormModel descriptionForm = new();
     private PlanFormModel planForm = new();
     private MappingFormModel mappingForm = new();
+    private string selectedInstructionalMethodId = DefaultInstructionalMethodId;
+    private string selectedAssessmentMethodId = DefaultAssessmentMethodId;
+    private string selectedGradingBasisId = DefaultGradingBasisId;
+    private const string DefaultInstructionalMethodId = "explicit-guided";
+    private const string DefaultAssessmentMethodId = "mixed-formative-summative";
+    private const string DefaultGradingBasisId = "mastery-letter";
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,9 +194,14 @@ else
 
     private async Task SaveCourse()
     {
+        if (!ValidateCourse())
+        {
+            return;
+        }
+
         await Run(() => CourseService.UpdateCourseAsync(
             ParentUser(),
-            new UpdateCourseCommand(CourseId, courseForm.Title, courseForm.SubjectArea, courseForm.PlannedCreditValue)));
+            new UpdateCourseCommand(CourseId, courseForm.Title, courseForm.SubjectAreas, courseForm.Duration, courseForm.PlannedCreditValue)));
     }
 
     private async Task SaveDescription()
@@ -213,6 +255,7 @@ else
     private async Task Run(Func<Task<OperationResult>> action)
     {
         messages.Clear();
+        fieldErrors.Clear();
         var result = await action();
         if (result.Succeeded)
         {
@@ -235,7 +278,8 @@ else
         courseForm = new CourseFormModel
         {
             Title = detail.Title,
-            SubjectArea = detail.SubjectArea,
+            SubjectAreasText = string.Join(", ", detail.SubjectAreas),
+            Duration = detail.Duration,
             PlannedCreditValue = detail.PlannedCreditValue
         };
         descriptionForm = new DescriptionFormModel
@@ -247,6 +291,10 @@ else
             AssessmentMethods = detail.AssessmentMethods,
             GradingBasis = detail.GradingBasis
         };
+        ApplyDefaultPresetsForBlankFields();
+        selectedInstructionalMethodId = MatchPreset(InstructionalMethodOptions, descriptionForm.InstructionalMethods, DefaultInstructionalMethodId);
+        selectedAssessmentMethodId = MatchPreset(AssessmentMethodOptions, descriptionForm.AssessmentMethods, DefaultAssessmentMethodId);
+        selectedGradingBasisId = MatchPreset(GradingBasisOptions, descriptionForm.GradingBasis, DefaultGradingBasisId);
         planForm = new PlanFormModel
         {
             Goals = detail.Goals,
@@ -262,13 +310,164 @@ else
         return Session.CurrentUser ?? UserContext.Student("Anonymous");
     }
 
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "one semester" : "two semesters";
+    }
+
+    private void ChangeInstructionalMethod(ChangeEventArgs eventArgs)
+    {
+        selectedInstructionalMethodId = eventArgs.Value?.ToString() ?? "other";
+        ApplyPreset(InstructionalMethodOptions, selectedInstructionalMethodId, value => descriptionForm.InstructionalMethods = value);
+    }
+
+    private void ChangeAssessmentMethod(ChangeEventArgs eventArgs)
+    {
+        selectedAssessmentMethodId = eventArgs.Value?.ToString() ?? "other";
+        ApplyPreset(AssessmentMethodOptions, selectedAssessmentMethodId, value => descriptionForm.AssessmentMethods = value);
+    }
+
+    private void ChangeGradingBasis(ChangeEventArgs eventArgs)
+    {
+        selectedGradingBasisId = eventArgs.Value?.ToString() ?? "other";
+        ApplyPreset(GradingBasisOptions, selectedGradingBasisId, value => descriptionForm.GradingBasis = value);
+    }
+
+    private void ApplyDefaultPresetsForBlankFields()
+    {
+        descriptionForm.InstructionalMethods = FillBlank(descriptionForm.InstructionalMethods, PresetText(InstructionalMethodOptions, DefaultInstructionalMethodId));
+        descriptionForm.AssessmentMethods = FillBlank(descriptionForm.AssessmentMethods, PresetText(AssessmentMethodOptions, DefaultAssessmentMethodId));
+        descriptionForm.GradingBasis = FillBlank(descriptionForm.GradingBasis, PresetText(GradingBasisOptions, DefaultGradingBasisId));
+    }
+
+    private static void ApplyPreset(IReadOnlyList<PresetOption> options, string selectedId, Action<string> apply)
+    {
+        if (selectedId == "other")
+        {
+            return;
+        }
+
+        var option = options.FirstOrDefault(item => item.Id == selectedId);
+        if (option is not null)
+        {
+            apply(option.Text);
+        }
+    }
+
+    private static string MatchPreset(IReadOnlyList<PresetOption> options, string value, string defaultId)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultId;
+        }
+
+        return options.FirstOrDefault(option => option.Text == value)?.Id ?? "other";
+    }
+
+    private static string PresetText(IReadOnlyList<PresetOption> options, string id)
+    {
+        return options.First(option => option.Id == id).Text;
+    }
+
+    private static string FillBlank(string value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private bool ValidateCourse()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+
+        if (string.IsNullOrWhiteSpace(courseForm.Title))
+        {
+            fieldErrors["course.Title"] = "Title is required.";
+        }
+
+        if (courseForm.SubjectAreas.Count == 0)
+        {
+            fieldErrors["course.SubjectAreas"] = "At least one subject area is required.";
+        }
+
+        if (!Enum.IsDefined(courseForm.Duration))
+        {
+            fieldErrors["course.Duration"] = "Duration is required.";
+        }
+
+        if (courseForm.PlannedCreditValue <= 0 || courseForm.PlannedCreditValue > 3)
+        {
+            fieldErrors["course.PlannedCreditValue"] = "Planned credit must be greater than 0 and no more than 3.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required fields.", "alert alert-danger"));
+        return false;
+    }
+
     private sealed record PageMessage(string Text, string CssClass);
+    private sealed record PresetOption(string Id, string Name, string Text);
+
+    private static readonly IReadOnlyList<PresetOption> InstructionalMethodOptions =
+    [
+        new(DefaultInstructionalMethodId, "Explicit teaching with guided practice",
+            "Explicit instruction with guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection."),
+        new("inquiry-project", "Inquiry and project-based learning",
+            "Inquiry and project-based learning built around driving questions, research, investigation, product creation, critique, revision, and reflection. Parent instruction supports planning, source evaluation, and quality standards."),
+        new("seminar-discussion", "Reading, seminar, and discussion",
+            "Assigned reading, annotation, Socratic-style discussion, short written responses, vocabulary study, and reflective conferences. Parent guidance emphasizes close reading, evidence, and clear communication."),
+        new("lab-fieldwork", "Lab, simulation, and fieldwork",
+            "Hands-on labs, simulations, demonstrations, field observations, data collection, analysis, lab notes, and parent-guided safety and reasoning checks."),
+        new("online-blended", "Online/blended instruction",
+            "Structured online lessons or videos combined with parent check-ins, guided notes, offline practice, discussion, and portfolio evidence from assignments or projects."),
+        new("other", "Other", "")
+    ];
+
+    private static readonly IReadOnlyList<PresetOption> AssessmentMethodOptions =
+    [
+        new(DefaultAssessmentMethodId, "Mixed formative and summative evidence",
+            "Ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate, project or performance evidence, and a final portfolio review or summative evaluation."),
+        new("portfolio-performance", "Portfolio and performance assessment",
+            "Portfolio artifacts, project rubrics, demonstrations, presentations, performances, lab or field notes, and parent narrative evaluation of growth and mastery."),
+        new("tests-quizzes", "Quizzes, tests, and written work",
+            "Regular quizzes or tests, written assignments, problem sets, corrections, short reflections, and a final exam or cumulative written evaluation where appropriate."),
+        new("competency-mastery", "Competency/mastery demonstrations",
+            "Clear competencies, repeated practice, revision opportunities, student explanations, demonstrations of mastery, and parent review before credit is recorded."),
+        new("other", "Other", "")
+    ];
+
+    private static readonly IReadOnlyList<PresetOption> GradingBasisOptions =
+    [
+        new(DefaultGradingBasisId, "Mastery-aligned letter grade",
+            "Mastery-aligned letter grade using parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection."),
+        new("standards-rubric", "Standards/rubric-based grade",
+            "Letter grade derived from rubric scores for course objectives, with emphasis on demonstrated mastery, quality of final evidence, revision, and clear parent documentation."),
+        new("portfolio-narrative", "Portfolio plus narrative evaluation",
+            "Grade based on a curated portfolio, parent narrative evaluation, completed assignments, student reflection, and evidence of progress against course goals."),
+        new("pass-fail-mastery", "Pass/fail mastery",
+            "Pass/fail credit based on completion of agreed course objectives, sufficient evidence of mastery, participation, and final parent review."),
+        new("other", "Other", "")
+    ];
 
     private sealed class CourseFormModel
     {
         public string Title { get; set; } = "";
-        public string SubjectArea { get; set; } = "";
+        public string SubjectAreasText { get; set; } = "";
+        public CourseDuration Duration { get; set; } = CourseDuration.TwoSemesters;
         public decimal PlannedCreditValue { get; set; } = 1;
+
+        public IReadOnlyList<string> SubjectAreas => SubjectAreasText
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     private sealed class DescriptionFormModel

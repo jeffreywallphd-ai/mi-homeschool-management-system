@@ -17,10 +17,14 @@ Purpose: Michigan legal-reference and wording boundaries.
 
 - MDE no-routine-role/no-reporting posture for exemption (f).
 - Records show selected subject-area coverage; they do not certify compliance.
+- MMC reference categories are separate transcript-planning aids, not homeschool legal requirements.
 - Michigan is a seed profile, not a hard-coded product limit.
+- Statutory requirement areas are prioritized first in lists and summaries.
+- Overlapping source labels use shared parent-facing names where practical while preserving source views.
 - Legal-facing changes refresh official sources first.
 
 ## Common Failure Modes
 
 - Saying compliant, approved, accredited, or submitted.
 - Merging statutory and MDE summary areas into one untraceable list.
+- Merging MMC reference categories with statutory homeschool subject areas.

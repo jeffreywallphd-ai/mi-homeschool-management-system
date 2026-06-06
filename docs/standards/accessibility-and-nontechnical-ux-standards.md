@@ -19,12 +19,19 @@ Design parent-first and student-capable. The parent should be able to operate th
 - Make record status visible.
 - Make high-stakes actions explicit.
 - Show validation errors near the affected field.
+- Mark required fields with an asterisk.
 - Do not hide legal-boundary wording when generating official records.
 - Preserve keyboard accessibility and semantic UI structure.
 
 ## Contract-Backed UI
 
 UI components must submit explicit view models or commands. A screen should not depend on partially initialized domain objects or raw persistence models.
+
+Required-field validation should run in the UI before command submission when the missing field can be identified locally. Domain validation remains the final boundary.
+
+## Workbench Layout
+
+For form-heavy planning screens, place the main form and primary records on the left side of the content body. Place related support tools, import panels, previews, summaries, and selection helpers on the right side. On smaller screens, the support area should collapse below the main workflow.
 
 ## Student Workflows
 

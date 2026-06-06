@@ -47,6 +47,7 @@ bin/
 obj/
 publish/
 artifacts/
+.verify-output/
 TestResults/
 coverage/
 *.coverage

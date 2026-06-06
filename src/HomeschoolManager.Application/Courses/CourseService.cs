@@ -1,6 +1,7 @@
 using HomeschoolManager.Application.Access;
 using HomeschoolManager.Application.Common;
 using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Domain.Access;
 using HomeschoolManager.Domain.Common;
 using HomeschoolManager.Domain.Curriculum;
@@ -19,13 +20,17 @@ public sealed class CourseService
 
     public async Task<IReadOnlyList<CourseListItem>> ListCoursesAsync(CancellationToken cancellationToken = default)
     {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+
         var courses = await repository.GetCoursesAsync(cancellationToken);
         return courses
             .OrderBy(course => course.Title)
             .Select(course => new CourseListItem(
                 course.Id,
                 course.Title,
-                course.SubjectArea,
+                course.Description.Description,
+                course.SubjectAreas,
+                course.Duration,
                 course.PlannedCreditValue,
                 course.RequirementMappings.Count))
             .ToArray();
@@ -33,6 +38,8 @@ public sealed class CourseService
 
     public async Task<CourseDetail?> GetCourseDetailAsync(Guid courseId, CancellationToken cancellationToken = default)
     {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
         if (course is null)
         {
@@ -73,9 +80,12 @@ public sealed class CourseService
                 student.Id,
                 schoolYear.Id,
                 command.Title,
-                command.SubjectArea,
+                command.SubjectAreas,
+                command.Duration,
                 command.PlannedCreditValue,
                 null,
+                null,
+                new CourseDescription(command.Description, "", "", "", "", ""),
                 null,
                 []);
 
@@ -112,8 +122,11 @@ public sealed class CourseService
                 existing.StudentId,
                 existing.SchoolYearId,
                 command.Title,
-                command.SubjectArea,
+                command.SubjectAreas,
+                command.Duration,
                 command.PlannedCreditValue,
+                existing.SourcePackId,
+                existing.SourceTemplateId,
                 existing.Description,
                 existing.CurriculumPlan,
                 existing.RequirementMappings);
@@ -125,6 +138,165 @@ public sealed class CourseService
         {
             return OperationResult.Failure(ex.Message);
         }
+    }
+
+    public IReadOnlyList<CoursePackSummary> ListCoursePacks()
+    {
+        return DefaultCoursePacks.All
+            .Select(pack => new CoursePackSummary(
+                pack.Id,
+                pack.Name,
+                pack.Description,
+                pack.Courses.Count,
+                pack.Courses.Sum(course => course.DefaultOption.PlannedCreditValue)))
+            .ToArray();
+    }
+
+    public CoursePackDetail? GetCoursePackDetail(string packId)
+    {
+        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == packId);
+        if (pack is null)
+        {
+            return null;
+        }
+
+        return new CoursePackDetail(
+            pack.Id,
+            pack.Name,
+            pack.Description,
+            pack.Courses.Select(course => new CoursePackCourseView(
+                course.TemplateId,
+                course.Title,
+                course.SubjectAreas,
+                course.Duration,
+                course.PlannedCreditValue,
+                course.Description.Description,
+                course.DefaultOptionId,
+                course.Options.Select(option => new CoursePackOptionView(
+                    option.OptionId,
+                    option.Title,
+                    option.SubjectAreas,
+                    option.Duration,
+                    option.PlannedCreditValue,
+                    option.Description.Description)).ToArray())).ToArray());
+    }
+
+    public async Task<OperationResult<int>> ImportCoursePackAsync(
+        UserContext user,
+        ImportCoursePackCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<int>.Failure(authorized.Errors.ToArray());
+        }
+
+        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == command.PackId);
+        if (pack is null)
+        {
+            return OperationResult<int>.Failure("Course pack was not found.");
+        }
+
+        var student = await repository.GetStudentAsync(cancellationToken);
+        if (student is null)
+        {
+            return OperationResult<int>.Failure("Create a student before importing a course pack.");
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        if (schoolYear is null)
+        {
+            return OperationResult<int>.Failure("Create a school year before importing a course pack.");
+        }
+
+        var courses = await repository.GetCoursesAsync(cancellationToken);
+        var existingTemplateIds = courses
+            .Where(course => string.Equals(course.SourcePackId, pack.Id, StringComparison.OrdinalIgnoreCase))
+            .Select(course => course.SourceTemplateId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        await RefreshRequirementSeedForPackAsync(pack, cancellationToken);
+
+        var areas = await repository.GetRequirementAreasAsync(cancellationToken);
+        if (areas.Count == 0)
+        {
+            return OperationResult<int>.Failure("Seed Michigan requirement areas before importing this course pack.");
+        }
+
+        var importedCount = 0;
+        var selectionByTemplateId = command.Selections
+            .Where(selection => !string.IsNullOrWhiteSpace(selection.TemplateId))
+            .GroupBy(selection => selection.TemplateId.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Last().OptionId.Trim(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var selectedTemplateIds = command.TemplateIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var templateId in selectionByTemplateId.Keys)
+        {
+            selectedTemplateIds.Add(templateId);
+        }
+
+        var selectedTemplates = selectedTemplateIds.Count == 0
+            ? pack.Courses
+            : pack.Courses.Where(course => selectedTemplateIds.Contains(course.TemplateId)).ToArray();
+
+        if (selectedTemplates.Count == 0)
+        {
+            return OperationResult<int>.Failure("Select at least one course to import.");
+        }
+
+        var unknownTemplateIds = selectedTemplateIds
+            .Except(pack.Courses.Select(course => course.TemplateId), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (unknownTemplateIds.Length > 0)
+        {
+            return OperationResult<int>.Failure("One or more selected courses were not found in the course pack.");
+        }
+
+        foreach (var template in selectedTemplates.Where(course => !existingTemplateIds.Contains(course.TemplateId)))
+        {
+            var option = ResolveSelectedOption(template, selectionByTemplateId);
+            if (option is null)
+            {
+                return OperationResult<int>.Failure("One or more selected course options were not found in the course pack.");
+            }
+
+            try
+            {
+                var courseId = Guid.NewGuid();
+                var mappings = BuildMappings(courseId, option, areas);
+                var course = new Course(
+                    courseId,
+                    student.Id,
+                    schoolYear.Id,
+                    option.Title,
+                    option.SubjectAreas,
+                    option.Duration,
+                    option.PlannedCreditValue,
+                    pack.Id,
+                    template.TemplateId,
+                    option.Description,
+                    option.CurriculumPlan,
+                    mappings);
+
+                await repository.SaveCourseAsync(course, cancellationToken);
+                importedCount++;
+            }
+            catch (DomainException ex)
+            {
+                return OperationResult<int>.Failure(ex.Message);
+            }
+        }
+
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        return OperationResult<int>.Success(importedCount);
     }
 
     public async Task<OperationResult> SaveCourseDescriptionAsync(
@@ -232,31 +404,33 @@ public sealed class CourseService
 
     public async Task<IReadOnlyList<CoverageSummaryItem>> GetCoverageSummaryAsync(CancellationToken cancellationToken = default)
     {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
 
         return areas
-            .OrderBy(area => area.View)
-            .ThenBy(area => area.Name)
-            .Select(area =>
+            .GroupBy(area => area.Name)
+            .OrderBy(group => group.Select(area => area.View).Min(SourceOrder))
+            .ThenBy(group => group.Key)
+            .Select(group =>
             {
+                var areaIds = group.Select(area => area.Id).ToHashSet();
                 var courseMappings = courses
-                    .Select(course => new
-                    {
-                        Course = course,
-                        Mapping = course.RequirementMappings.FirstOrDefault(mapping => mapping.RequirementAreaId == area.Id)
-                    })
+                    .SelectMany(course => course.RequirementMappings
+                        .Where(mapping => areaIds.Contains(mapping.RequirementAreaId))
+                        .Select(mapping => new { Course = course, Mapping = mapping }))
                     .Where(item => item.Mapping is not null)
                     .ToArray();
 
                 return new CoverageSummaryItem(
-                    area.Id,
-                    area.View,
-                    area.Name,
-                    area.GradeBand,
+                    group.First().Id,
+                    FormatSources(group.Select(area => area.View)),
+                    group.Key,
+                    string.Join(", ", group.Select(area => area.GradeBand).Distinct().Order()),
                     courseMappings.Length > 0,
-                    HighestCoverage(courseMappings.Select(item => item.Mapping!.CoverageLevel)),
-                    courseMappings.Select(item => item.Course.Title).Order().ToArray());
+                    HighestCoverage(courseMappings.Select(item => item.Mapping.CoverageLevel)),
+                    courseMappings.Select(item => item.Course.Title).Distinct().Order().ToArray());
             })
             .ToArray();
     }
@@ -274,14 +448,15 @@ public sealed class CourseService
                     mapping.CoverageLevel,
                     mapping.Notes);
             })
-            .OrderBy(mapping => mapping.RequirementView)
+            .OrderBy(mapping => SourceOrder(mapping.RequirementView))
             .ThenBy(mapping => mapping.RequirementAreaName)
             .ToArray();
 
         return new CourseDetail(
             course.Id,
             course.Title,
-            course.SubjectArea,
+            course.SubjectAreas,
+            course.Duration,
             course.PlannedCreditValue,
             course.Description.Description,
             course.Description.InstructionalMethods,
@@ -300,5 +475,173 @@ public sealed class CourseService
     private static CoverageLevel? HighestCoverage(IEnumerable<CoverageLevel> levels)
     {
         return levels.OrderBy(level => (int)level).Cast<CoverageLevel?>().FirstOrDefault();
+    }
+
+    private static string FormatSources(IEnumerable<string> sources)
+    {
+        var ordered = sources
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(SourceOrder)
+            .ThenBy(source => source)
+            .ToArray();
+
+        return ordered.Length switch
+        {
+            0 => "",
+            1 => ordered[0],
+            2 => $"{ordered[0]} and {ordered[1]}",
+            _ => string.Join("; ", ordered)
+        };
+    }
+
+    private static int SourceOrder(string source)
+    {
+        return source switch
+        {
+            "Statutory" => 0,
+            "MDE Summary" => 1,
+            "MMC Reference" => 2,
+            _ => 99
+        };
+    }
+
+    private static IReadOnlyList<RequirementMapping> BuildMappings(
+        Guid courseId,
+        CourseTemplateOptionDefinition option,
+        IReadOnlyList<RequirementArea> areas)
+    {
+        return option.RequirementMappings
+            .Select(mapping =>
+            {
+                var area = areas.FirstOrDefault(item =>
+                    string.Equals(item.View, mapping.RequirementAreaView, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Name, mapping.RequirementAreaName, StringComparison.OrdinalIgnoreCase));
+
+                if (area is null)
+                {
+                    throw new DomainException($"Requirement area '{mapping.RequirementAreaName}' was not found.");
+                }
+
+                return new RequirementMapping(
+                    Guid.NewGuid(),
+                    courseId,
+                    area.Id,
+                    mapping.CoverageLevel,
+                    mapping.Notes);
+            })
+            .ToArray();
+    }
+
+    private static CourseTemplateOptionDefinition? ResolveSelectedOption(
+        CourseTemplateDefinition template,
+        IReadOnlyDictionary<string, string> selectionByTemplateId)
+    {
+        var optionId = selectionByTemplateId.TryGetValue(template.TemplateId, out var selectedOptionId)
+            ? selectedOptionId
+            : template.DefaultOptionId;
+
+        if (string.IsNullOrWhiteSpace(optionId))
+        {
+            optionId = template.DefaultOptionId;
+        }
+
+        return template.Options.FirstOrDefault(option =>
+            string.Equals(option.OptionId, optionId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task BackfillImportedCoursePackDetailsAsync(CancellationToken cancellationToken)
+    {
+        var courses = await repository.GetCoursesAsync(cancellationToken);
+        foreach (var course in courses)
+        {
+            var option = FindSourceOption(course);
+            if (option is null)
+            {
+                continue;
+            }
+
+            var description = MergeDescription(course.Description, option.Description);
+            var curriculumPlan = MergeCurriculumPlan(course.CurriculumPlan, option.CurriculumPlan);
+            if (description == course.Description && curriculumPlan == course.CurriculumPlan)
+            {
+                continue;
+            }
+
+            var updated = new Course(
+                course.Id,
+                course.StudentId,
+                course.SchoolYearId,
+                course.Title,
+                course.SubjectAreas,
+                course.Duration,
+                course.PlannedCreditValue,
+                course.SourcePackId,
+                course.SourceTemplateId,
+                description,
+                curriculumPlan,
+                course.RequirementMappings);
+
+            await repository.SaveCourseAsync(updated, cancellationToken);
+        }
+    }
+
+    private static CourseTemplateOptionDefinition? FindSourceOption(Course course)
+    {
+        if (string.IsNullOrWhiteSpace(course.SourcePackId) || string.IsNullOrWhiteSpace(course.SourceTemplateId))
+        {
+            return null;
+        }
+
+        var pack = DefaultCoursePacks.All.FirstOrDefault(item =>
+            string.Equals(item.Id, course.SourcePackId, StringComparison.OrdinalIgnoreCase));
+        var template = pack?.Courses.FirstOrDefault(item =>
+            string.Equals(item.TemplateId, course.SourceTemplateId, StringComparison.OrdinalIgnoreCase));
+        if (template is null)
+        {
+            return null;
+        }
+
+        return template.Options.FirstOrDefault(option =>
+            string.Equals(option.Title, course.Title, StringComparison.OrdinalIgnoreCase))
+            ?? template.DefaultOption;
+    }
+
+    private static CourseDescription MergeDescription(CourseDescription current, CourseDescription defaults)
+    {
+        return new CourseDescription(
+            FillBlank(current.Description, defaults.Description),
+            FillBlank(current.InstructionalMethods, defaults.InstructionalMethods),
+            FillBlank(current.MajorTopics, defaults.MajorTopics),
+            FillBlank(current.TextsAndResources, defaults.TextsAndResources),
+            FillBlank(current.AssessmentMethods, defaults.AssessmentMethods),
+            FillBlank(current.GradingBasis, defaults.GradingBasis));
+    }
+
+    private static CurriculumPlan MergeCurriculumPlan(CurriculumPlan current, CurriculumPlan defaults)
+    {
+        return new CurriculumPlan(
+            FillBlank(current.Goals, defaults.Goals),
+            FillBlank(current.LearningObjectives, defaults.LearningObjectives),
+            FillBlank(current.MajorResources, defaults.MajorResources),
+            FillBlank(current.PlannedSequence, defaults.PlannedSequence),
+            FillBlank(current.ParentNotes, defaults.ParentNotes));
+    }
+
+    private static string FillBlank(string current, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(current) ? fallback : current;
+    }
+
+    private async Task RefreshRequirementSeedForPackAsync(
+        CoursePackDefinition pack,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(pack.RequirementJurisdiction, "Michigan", StringComparison.OrdinalIgnoreCase))
+        {
+            await repository.SaveRequirementSeedAsync(
+                MichiganRequirementSeed.CreateSet(),
+                MichiganRequirementSeed.CreateAreas(),
+                cancellationToken);
+        }
     }
 }

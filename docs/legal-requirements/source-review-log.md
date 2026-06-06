@@ -15,12 +15,16 @@
 | 2026-06-06 | MDE Exemption (f) Home School page | Confirms MDE no-role/no-reporting posture for exemption (f) and the organized educational program subject areas. |
 | 2026-06-06 | Michigan Legislature MCL 380.1561 | Confirms statutory exemption text and subject-area list. |
 | 2026-06-06 | MDE Homeschooling in Michigan PDF | Confirms no required curriculum/student-data submission to MDE and parent responsibility for records including transcripts and diplomas. |
+| 2026-06-06 | MDE Michigan Merit Curriculum FAQ Introduction | Confirms the 18-credit MMC categories, nonpublic/home school graduation-criteria boundary, and one-semester Civics/Government note. |
+| 2026-06-06 | MDE Michigan Merit Curriculum Overview PDF | Confirms MMC reference categories and that courses, CTE programs, internships, and other learning opportunities can provide pieces of multiple credits. |
 
 ## Source URLs
 
 - https://www.michigan.gov/mde/Services/flexible-learning/options/nonpub-home/home-school-information/exemption-f-home-school
 - https://legislature.mi.gov/Laws/MCL?objectName=MCL-380-1561
 - https://www.michigan.gov/mde/-/media/Project/Websites/mde/Flexible-Learning-Options/homeschool/Homeschooling-in-Michigan.pdf
+- https://www.michigan.gov/mde/services/academic-standards/mmc/michigan_merit_curriculum_faq_guidance/general-mmc-topics/introduction
+- https://www.michigan.gov/mde/-/media/Project/Websites/mde/Academic-Standards/Personal-Finance/Michigan_Merit_Curriculum_Overview.pdf
 
 ## Maintenance Rule
 

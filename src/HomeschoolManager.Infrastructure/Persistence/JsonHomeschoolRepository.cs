@@ -106,8 +106,7 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
                 document.RequirementSets.RemoveAll(set => set.Id == requirementSet.Id);
                 document.RequirementSets.Add(requirementSet);
 
-                var seedAreaIds = requirementAreas.Select(area => area.Id).ToHashSet();
-                document.RequirementAreas.RemoveAll(area => seedAreaIds.Contains(area.Id));
+                document.RequirementAreas.RemoveAll(area => area.RequirementSetId == requirementSet.Id);
                 document.RequirementAreas.AddRange(requirementAreas);
             },
             cancellationToken);

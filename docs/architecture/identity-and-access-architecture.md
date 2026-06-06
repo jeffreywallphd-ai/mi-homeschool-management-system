@@ -16,6 +16,10 @@ The parent/admin login may use Windows credentials or a similarly simple local a
 
 The student may have a simple PIN-based access flow for student-facing work.
 
+Browser refresh should restore the last selected local role when possible. V1 may keep this as process-wide local session state because the app is designed for one parent-owned PC, not multi-family concurrent hosting. This is local usability state only; application services remain responsible for parent/admin authorization on every mutation.
+
+When no local session is active, startup should route to the login page and the left navigation should expose only Login.
+
 ## Roles
 
 | Role | Purpose |

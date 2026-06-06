@@ -2,6 +2,7 @@ using HomeschoolManager.Web.Components;
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Infrastructure;
 using HomeschoolManager.Web.Services;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +13,18 @@ builder.Logging.AddConsole();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddHomeschoolManagerInfrastructure(builder.Configuration);
-builder.Services.AddScoped<SessionState>();
+builder.Services.AddSingleton<SessionState>();
+
+var dataProtectionDirectory = builder.Environment.IsDevelopment()
+    ? Path.Combine(builder.Environment.ContentRootPath, ".dev-data", "DataProtection-Keys")
+    : Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "HomeschoolManager",
+        "DataProtection-Keys");
+Directory.CreateDirectory(dataProtectionDirectory);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionDirectory))
+    .SetApplicationName("HomeschoolManager");
 
 var app = builder.Build();
 

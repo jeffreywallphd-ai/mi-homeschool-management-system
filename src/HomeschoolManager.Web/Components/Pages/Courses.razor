@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using HomeschoolManager.Application.Common
 @using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
 @inject CourseService CourseService
 @inject SessionState Session
@@ -12,23 +13,201 @@
 
 <p>Courses are the main planning unit for senior-year records, descriptions, curriculum plans, and Michigan requirement mappings.</p>
 
-@if (!Session.IsParentAdmin)
-{
-    <div class="alert alert-warning">Sign in as parent/admin to create or edit courses.</div>
-}
-else
-{
-    <section class="form-section">
-        <h2>Create course</h2>
-        <label class="form-label" for="course-title">Title</label>
-        <input id="course-title" class="form-control" @bind="newCourse.Title" />
-        <label class="form-label" for="subject-area">Subject area</label>
-        <input id="subject-area" class="form-control" @bind="newCourse.SubjectArea" />
-        <label class="form-label" for="planned-credit">Planned credit value</label>
-        <input id="planned-credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="newCourse.PlannedCreditValue" />
-        <button class="btn btn-primary mt-2" @onclick="CreateCourse">Create course</button>
-    </section>
-}
+<div class="content-workbench">
+    <main class="workbench-main">
+        @if (!Session.IsParentAdmin)
+        {
+            <div class="alert alert-warning">Sign in as parent/admin to create or edit courses.</div>
+        }
+        else
+        {
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Create course</h2>
+                    @if (courses.Count > 0)
+                    {
+                        <button class="btn btn-outline-primary btn-sm" @onclick="ToggleCreateCourse">
+                            @(showCreateCourse ? "Hide" : "New Course")
+                        </button>
+                    }
+                </div>
+                @if (courses.Count == 0 || showCreateCourse)
+                {
+                    <label class="form-label" for="course-title">Title <span class="required-marker">*</span></label>
+                    <input id="course-title" class="form-control" @bind="newCourse.Title" />
+                    @ValidationFor("newCourse.Title")
+                    <label class="form-label" for="course-description">Description</label>
+                    <textarea id="course-description" class="form-control" rows="4" @bind="newCourse.Description"></textarea>
+                    <label class="form-label" for="subject-areas">Subject areas <span class="required-marker">*</span></label>
+                    <input id="subject-areas" class="form-control" @bind="newCourse.SubjectAreasText" />
+                    @ValidationFor("newCourse.SubjectAreas")
+                    <label class="form-label" for="duration">Duration <span class="required-marker">*</span></label>
+                    <select id="duration" class="form-select" @bind="newCourse.Duration">
+                        <option value="@CourseDuration.OneSemester">One semester</option>
+                        <option value="@CourseDuration.TwoSemesters">Two semesters</option>
+                    </select>
+                    @ValidationFor("newCourse.Duration")
+                    <label class="form-label" for="planned-credit">Planned credit value <span class="required-marker">*</span></label>
+                    <input id="planned-credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="newCourse.PlannedCreditValue" />
+                    @ValidationFor("newCourse.PlannedCreditValue")
+                    <button class="btn btn-primary mt-2" @onclick="CreateCourse">Create course</button>
+                }
+            </section>
+        }
+
+        <section class="status-panel">
+            <h2>Course list</h2>
+            @if (courses.Count == 0)
+            {
+                <p>No courses have been created yet.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th>Subjects</th>
+                            <th>Duration</th>
+                            <th>Planned credit</th>
+                            <th>Mappings</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var course in courses)
+                        {
+                            <tr>
+                                <td>@course.Title</td>
+                                <td>@DisplayDescription(course.Description)</td>
+                                <td>@string.Join(", ", course.SubjectAreas)</td>
+                                <td>@DurationText(course.Duration)</td>
+                                <td>@course.PlannedCreditValue</td>
+                                <td>@course.MappingCount</td>
+                                <td><a href="@($"/courses/{course.Id}")">Open</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+
+    </main>
+
+    <aside class="workbench-support">
+        <section class="support-card">
+            <h2>Course packs</h2>
+            <label class="form-label" for="course-pack">Pack</label>
+            <select id="course-pack" class="form-select" @bind="selectedPackId" @bind:after="SelectPack">
+                @foreach (var pack in coursePacks)
+                {
+                    <option value="@pack.Id">@pack.Name</option>
+                }
+            </select>
+            @if (selectedPack is not null)
+            {
+                <p>@selectedPack.Description</p>
+                <p>@selectedTemplateIds.Count selected course(s), @SelectedPackCreditTotal() planned credits</p>
+                @if (Session.IsParentAdmin)
+                {
+                    <div class="course-pack-actions">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-primary" @onclick="ImportFullPack">Import full pack</button>
+                            <button class="btn btn-outline-primary" @onclick="ImportSelectedPack">Import selected</button>
+                        </div>
+                        <button class="btn btn-link btn-sm" @onclick="TogglePackDetails">
+                            @(showPackDetails ? "Hide pack details" : "Show pack details")
+                        </button>
+                    </div>
+                }
+                @if (showPackDetails)
+                {
+                    <table class="table table-sm mt-3 course-pack-table">
+                        <thead>
+                            <tr>
+                                <th>Select</th>
+                                <th>Course</th>
+                                <th>Description</th>
+                                <th>Length</th>
+                                <th>Credits</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in selectedPack.Courses)
+                            {
+                                <tr>
+                                    <td>
+                                        <input class="form-check-input" type="checkbox" checked="@selectedTemplateIds.Contains(item.TemplateId)" @onchange="eventArgs => ToggleSelectedTemplate(item.TemplateId, eventArgs)" />
+                                    </td>
+                                    <td class="course-pack-title">
+                                        @if (item.Options.Count > 1)
+                                        {
+                                            <select class="form-select form-select-sm course-pack-course-select" value="@SelectedOptionId(item.TemplateId)" @onchange="eventArgs => ChangeSelectedOption(item.TemplateId, eventArgs)">
+                                                @foreach (var option in item.Options)
+                                                {
+                                                    <option value="@option.OptionId">@option.Title</option>
+                                                }
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            @SelectedOption(item).Title
+                                        }
+                                    </td>
+                                    <td class="course-pack-description">
+                                        <div class="@DescriptionTextCss(item.TemplateId)">@DisplayDescription(SelectedOption(item).Description)</div>
+                                        @if (CanToggleDescription(SelectedOption(item).Description))
+                                        {
+                                            <button type="button" class="btn btn-link btn-sm course-pack-description-toggle" @onclick="() => ToggleDescription(item.TemplateId)">
+                                                @(expandedDescriptionTemplateIds.Contains(item.TemplateId) ? "Less" : "More")
+                                            </button>
+                                        }
+                                    </td>
+                                    <td class="course-pack-length">@DurationText(SelectedOption(item).Duration)</td>
+                                    <td class="course-pack-credits">@SelectedOption(item).PlannedCreditValue</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            }
+        </section>
+
+        <section class="status-panel">
+            <h2>Michigan coverage summary</h2>
+            <p>These records show selected coverage areas. This summary does not certify legal compliance.</p>
+            @if (coverage.Count == 0)
+            {
+                <p>No requirement areas are available. Seed Michigan requirements from Setup.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th>Source</th>
+                            <th>Coverage</th>
+                            <th>Courses</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in coverage)
+                        {
+                            <tr class="@CoverageRowCss(item)">
+                                <td>@item.Name</td>
+                                <td>@item.Source</td>
+                                <td>@(item.IsMapped ? item.CoverageLevel?.ToString() : "Not mapped")</td>
+                                <td>@string.Join(", ", item.CourseTitles)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </aside>
+</div>
 
 @if (messages.Count > 0)
 {
@@ -40,87 +219,38 @@ else
     </section>
 }
 
-<section class="status-panel">
-    <h2>Course list</h2>
-    @if (courses.Count == 0)
-    {
-        <p>No courses have been created yet.</p>
-    }
-    else
-    {
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Subject</th>
-                    <th>Planned credit</th>
-                    <th>Mappings</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var course in courses)
-                {
-                    <tr>
-                        <td>@course.Title</td>
-                        <td>@course.SubjectArea</td>
-                        <td>@course.PlannedCreditValue</td>
-                        <td>@course.MappingCount</td>
-                        <td><a href="@($"/courses/{course.Id}")">Open</a></td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-</section>
-
-<section class="status-panel">
-    <h2>Michigan coverage summary</h2>
-    <p>These records show selected coverage areas. This summary does not certify legal compliance.</p>
-    @if (coverage.Count == 0)
-    {
-        <p>No requirement areas are available. Seed Michigan requirements from Setup.</p>
-    }
-    else
-    {
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>View</th>
-                    <th>Area</th>
-                    <th>Coverage</th>
-                    <th>Courses</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in coverage)
-                {
-                    <tr>
-                        <td>@item.View</td>
-                        <td>@item.Name</td>
-                        <td>@(item.IsMapped ? item.CoverageLevel?.ToString() : "Not mapped")</td>
-                        <td>@string.Join(", ", item.CourseTitles)</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-</section>
-
 @code {
     private IReadOnlyList<CourseListItem> courses = [];
     private IReadOnlyList<CoverageSummaryItem> coverage = [];
+    private IReadOnlyList<CoursePackSummary> coursePacks = [];
+    private CoursePackDetail? selectedPack;
+    private string selectedPackId = "";
+    private bool showCreateCourse;
+    private bool showPackDetails;
+    private readonly HashSet<string> selectedTemplateIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> selectedOptionIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> expandedDescriptionTemplateIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
     private CourseFormModel newCourse = new();
 
     protected override async Task OnInitializedAsync()
     {
+        coursePacks = CourseService.ListCoursePacks();
+        selectedPackId = coursePacks.FirstOrDefault()?.Id ?? "";
+        SelectPack();
         await Refresh();
     }
 
     private async Task CreateCourse()
     {
         messages.Clear();
+        fieldErrors.Clear();
+        if (!ValidateNewCourse())
+        {
+            return;
+        }
+
         var user = Session.CurrentUser;
         if (user is null)
         {
@@ -130,7 +260,7 @@ else
 
         var result = await CourseService.CreateCourseAsync(
             user,
-            new CreateCourseCommand(newCourse.Title, newCourse.SubjectArea, newCourse.PlannedCreditValue));
+            new CreateCourseCommand(newCourse.Title, newCourse.Description, newCourse.SubjectAreas, newCourse.Duration, newCourse.PlannedCreditValue));
 
         if (!result.Succeeded)
         {
@@ -140,7 +270,114 @@ else
 
         messages.Add(new PageMessage("Course created.", "alert alert-success"));
         newCourse = new CourseFormModel();
+        showCreateCourse = false;
         await Refresh();
+    }
+
+    private void ToggleCreateCourse()
+    {
+        showCreateCourse = !showCreateCourse;
+    }
+
+    private void TogglePackDetails()
+    {
+        showPackDetails = !showPackDetails;
+    }
+
+    private Task ImportFullPack()
+    {
+        var selections = selectedPack?.Courses
+            .Select(course => new CoursePackSelectionCommand(course.TemplateId, SelectedOptionId(course.TemplateId)))
+            .ToArray() ?? [];
+        return ImportPack(selections, true);
+    }
+
+    private Task ImportSelectedPack()
+    {
+        var selections = selectedPack?.Courses
+            .Where(course => selectedTemplateIds.Contains(course.TemplateId))
+            .Select(course => new CoursePackSelectionCommand(course.TemplateId, SelectedOptionId(course.TemplateId)))
+            .ToArray() ?? [];
+        return ImportPack(selections, false);
+    }
+
+    private async Task ImportPack(IReadOnlyList<CoursePackSelectionCommand> selections, bool importFullPack)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var user = Session.CurrentUser;
+        if (user is null)
+        {
+            messages.Add(new PageMessage("Sign in as parent/admin to import a course pack.", "alert alert-danger"));
+            return;
+        }
+
+        if (!importFullPack && selections.Count == 0)
+        {
+            messages.Add(new PageMessage("Choose one or more courses, or import the full pack.", "alert alert-danger"));
+            return;
+        }
+
+        var result = await CourseService.ImportCoursePackAsync(user, new ImportCoursePackCommand(selectedPackId, [], selections));
+        if (!result.Succeeded)
+        {
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        messages.Add(new PageMessage($"Imported {result.Value} course(s).", "alert alert-success"));
+        await Refresh();
+    }
+
+    private void SelectPack()
+    {
+        selectedPack = string.IsNullOrWhiteSpace(selectedPackId)
+            ? null
+            : CourseService.GetCoursePackDetail(selectedPackId);
+        selectedTemplateIds.Clear();
+        selectedOptionIds.Clear();
+        expandedDescriptionTemplateIds.Clear();
+        if (selectedPack is not null)
+        {
+            foreach (var course in selectedPack.Courses)
+            {
+                selectedTemplateIds.Add(course.TemplateId);
+                selectedOptionIds[course.TemplateId] = course.DefaultOptionId;
+            }
+        }
+    }
+
+    private void ToggleSelectedTemplate(string templateId, ChangeEventArgs eventArgs)
+    {
+        var isChecked = eventArgs.Value is bool value && value;
+        if (isChecked)
+        {
+            selectedTemplateIds.Add(templateId);
+            return;
+        }
+
+        selectedTemplateIds.Remove(templateId);
+    }
+
+    private void ChangeSelectedOption(string templateId, ChangeEventArgs eventArgs)
+    {
+        var optionId = eventArgs.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(optionId))
+        {
+            selectedOptionIds.Remove(templateId);
+            return;
+        }
+
+        selectedOptionIds[templateId] = optionId;
+        expandedDescriptionTemplateIds.Remove(templateId);
+    }
+
+    private void ToggleDescription(string templateId)
+    {
+        if (!expandedDescriptionTemplateIds.Add(templateId))
+        {
+            expandedDescriptionTemplateIds.Remove(templateId);
+        }
     }
 
     private async Task Refresh()
@@ -149,11 +386,111 @@ else
         coverage = await CourseService.GetCoverageSummaryAsync();
     }
 
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
+    }
+
+    private static string DisplayDescription(string description)
+    {
+        return string.IsNullOrWhiteSpace(description) ? "No description yet" : description;
+    }
+
+    private string DescriptionTextCss(string templateId)
+    {
+        return expandedDescriptionTemplateIds.Contains(templateId)
+            ? "course-pack-description-text expanded"
+            : "course-pack-description-text";
+    }
+
+    private static bool CanToggleDescription(string description)
+    {
+        return !string.IsNullOrWhiteSpace(description) && description.Length > 90;
+    }
+
+    private static string CoverageRowCss(CoverageSummaryItem item)
+    {
+        return IsUnmetStatutoryRequirement(item) ? "unmet-statutory-requirement" : "";
+    }
+
+    private static bool IsUnmetStatutoryRequirement(CoverageSummaryItem item)
+    {
+        return !item.IsMapped && item.Source.Contains("Statutory", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string SelectedOptionId(string templateId)
+    {
+        if (selectedOptionIds.TryGetValue(templateId, out var optionId))
+        {
+            return optionId;
+        }
+
+        var course = selectedPack?.Courses.FirstOrDefault(item => item.TemplateId == templateId);
+        return course?.DefaultOptionId ?? "";
+    }
+
+    private CoursePackOptionView SelectedOption(CoursePackCourseView course)
+    {
+        var selectedOptionId = SelectedOptionId(course.TemplateId);
+        return course.Options.FirstOrDefault(option => string.Equals(option.OptionId, selectedOptionId, StringComparison.OrdinalIgnoreCase))
+            ?? course.Options.First();
+    }
+
+    private decimal SelectedPackCreditTotal()
+    {
+        return selectedPack?.Courses
+            .Where(course => selectedTemplateIds.Contains(course.TemplateId))
+            .Sum(course => SelectedOption(course).PlannedCreditValue) ?? 0;
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private bool ValidateNewCourse()
+    {
+        if (string.IsNullOrWhiteSpace(newCourse.Title))
+        {
+            fieldErrors["newCourse.Title"] = "Title is required.";
+        }
+
+        if (newCourse.SubjectAreas.Count == 0)
+        {
+            fieldErrors["newCourse.SubjectAreas"] = "At least one subject area is required.";
+        }
+
+        if (!Enum.IsDefined(newCourse.Duration))
+        {
+            fieldErrors["newCourse.Duration"] = "Duration is required.";
+        }
+
+        if (newCourse.PlannedCreditValue <= 0 || newCourse.PlannedCreditValue > 3)
+        {
+            fieldErrors["newCourse.PlannedCreditValue"] = "Planned credit must be greater than 0 and no more than 3.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required fields.", "alert alert-danger"));
+        return false;
+    }
+
     private sealed class CourseFormModel
     {
         public string Title { get; set; } = "";
-        public string SubjectArea { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string SubjectAreasText { get; set; } = "";
+        public CourseDuration Duration { get; set; } = CourseDuration.TwoSemesters;
         public decimal PlannedCreditValue { get; set; } = 1;
+
+        public IReadOnlyList<string> SubjectAreas => SubjectAreasText
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     private sealed record PageMessage(string Text, string CssClass);

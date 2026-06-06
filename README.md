@@ -29,6 +29,32 @@ Prerequisite:
 From the repository root:
 
 ```powershell
+.\Start-Dev.ps1
+```
+
+From Git Bash:
+
+```bash
+./start-dev.sh
+```
+
+That script restores packages, builds the solution, runs the contract tests, and starts the web app with hot reload.
+
+To start without hot reload:
+
+```powershell
+.\Start-Dev.ps1 -NoWatch
+```
+
+From Git Bash:
+
+```bash
+./start-dev.sh -NoWatch
+```
+
+For manual startup:
+
+```powershell
 $env:DOTNET_CLI_HOME = Join-Path (Get-Location) ".dotnet-home"
 $env:NUGET_PACKAGES = Join-Path (Get-Location) ".nuget-packages"
 $env:APPDATA = Join-Path (Get-Location) ".appdata"

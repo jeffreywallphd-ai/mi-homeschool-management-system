@@ -35,18 +35,38 @@ public static class MichiganRequirementSeed
         {
             "Mathematics",
             "Reading",
-            "English",
+            "English Language Arts",
             "Science",
             "Social Studies",
             "U.S. Constitution",
             "Michigan Constitution",
-            "Civil Government / History"
+            "Civics"
+        };
+
+        var mmcReference = new[]
+        {
+            "English Language Arts",
+            "Mathematics",
+            "Online Learning Experience",
+            "Personal Finance",
+            "Physical Education and Health",
+            "Science",
+            "Social Studies",
+            "Visual, Performing, and Applied Arts",
+            "World Language"
         };
 
         var areas = new List<RequirementArea>();
         areas.AddRange(statutory.Select(name => Area(name, "All grades", "Required", "Statutory")));
-        areas.AddRange(mdeGuidance.Select(name => Area(name, name.Contains("Constitution", StringComparison.Ordinal) || name.Contains("Government", StringComparison.Ordinal) ? "Grades 10-12" : "All grades", "Guidance", "MDE Summary")));
+        areas.AddRange(mdeGuidance.Select(name => Area(name, IsUpperGradeMdeArea(name) ? "Grades 10-12" : "All grades", "Guidance", "MDE Summary")));
+        areas.AddRange(mmcReference.Select(name => Area(name, "High school", "Reference", "MMC Reference")));
         return areas;
+    }
+
+    private static bool IsUpperGradeMdeArea(string name)
+    {
+        return name.Contains("Constitution", StringComparison.Ordinal) ||
+            name.Contains("Civics", StringComparison.Ordinal);
     }
 
     private static RequirementArea Area(string name, string gradeBand, string requiredOrRecommended, string view)
