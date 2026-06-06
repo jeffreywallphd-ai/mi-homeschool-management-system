@@ -1,0 +1,68 @@
+@page "/login"
+@rendermode InteractiveServer
+@using HomeschoolManager.Infrastructure.Access
+@using HomeschoolManager.Web.Services
+@inject LocalAccessService AccessService
+@inject SessionState Session
+
+<PageTitle>Login</PageTitle>
+
+<h1>Login</h1>
+
+@if (Session.IsAuthenticated)
+{
+    <div class="alert alert-success">
+        Signed in as @Session.CurrentUser?.DisplayName (@Session.CurrentUser?.Role).
+    </div>
+    <button class="btn btn-secondary" @onclick="SignOut">Sign out</button>
+}
+else
+{
+    <section class="form-section">
+        <h2>Parent/admin</h2>
+        <p>Use the current Windows user as the local parent/admin session.</p>
+        <button class="btn btn-primary" @onclick="SignInParent">Sign in as parent/admin</button>
+    </section>
+
+    <section class="form-section">
+        <h2>Student PIN</h2>
+        <label for="student-pin" class="form-label">PIN</label>
+        <input id="student-pin" class="form-control" type="password" @bind="studentPin" />
+        <button class="btn btn-outline-primary mt-2" @onclick="SignInStudent">Sign in as student</button>
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="validation-message">@error</div>
+        }
+    </section>
+}
+
+@code {
+    private string studentPin = "";
+    private string error = "";
+
+    private void SignInParent()
+    {
+        Session.SignIn(AccessService.CreateParentSession());
+        error = "";
+    }
+
+    private void SignInStudent()
+    {
+        var user = AccessService.CreateStudentSession(studentPin);
+        if (user is null)
+        {
+            error = "The student PIN was not recognized.";
+            return;
+        }
+
+        Session.SignIn(user);
+        error = "";
+    }
+
+    private void SignOut()
+    {
+        Session.SignOut();
+        studentPin = "";
+        error = "";
+    }
+}

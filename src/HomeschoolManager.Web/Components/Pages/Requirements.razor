@@ -1,0 +1,48 @@
+@page "/requirements"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Requirements
+@inject RequirementService RequirementService
+
+<PageTitle>Michigan Requirements</PageTitle>
+
+<h1>Michigan requirement checklist</h1>
+
+<p>These areas help show selected Michigan homeschool subject-area coverage in your records. This checklist does not certify legal compliance.</p>
+
+@if (items.Count == 0)
+{
+    <div class="alert alert-info">No Michigan requirement areas have been seeded yet. Sign in as parent/admin and seed them from Setup.</div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>View</th>
+                <th>Area</th>
+                <th>Grade band</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in items)
+            {
+                <tr>
+                    <td>@item.View</td>
+                    <td>@item.Name</td>
+                    <td>@item.GradeBand</td>
+                    <td>@item.RequiredOrRecommended</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<RequirementChecklistItem> items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        items = await RequirementService.GetChecklistAsync();
+    }
+}

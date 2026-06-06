@@ -1,0 +1,56 @@
+# Records and Credentials Use Cases
+
+- Status: accepted
+- Last reviewed: 2026-06-06
+- Canonical for: user-facing official-record and credential workflows
+- Related ADRs: [ADR-0001](../adr/ADR-0001-parent-owned-records-not-state-filings.md), [ADR-0003](../adr/ADR-0003-records-and-credentials-module-from-start.md), [ADR-0005](../adr/ADR-0005-parent-defined-graduation-standards-before-diploma.md)
+- Related docs: [Official Records Rules](../domain/official-records-rules.md), [Document Generation Architecture](../architecture/document-generation-architecture.md)
+- Related tests: not yet implemented
+- Supersedes: none
+
+## Use Cases
+
+The system must support these parent-facing record workflows:
+
+- Generate a progress report for a date range.
+- Generate a report card for a term, semester, or school year.
+- Generate a high-school transcript.
+- Generate a family-issued diploma.
+- Generate a course-description packet.
+- Generate a portfolio export.
+- Generate a graduation packet.
+- Export a student archive for long-term family records.
+
+## Required Record Packet Types
+
+- Transcript only.
+- Transcript plus course descriptions.
+- Full graduation packet.
+- Portfolio packet.
+
+## Required Graduation Packet Contents
+
+A graduation packet should be able to include:
+
+- Transcript.
+- Diploma copy.
+- Course descriptions.
+- Graduation plan.
+- Report cards.
+- Test records.
+- Portfolio index.
+- Selected artifacts.
+- Parent evaluation notes.
+
+## Credential Language
+
+Generated records must identify themselves as family-issued or parent-issued when appropriate. They must not imply state submission, MDE approval, accreditation, or legal certification.
+
+## Evidence Chain
+
+Official records should link back to source data:
+
+- Transcript course lines should trace to course completions or credit awards.
+- Diploma issuance should trace to an accepted graduation plan.
+- Report card grades should trace to gradebook and evaluation evidence.
+- Portfolio packets should trace to selected artifacts and evidence tags.

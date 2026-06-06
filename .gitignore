@@ -43,6 +43,25 @@
 build/
 Build/
 build-*/
+bin/
+obj/
+publish/
+artifacts/
+TestResults/
+coverage/
+*.coverage
+*.trx
+*.user
+*.suo
+.vs/
+
+# Repo-local .NET/NuGet caches used by sandboxed tooling
+.dotnet-home/
+.nuget-packages/
+.appdata/
+.localappdata/
+.dev-data/
+.run-web.*.log
 
 # CMake generated files
 CMakeFiles/

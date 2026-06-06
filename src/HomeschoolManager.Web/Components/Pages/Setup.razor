@@ -1,0 +1,239 @@
+@page "/setup"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
+@using HomeschoolManager.Application.Requirements
+@using HomeschoolManager.Application.Setup
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.Web.Services
+@inject SetupService SetupService
+@inject RequirementService RequirementService
+@inject SessionState Session
+
+<PageTitle>Setup</PageTitle>
+
+<h1>Setup</h1>
+
+@if (!Session.IsParentAdmin)
+{
+    <div class="alert alert-warning">Sign in as parent/admin to manage setup.</div>
+}
+else
+{
+    <section class="status-panel">
+        <h2>Current setup</h2>
+        @if (summary is null)
+        {
+            <p>Loading setup status...</p>
+        }
+        else
+        {
+            <ul>
+                <li>Household: @Display(summary.HasHousehold, summary.HouseholdName)</li>
+                <li>School profile: @Display(summary.HasSchoolProfile, summary.SchoolName)</li>
+                <li>Student: @Display(summary.HasStudent, summary.StudentName)</li>
+                <li>School year: @Display(summary.HasSchoolYear, summary.SchoolYearName)</li>
+            </ul>
+        }
+    </section>
+
+    <section class="form-section">
+        <h2>Household</h2>
+        <label class="form-label" for="household-name">Household name</label>
+        <input id="household-name" class="form-control" @bind="household.HouseholdName" />
+        <label class="form-label" for="parent-name">Parent/guardian name</label>
+        <input id="parent-name" class="form-control" @bind="household.ParentGuardianName" />
+        <button class="btn btn-primary mt-2" @onclick="SaveHousehold">Save household</button>
+    </section>
+
+    <section class="form-section">
+        <h2>School profile</h2>
+        <label class="form-label" for="school-name">School name</label>
+        <input id="school-name" class="form-control" @bind="school.SchoolName" />
+        <label class="form-label" for="administrator-name">Administrator parent name</label>
+        <input id="administrator-name" class="form-control" @bind="school.AdministratorParentName" />
+        <label class="form-label" for="jurisdiction">Jurisdiction</label>
+        <input id="jurisdiction" class="form-control" @bind="school.Jurisdiction" />
+        <label class="form-label" for="start-date">Homeschool start date</label>
+        <input id="start-date" class="form-control" type="date" @bind="school.HomeschoolStartDate" />
+        <label class="form-label" for="basis">Operating basis</label>
+        <input id="basis" class="form-control" @bind="school.OperatingBasis" />
+        <label class="form-label" for="signature">Diploma signature name</label>
+        <input id="signature" class="form-control" @bind="school.DiplomaSignatureName" />
+        <label class="form-label" for="city">Diploma issue city</label>
+        <input id="city" class="form-control" @bind="school.DiplomaIssueCity" />
+        <label class="form-label" for="state">Diploma issue state</label>
+        <input id="state" class="form-control" @bind="school.DiplomaIssueState" />
+        <button class="btn btn-primary mt-2" @onclick="SaveSchool">Save school profile</button>
+    </section>
+
+    <section class="form-section">
+        <h2>Student</h2>
+        <label class="form-label" for="first-name">First name</label>
+        <input id="first-name" class="form-control" @bind="student.FirstName" />
+        <label class="form-label" for="last-name">Last name</label>
+        <input id="last-name" class="form-control" @bind="student.LastName" />
+        <label class="form-label" for="grade-level">Grade level</label>
+        <input id="grade-level" class="form-control" type="number" min="0" max="12" @bind="student.GradeLevel" />
+        <button class="btn btn-primary mt-2" @onclick="SaveStudent">Save student</button>
+    </section>
+
+    <section class="form-section">
+        <h2>School year</h2>
+        <label class="form-label" for="year-name">School year name</label>
+        <input id="year-name" class="form-control" @bind="year.Name" />
+        <label class="form-label" for="start-year">Start year</label>
+        <input id="start-year" class="form-control" type="number" @bind="year.StartYear" />
+        <label class="form-label" for="end-year">End year</label>
+        <input id="end-year" class="form-control" type="number" @bind="year.EndYear" />
+        <label class="form-label" for="term1-start">Semester 1 start</label>
+        <input id="term1-start" class="form-control" type="date" @bind="year.FirstTermStart" />
+        <label class="form-label" for="term1-end">Semester 1 end</label>
+        <input id="term1-end" class="form-control" type="date" @bind="year.FirstTermEnd" />
+        <label class="form-label" for="term2-start">Semester 2 start</label>
+        <input id="term2-start" class="form-control" type="date" @bind="year.SecondTermStart" />
+        <label class="form-label" for="term2-end">Semester 2 end</label>
+        <input id="term2-end" class="form-control" type="date" @bind="year.SecondTermEnd" />
+        <button class="btn btn-primary mt-2" @onclick="SaveSchoolYear">Save school year</button>
+    </section>
+
+    <section class="form-section">
+        <h2>Michigan requirement seed</h2>
+        <p>Seed Michigan as the first jurisdiction profile. This supports selected subject-area coverage tracking and does not certify legal compliance.</p>
+        <button class="btn btn-primary" @onclick="SeedMichigan">Seed Michigan requirements</button>
+    </section>
+}
+
+@if (messages.Count > 0)
+{
+    <section class="message-list" aria-live="polite">
+        @foreach (var message in messages)
+        {
+            <div class="@message.CssClass">@message.Text</div>
+        }
+    </section>
+}
+
+@code {
+    private SetupSummary? summary;
+    private readonly List<PageMessage> messages = [];
+    private HouseholdModel household = new();
+    private SchoolModel school = new();
+    private StudentModel student = new();
+    private SchoolYearModel year = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshSummary();
+    }
+
+    private async Task SaveHousehold()
+    {
+        await Run(() => SetupService.CreateHouseholdAsync(ParentUser(), new CreateHouseholdCommand(household.HouseholdName, household.ParentGuardianName)));
+    }
+
+    private async Task SaveSchool()
+    {
+        await Run(() => SetupService.ConfigureSchoolProfileAsync(
+            ParentUser(),
+            new ConfigureSchoolProfileCommand(
+                school.SchoolName,
+                school.AdministratorParentName,
+                school.Jurisdiction,
+                school.HomeschoolStartDate,
+                school.OperatingBasis,
+                school.DiplomaSignatureName,
+                school.DiplomaIssueCity,
+                school.DiplomaIssueState)));
+    }
+
+    private async Task SaveStudent()
+    {
+        await Run(() => SetupService.CreateStudentAsync(ParentUser(), new CreateStudentCommand(student.FirstName, student.LastName, student.GradeLevel)));
+    }
+
+    private async Task SaveSchoolYear()
+    {
+        await Run(() => SetupService.ConfigureSchoolYearAsync(
+            ParentUser(),
+            new ConfigureSchoolYearCommand(
+                year.Name,
+                year.StartYear,
+                year.EndYear,
+                year.FirstTermStart,
+                year.FirstTermEnd,
+                year.SecondTermStart,
+                year.SecondTermEnd)));
+    }
+
+    private async Task SeedMichigan()
+    {
+        await Run(() => RequirementService.SeedMichiganAsync(ParentUser()));
+    }
+
+    private async Task Run(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await RefreshSummary();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task RefreshSummary()
+    {
+        summary = await SetupService.GetSummaryAsync();
+    }
+
+    private UserContext ParentUser()
+    {
+        return Session.CurrentUser ?? UserContext.Student("Anonymous");
+    }
+
+    private static string Display(bool exists, string value)
+    {
+        return exists ? value : "Not set";
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
+
+    private sealed class HouseholdModel
+    {
+        public string HouseholdName { get; set; } = "Family Household";
+        public string ParentGuardianName { get; set; } = "";
+    }
+
+    private sealed class SchoolModel
+    {
+        public string SchoolName { get; set; } = "Family Homeschool";
+        public string AdministratorParentName { get; set; } = "";
+        public string Jurisdiction { get; set; } = "Michigan";
+        public DateOnly HomeschoolStartDate { get; set; } = new(2026, 8, 24);
+        public string OperatingBasis { get; set; } = "Michigan Exemption 3(f)";
+        public string DiplomaSignatureName { get; set; } = "";
+        public string DiplomaIssueCity { get; set; } = "";
+        public string DiplomaIssueState { get; set; } = "Michigan";
+    }
+
+    private sealed class StudentModel
+    {
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public int GradeLevel { get; set; } = 12;
+    }
+
+    private sealed class SchoolYearModel
+    {
+        public string Name { get; set; } = "2026-2027";
+        public int StartYear { get; set; } = 2026;
+        public int EndYear { get; set; } = 2027;
+        public DateOnly FirstTermStart { get; set; } = new(2026, 8, 24);
+        public DateOnly FirstTermEnd { get; set; } = new(2026, 12, 18);
+        public DateOnly SecondTermStart { get; set; } = new(2027, 1, 11);
+        public DateOnly SecondTermEnd { get; set; } = new(2027, 5, 28);
+    }
+}

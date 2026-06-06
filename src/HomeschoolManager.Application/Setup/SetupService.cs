@@ -1,0 +1,172 @@
+using HomeschoolManager.Application.Access;
+using HomeschoolManager.Application.Common;
+using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Domain.Access;
+using HomeschoolManager.Domain.Common;
+using HomeschoolManager.Domain.Household;
+using HomeschoolManager.Domain.Students;
+
+namespace HomeschoolManager.Application.Setup;
+
+public sealed class SetupService
+{
+    private readonly IHomeschoolRepository repository;
+
+    public SetupService(IHomeschoolRepository repository)
+    {
+        this.repository = repository;
+    }
+
+    public async Task<SetupSummary> GetSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        var household = await repository.GetHouseholdAsync(cancellationToken);
+        var schoolProfile = await repository.GetSchoolProfileAsync(cancellationToken);
+        var student = await repository.GetStudentAsync(cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+
+        return new SetupSummary(
+            household is not null,
+            schoolProfile is not null,
+            student is not null,
+            schoolYear is not null,
+            household?.Name ?? "",
+            household?.ParentGuardianName ?? "",
+            schoolProfile?.SchoolName ?? "",
+            student is null ? "" : $"{student.FirstName} {student.LastName}",
+            schoolYear?.Name ?? "");
+    }
+
+    public async Task<OperationResult> CreateHouseholdAsync(
+        UserContext user,
+        CreateHouseholdCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        try
+        {
+            var household = new Household(Guid.NewGuid(), command.HouseholdName, command.ParentGuardianName);
+            await repository.SaveHouseholdAsync(household, cancellationToken);
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> ConfigureSchoolProfileAsync(
+        UserContext user,
+        ConfigureSchoolProfileCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var household = await repository.GetHouseholdAsync(cancellationToken);
+        if (household is null)
+        {
+            return OperationResult.Failure("Create a household before configuring the school profile.");
+        }
+
+        try
+        {
+            var profile = new SchoolProfile(
+                Guid.NewGuid(),
+                household.Id,
+                command.SchoolName,
+                command.AdministratorParentName,
+                command.Jurisdiction,
+                command.HomeschoolStartDate,
+                command.OperatingBasis,
+                command.DiplomaSignatureName,
+                command.DiplomaIssueCity,
+                command.DiplomaIssueState);
+
+            await repository.SaveSchoolProfileAsync(profile, cancellationToken);
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> CreateStudentAsync(
+        UserContext user,
+        CreateStudentCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var household = await repository.GetHouseholdAsync(cancellationToken);
+        if (household is null)
+        {
+            return OperationResult.Failure("Create a household before adding a student.");
+        }
+
+        try
+        {
+            var student = new Student(Guid.NewGuid(), household.Id, command.FirstName, command.LastName, command.GradeLevel);
+            await repository.SaveStudentAsync(student, cancellationToken);
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> ConfigureSchoolYearAsync(
+        UserContext user,
+        ConfigureSchoolYearCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var student = await repository.GetStudentAsync(cancellationToken);
+        if (student is null)
+        {
+            return OperationResult.Failure("Create a student before configuring a school year.");
+        }
+
+        try
+        {
+            var terms = new[]
+            {
+                new Term(Guid.NewGuid(), "Semester 1", command.FirstTermStart, command.FirstTermEnd),
+                new Term(Guid.NewGuid(), "Semester 2", command.SecondTermStart, command.SecondTermEnd)
+            };
+
+            var schoolYear = new SchoolYear(
+                Guid.NewGuid(),
+                student.Id,
+                command.Name,
+                command.StartYear,
+                command.EndYear,
+                terms);
+
+            await repository.SaveSchoolYearAsync(schoolYear, cancellationToken);
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+}

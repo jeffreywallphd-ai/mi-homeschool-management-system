@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D575896A-CE8F-4C45-A36A-DFBE61AD61D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Web", "src\HomeschoolManager.Web\HomeschoolManager.Web.csproj", "{26E82016-BEF0-41DF-B182-65BD26375547}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Domain", "src\HomeschoolManager.Domain\HomeschoolManager.Domain.csproj", "{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Application", "src\HomeschoolManager.Application\HomeschoolManager.Application.csproj", "{37EFD399-8783-451F-BA88-3406EBF7FAB1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Infrastructure", "src\HomeschoolManager.Infrastructure\HomeschoolManager.Infrastructure.csproj", "{412E240B-0FED-4296-BB59-7C1123417F2F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Tests", "src\HomeschoolManager.Tests\HomeschoolManager.Tests.csproj", "{E730B178-1595-4DBE-861B-C4C30B248145}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{26E82016-BEF0-41DF-B182-65BD26375547}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26E82016-BEF0-41DF-B182-65BD26375547}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26E82016-BEF0-41DF-B182-65BD26375547}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26E82016-BEF0-41DF-B182-65BD26375547}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37EFD399-8783-451F-BA88-3406EBF7FAB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37EFD399-8783-451F-BA88-3406EBF7FAB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37EFD399-8783-451F-BA88-3406EBF7FAB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37EFD399-8783-451F-BA88-3406EBF7FAB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{412E240B-0FED-4296-BB59-7C1123417F2F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{412E240B-0FED-4296-BB59-7C1123417F2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{412E240B-0FED-4296-BB59-7C1123417F2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{412E240B-0FED-4296-BB59-7C1123417F2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E730B178-1595-4DBE-861B-C4C30B248145}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E730B178-1595-4DBE-861B-C4C30B248145}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E730B178-1595-4DBE-861B-C4C30B248145}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E730B178-1595-4DBE-861B-C4C30B248145}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{26E82016-BEF0-41DF-B182-65BD26375547} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{37EFD399-8783-451F-BA88-3406EBF7FAB1} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{412E240B-0FED-4296-BB59-7C1123417F2F} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{E730B178-1595-4DBE-861B-C4C30B248145} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+	EndGlobalSection
+EndGlobal
