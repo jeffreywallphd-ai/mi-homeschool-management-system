@@ -1,4 +1,5 @@
 using HomeschoolManager.Domain.Household;
+using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
 
@@ -30,6 +31,12 @@ public interface IHomeschoolRepository
         RequirementSet requirementSet,
         IReadOnlyList<RequirementArea> requirementAreas,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Course>> GetCoursesAsync(CancellationToken cancellationToken = default);
+
+    Task<Course?> GetCourseAsync(Guid courseId, CancellationToken cancellationToken = default);
+
+    Task SaveCourseAsync(Course course, CancellationToken cancellationToken = default);
 
     Task EnsureStoreCreatedAsync(CancellationToken cancellationToken = default);
 }

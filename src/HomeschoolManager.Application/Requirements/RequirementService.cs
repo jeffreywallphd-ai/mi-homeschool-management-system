@@ -36,7 +36,7 @@ public sealed class RequirementService
         return areas
             .OrderBy(area => area.View)
             .ThenBy(area => area.Name)
-            .Select(area => new RequirementChecklistItem(area.View, area.Name, area.GradeBand, area.RequiredOrRecommended))
+            .Select(area => new RequirementChecklistItem(area.Id, area.View, area.Name, area.GradeBand, area.RequiredOrRecommended))
             .ToArray();
     }
 }

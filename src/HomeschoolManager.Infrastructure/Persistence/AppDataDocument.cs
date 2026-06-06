@@ -1,4 +1,5 @@
 using HomeschoolManager.Domain.Household;
+using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
 
@@ -19,4 +20,6 @@ public sealed class AppDataDocument
     public List<RequirementSet> RequirementSets { get; set; } = [];
 
     public List<RequirementArea> RequirementAreas { get; set; } = [];
+
+    public List<Course> Courses { get; set; } = [];
 }

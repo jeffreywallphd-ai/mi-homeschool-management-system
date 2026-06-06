@@ -1,0 +1,299 @@
+@page "/courses/{CourseId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Application.Requirements
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@inject CourseService CourseService
+@inject RequirementService RequirementService
+@inject SessionState Session
+
+<PageTitle>Course Detail</PageTitle>
+
+@if (detail is null)
+{
+    <h1>Course not found</h1>
+    <p>The requested course could not be loaded.</p>
+}
+else
+{
+    <h1>@detail.Title</h1>
+    <p>@detail.SubjectArea, @detail.PlannedCreditValue planned credit(s)</p>
+
+    @if (!Session.IsParentAdmin)
+    {
+        <div class="alert alert-warning">Sign in as parent/admin to edit course planning records.</div>
+    }
+    else
+    {
+        <section class="form-section">
+            <h2>Course identity</h2>
+            <label class="form-label" for="title">Title</label>
+            <input id="title" class="form-control" @bind="courseForm.Title" />
+            <label class="form-label" for="subject">Subject area</label>
+            <input id="subject" class="form-control" @bind="courseForm.SubjectArea" />
+            <label class="form-label" for="credit">Planned credit value</label>
+            <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" />
+            <button class="btn btn-primary mt-2" @onclick="SaveCourse">Save course</button>
+        </section>
+
+        <section class="form-section">
+            <h2>Course description</h2>
+            <label class="form-label" for="description">Description</label>
+            <textarea id="description" class="form-control" rows="3" @bind="descriptionForm.Description"></textarea>
+            <label class="form-label" for="methods">Instructional methods</label>
+            <textarea id="methods" class="form-control" rows="2" @bind="descriptionForm.InstructionalMethods"></textarea>
+            <label class="form-label" for="topics">Major topics</label>
+            <textarea id="topics" class="form-control" rows="2" @bind="descriptionForm.MajorTopics"></textarea>
+            <label class="form-label" for="resources">Texts and resources</label>
+            <textarea id="resources" class="form-control" rows="2" @bind="descriptionForm.TextsAndResources"></textarea>
+            <label class="form-label" for="assessment">Assessment methods</label>
+            <textarea id="assessment" class="form-control" rows="2" @bind="descriptionForm.AssessmentMethods"></textarea>
+            <label class="form-label" for="grading">Grading basis</label>
+            <input id="grading" class="form-control" @bind="descriptionForm.GradingBasis" />
+            <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
+        </section>
+
+        <section class="form-section">
+            <h2>Curriculum plan</h2>
+            <label class="form-label" for="goals">Goals</label>
+            <textarea id="goals" class="form-control" rows="2" @bind="planForm.Goals"></textarea>
+            <label class="form-label" for="objectives">Learning objectives</label>
+            <textarea id="objectives" class="form-control" rows="2" @bind="planForm.LearningObjectives"></textarea>
+            <label class="form-label" for="major-resources">Major resources</label>
+            <textarea id="major-resources" class="form-control" rows="2" @bind="planForm.MajorResources"></textarea>
+            <label class="form-label" for="sequence">Planned sequence</label>
+            <textarea id="sequence" class="form-control" rows="2" @bind="planForm.PlannedSequence"></textarea>
+            <label class="form-label" for="notes">Parent notes</label>
+            <textarea id="notes" class="form-control" rows="2" @bind="planForm.ParentNotes"></textarea>
+            <button class="btn btn-primary mt-2" @onclick="SavePlan">Save curriculum plan</button>
+        </section>
+
+        <section class="form-section">
+            <h2>Requirement mapping</h2>
+            <p>Mappings show selected coverage. They are parent-owned evidence summaries, not legal determinations.</p>
+            <label class="form-label" for="requirement-area">Requirement area</label>
+            <select id="requirement-area" class="form-select" @bind="mappingForm.RequirementAreaId">
+                <option value="@Guid.Empty">Choose an area</option>
+                @foreach (var item in requirementAreas)
+                {
+                    <option value="@item.RequirementAreaId">@item.View - @item.Name (@item.GradeBand)</option>
+                }
+            </select>
+            <label class="form-label" for="coverage-level">Coverage level</label>
+            <select id="coverage-level" class="form-select" @bind="mappingForm.CoverageLevel">
+                <option value="@CoverageLevel.Primary">Primary</option>
+                <option value="@CoverageLevel.Secondary">Secondary</option>
+                <option value="@CoverageLevel.Supporting">Supporting</option>
+            </select>
+            <label class="form-label" for="mapping-notes">Notes</label>
+            <textarea id="mapping-notes" class="form-control" rows="2" @bind="mappingForm.Notes"></textarea>
+            <button class="btn btn-primary mt-2" @onclick="AddOrUpdateMapping">Add or update mapping</button>
+        </section>
+    }
+
+    @if (messages.Count > 0)
+    {
+        <section class="message-list" aria-live="polite">
+            @foreach (var message in messages)
+            {
+                <div class="@message.CssClass">@message.Text</div>
+            }
+        </section>
+    }
+
+    <section class="status-panel">
+        <h2>Current mappings</h2>
+        @if (detail.Mappings.Count == 0)
+        {
+            <p>No requirement mappings yet.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>View</th>
+                        <th>Area</th>
+                        <th>Coverage</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mapping in detail.Mappings)
+                    {
+                        <tr>
+                            <td>@mapping.RequirementView</td>
+                            <td>@mapping.RequirementAreaName</td>
+                            <td>@mapping.CoverageLevel</td>
+                            <td>@mapping.Notes</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    private HomeschoolManager.Application.Courses.CourseDetail? detail;
+    private IReadOnlyList<RequirementChecklistItem> requirementAreas = [];
+    private readonly List<PageMessage> messages = [];
+    private CourseFormModel courseForm = new();
+    private DescriptionFormModel descriptionForm = new();
+    private PlanFormModel planForm = new();
+    private MappingFormModel mappingForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        requirementAreas = await RequirementService.GetChecklistAsync();
+        await Refresh();
+    }
+
+    private async Task SaveCourse()
+    {
+        await Run(() => CourseService.UpdateCourseAsync(
+            ParentUser(),
+            new UpdateCourseCommand(CourseId, courseForm.Title, courseForm.SubjectArea, courseForm.PlannedCreditValue)));
+    }
+
+    private async Task SaveDescription()
+    {
+        await Run(() => CourseService.SaveCourseDescriptionAsync(
+            ParentUser(),
+            new SaveCourseDescriptionCommand(
+                CourseId,
+                descriptionForm.Description,
+                descriptionForm.InstructionalMethods,
+                descriptionForm.MajorTopics,
+                descriptionForm.TextsAndResources,
+                descriptionForm.AssessmentMethods,
+                descriptionForm.GradingBasis)));
+    }
+
+    private async Task SavePlan()
+    {
+        await Run(() => CourseService.SaveCurriculumPlanAsync(
+            ParentUser(),
+            new SaveCurriculumPlanCommand(
+                CourseId,
+                planForm.Goals,
+                planForm.LearningObjectives,
+                planForm.MajorResources,
+                planForm.PlannedSequence,
+                planForm.ParentNotes)));
+    }
+
+    private async Task AddOrUpdateMapping()
+    {
+        if (detail is null)
+        {
+            return;
+        }
+
+        var mappings = detail.Mappings
+            .Where(mapping => mapping.RequirementAreaId != mappingForm.RequirementAreaId)
+            .Select(mapping => new RequirementMappingCommand(mapping.RequirementAreaId, mapping.CoverageLevel, mapping.Notes))
+            .ToList();
+
+        mappings.Add(new RequirementMappingCommand(mappingForm.RequirementAreaId, mappingForm.CoverageLevel, mappingForm.Notes));
+
+        await Run(() => CourseService.SetRequirementMappingsAsync(
+            ParentUser(),
+            new SetCourseRequirementMappingsCommand(CourseId, mappings)));
+
+        mappingForm = new MappingFormModel();
+    }
+
+    private async Task Run(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await Refresh();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task Refresh()
+    {
+        detail = await CourseService.GetCourseDetailAsync(CourseId);
+        if (detail is null)
+        {
+            return;
+        }
+
+        courseForm = new CourseFormModel
+        {
+            Title = detail.Title,
+            SubjectArea = detail.SubjectArea,
+            PlannedCreditValue = detail.PlannedCreditValue
+        };
+        descriptionForm = new DescriptionFormModel
+        {
+            Description = detail.Description,
+            InstructionalMethods = detail.InstructionalMethods,
+            MajorTopics = detail.MajorTopics,
+            TextsAndResources = detail.TextsAndResources,
+            AssessmentMethods = detail.AssessmentMethods,
+            GradingBasis = detail.GradingBasis
+        };
+        planForm = new PlanFormModel
+        {
+            Goals = detail.Goals,
+            LearningObjectives = detail.LearningObjectives,
+            MajorResources = detail.MajorResources,
+            PlannedSequence = detail.PlannedSequence,
+            ParentNotes = detail.ParentNotes
+        };
+    }
+
+    private UserContext ParentUser()
+    {
+        return Session.CurrentUser ?? UserContext.Student("Anonymous");
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
+
+    private sealed class CourseFormModel
+    {
+        public string Title { get; set; } = "";
+        public string SubjectArea { get; set; } = "";
+        public decimal PlannedCreditValue { get; set; } = 1;
+    }
+
+    private sealed class DescriptionFormModel
+    {
+        public string Description { get; set; } = "";
+        public string InstructionalMethods { get; set; } = "";
+        public string MajorTopics { get; set; } = "";
+        public string TextsAndResources { get; set; } = "";
+        public string AssessmentMethods { get; set; } = "";
+        public string GradingBasis { get; set; } = "";
+    }
+
+    private sealed class PlanFormModel
+    {
+        public string Goals { get; set; } = "";
+        public string LearningObjectives { get; set; } = "";
+        public string MajorResources { get; set; } = "";
+        public string PlannedSequence { get; set; } = "";
+        public string ParentNotes { get; set; } = "";
+    }
+
+    private sealed class MappingFormModel
+    {
+        public Guid RequirementAreaId { get; set; }
+        public CoverageLevel CoverageLevel { get; set; } = CoverageLevel.Primary;
+        public string Notes { get; set; } = "";
+    }
+}

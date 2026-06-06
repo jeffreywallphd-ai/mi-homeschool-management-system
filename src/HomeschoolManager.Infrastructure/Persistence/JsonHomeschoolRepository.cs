@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Household;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
@@ -108,6 +109,29 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
                 var seedAreaIds = requirementAreas.Select(area => area.Id).ToHashSet();
                 document.RequirementAreas.RemoveAll(area => seedAreaIds.Contains(area.Id));
                 document.RequirementAreas.AddRange(requirementAreas);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Course>> GetCoursesAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.Courses;
+    }
+
+    public async Task<Course?> GetCourseAsync(Guid courseId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.Courses.FirstOrDefault(course => course.Id == courseId);
+    }
+
+    public async Task SaveCourseAsync(Course course, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.Courses.RemoveAll(existing => existing.Id == course.Id);
+                document.Courses.Add(course);
             },
             cancellationToken);
     }
