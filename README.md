@@ -37,8 +37,8 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 
 dotnet restore HomeschoolManager.sln --configfile NuGet.Config
 dotnet build HomeschoolManager.sln --no-restore
-dotnet run --project src\HomeschoolManager.Tests\HomeschoolManager.Tests.csproj --no-build
-dotnet run --project src\HomeschoolManager.Web\HomeschoolManager.Web.csproj --launch-profile http
+dotnet run --project "./src/HomeschoolManager.Tests/HomeschoolManager.Tests.csproj" --no-build
+dotnet run --project "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" --launch-profile http
 ```
 
 Open:
@@ -60,7 +60,7 @@ This folder is ignored by Git.
 The first production-friendly path is a local publish and run on the parent PC:
 
 ```powershell
-dotnet publish src\HomeschoolManager.Web\HomeschoolManager.Web.csproj -c Release -o publish\HomeschoolManager
+dotnet publish "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" -c Release -o "./publish/HomeschoolManager"
 .\publish\HomeschoolManager\HomeschoolManager.Web.exe
 ```
 
