@@ -59,7 +59,9 @@ public sealed record LearningModuleView(
     IReadOnlyList<ModuleResourceView> ResourceItems,
     string AssignmentEvidencePlaceholder,
     ModuleStatus Status,
-    IReadOnlyList<LessonView> Lessons);
+    IReadOnlyList<LessonView> Lessons,
+    IReadOnlyList<AssignmentView> Assignments,
+    IReadOnlyList<AssignmentVariantView> AssignmentVariants);
 
 public sealed record ModuleLearningObjectiveView(string Text, string LinkedCourseObjective);
 
@@ -84,6 +86,45 @@ public sealed record LessonResourceView(
     bool IsPhysicalResource,
     string SourceNote);
 
+public sealed record AssignmentView(
+    Guid Id,
+    Guid ModuleId,
+    string SourceAssignmentId,
+    int SequenceOrder,
+    string Title,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    DateOnly? DueDate,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<Guid> LinkedLessonIds,
+    string RequiredOutput,
+    string ParentNotes,
+    bool IsPortfolioCandidate,
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentStatus Status);
+
+public sealed record AssignmentVariantView(
+    string VariantId,
+    string SourceAssignmentId,
+    string Title,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<string> LinkedSourceLessonIds,
+    string RequiredOutput,
+    string ParentNotes,
+    bool IsPortfolioCandidate,
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentStatus Status);
+
 public sealed record CoverageSummaryItem(
     Guid RequirementAreaId,
     string Source,
@@ -99,6 +140,12 @@ public sealed record CoursePackSummary(
     string Description,
     int CourseCount,
     decimal TotalPlannedCredits);
+
+public sealed record CoursePackExportFile(
+    string FileName,
+    string ContentType,
+    byte[] Content,
+    bool IsArchive);
 
 public sealed record CoursePackDetail(
     string Id,

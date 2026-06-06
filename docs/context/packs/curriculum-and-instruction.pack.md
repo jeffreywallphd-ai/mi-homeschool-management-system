@@ -14,6 +14,8 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 
 - Planning is course-first.
 - Course packs import as editable parent-owned course records.
+- Course pack export writes a JSON `.coursepack` file with a versioned envelope around the pack contract.
+- Future course-pack exports with attached files should use a zip archive containing the `.coursepack` JSON and referenced files.
 - Built-in pack import differs from future installed packs; installing adds external packs.
 - Pack templates can expose dropdown choices with stable default options.
 - Pack mappings must match the target jurisdiction seed vocabulary exactly.
@@ -22,12 +24,16 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Courses designate one-semester or two-semester duration.
 - Pack defaults include course description details and curriculum plan fields.
 - Courses own learning modules as instructional topic units; courses remain transcript-facing.
-- Modules include instructions, itemized objectives, source-backed lessons, status, optional term placement, and assignment/evidence placeholders.
+- Modules include instructions, itemized objectives, source-backed lessons, source-backed assignments, status, optional term placement, and assignment/evidence notes.
 - Modules do not include goals; module objectives are sufficient.
 - Modules do not expose major topics in the UI or pack contract.
 - Module objectives may optionally link to course objectives; pack defaults should repeatedly support each course objective.
 - Lessons sit inside modules and include introductory text plus one or more concrete resources.
 - Lesson resources, not module resources, are the active student-facing resource layer.
+- Assignments sit inside modules and define concrete student work tied to module objectives.
+- Assignments may link to lessons so the expected work points back to specific readings, videos, files, or physical resources.
+- Assignment variants use instructional method profiles, including a hybrid/default option.
+- Assignment status and planned points are planning fields, not grades or credit awards.
 - Default Michigan pack totals 8 planned credits and keeps history separate from government/civics/economics.
 - Default government/civics and U.S. history options map U.S. Constitution and Michigan Constitution coverage.
 - Pack resources use one item per line, with `Name | URL` when a viewable link exists.
@@ -37,7 +43,7 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Backfill may fill blank imported-course pack fields but must preserve parent-entered text.
 - Backfill may upgrade recognizable legacy built-in default text to the current built-in default format.
 - Backfill removes stale imported-course mappings to retired seed rows and adds missing current pack mappings.
-- Backfill may add missing source-backed pack modules or lessons but must preserve parent-created or parent-edited content.
+- Backfill may add missing source-backed pack modules, lessons, or assignments but must preserve parent-created or parent-edited content.
 - Requirement mappings are explicit.
 - Parent-added requirements behave like seeded requirement areas in mapping workflows.
 - Activity records are internal evidence, not routine state filings.
@@ -48,4 +54,5 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Inferring missing requirement mappings.
 - Duplicating imported template courses on repeat pack imports.
 - Turning resources or objectives into hard-to-edit text blocks.
+- Treating assignment status as completion evidence or a grade.
 - Treating attendance as a legal compliance counter.

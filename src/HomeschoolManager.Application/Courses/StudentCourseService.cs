@@ -216,6 +216,26 @@ public sealed class StudentCourseService
                             resource.SourceNote))
                         .ToArray()))
                 .ToArray(),
+            module.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .Select(assignment => new StudentAssignmentView(
+                    assignment.SequenceOrder,
+                    assignment.Title,
+                    assignment.Type,
+                    assignment.MethodProfile,
+                    assignment.Instructions,
+                    assignment.EstimatedEffort,
+                    assignment.DueTimingLabel,
+                    assignment.DueDate,
+                    assignment.LinkedModuleObjectives,
+                    assignment.LinkedLessonIds
+                        .Select(lessonId => module.Lessons.FirstOrDefault(lesson => lesson.Id == lessonId)?.Title ?? "")
+                        .Where(title => !string.IsNullOrWhiteSpace(title))
+                        .ToArray(),
+                    assignment.RequiredOutput,
+                    assignment.IsPortfolioCandidate,
+                    assignment.Status))
+                .ToArray(),
             module.AssignmentEvidencePlaceholder));
     }
 

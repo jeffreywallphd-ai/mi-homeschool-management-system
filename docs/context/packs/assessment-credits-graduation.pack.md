@@ -12,10 +12,13 @@ Purpose: Grades, GPA, tests, credit awards, course completion, and graduation pl
 ## Must Preserve
 
 - Missing grades are explicit states, not zero.
+- Assignment status and planned points do not create grades.
+- Assignment status may prepare later evidence or grading workflows only after explicit parent/admin action.
 - Credit awards are parent decisions.
 - Diploma generation requires accepted parent-defined graduation standards.
 
 ## Common Failure Modes
 
 - Awarding credit from course existence alone.
+- Inferring grades from assignment status, planned points, or planned weight.
 - Calculating GPA without a known grade scale.

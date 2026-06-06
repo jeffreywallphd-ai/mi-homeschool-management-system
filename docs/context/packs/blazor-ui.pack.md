@@ -31,6 +31,9 @@ Purpose: UI workflow and form-boundary guidance.
 - Module delete actions require a modal confirmation and exact `Delete` text.
 - Module objectives use itemized Add/Hide controls; module objective links to course objectives are optional.
 - Lesson details live on a separate page from module editing and manage lesson resources with itemized Add/Hide controls.
+- Assignments are managed from the module page list and edited on a dedicated assignment page.
+- Assignment edit pages use itemized objective and lesson selections, not raw mapping text.
+- Student module pages show assignments in the main learning flow after lessons, with evidence notes only as support content.
 - Page columns should fill available width and have generous horizontal spacing.
 - Course detail text areas allow at least four visible lines before scrolling.
 - Preset dropdown `Other` choices clear the associated text area so parent text starts clean.

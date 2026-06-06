@@ -122,6 +122,68 @@ else
                     </ol>
                 }
             </section>
+
+            <section class="form-section">
+                <h2>Assignments</h2>
+                @if (module.Assignments.Count == 0)
+                {
+                    <p>No assignments have been added yet.</p>
+                }
+                else
+                {
+                    <ol class="student-lesson-list">
+                        @foreach (var assignment in module.Assignments)
+                        {
+                            <li>
+                                <h3>@assignment.Title</h3>
+                                <p>@assignment.Instructions</p>
+                                <dl class="student-detail-facts">
+                                    <div>
+                                        <dt>Type</dt>
+                                        <dd>@AssignmentTypeLabel(assignment.Type)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Status</dt>
+                                        <dd>@AssignmentStatusLabel(assignment.Status)</dd>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(assignment.EstimatedEffort))
+                                    {
+                                        <div>
+                                            <dt>Estimated effort</dt>
+                                            <dd>@assignment.EstimatedEffort</dd>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(assignment.DueTimingLabel))
+                                    {
+                                        <div>
+                                            <dt>Timing</dt>
+                                            <dd>@assignment.DueTimingLabel</dd>
+                                        </div>
+                                    }
+                                </dl>
+                                @if (assignment.RelatedLessonTitles.Count > 0)
+                                {
+                                    <small>Related lessons: @string.Join(", ", assignment.RelatedLessonTitles)</small>
+                                }
+                                @if (assignment.LinkedModuleObjectives.Count > 0)
+                                {
+                                    <ul class="student-readable-list">
+                                        @foreach (var objective in assignment.LinkedModuleObjectives)
+                                        {
+                                            <li>@objective</li>
+                                        }
+                                    </ul>
+                                }
+                                <p><strong>Expected work:</strong> @assignment.RequiredOutput</p>
+                                @if (assignment.IsPortfolioCandidate)
+                                {
+                                    <small>Portfolio evidence candidate</small>
+                                }
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
         </main>
 
         <aside class="student-support-column">
@@ -227,4 +289,32 @@ else
 
         builder.CloseElement();
     };
+
+    private static string AssignmentTypeLabel(AssignmentType type)
+    {
+        return type switch
+        {
+            AssignmentType.ReadingResponse => "Reading response",
+            AssignmentType.ProblemSet => "Problem set",
+            AssignmentType.LabOrSimulation => "Lab or simulation",
+            AssignmentType.QuizOrTestPrep => "Quiz or test prep",
+            AssignmentType.PortfolioArtifact => "Portfolio artifact",
+            AssignmentType.PracticalDemonstration => "Practical demonstration",
+            _ => type.ToString()
+        };
+    }
+
+    private static string AssignmentStatusLabel(AssignmentStatus status)
+    {
+        return status switch
+        {
+            AssignmentStatus.Planned => "Planned",
+            AssignmentStatus.Assigned => "Assigned",
+            AssignmentStatus.Submitted => "Submitted",
+            AssignmentStatus.Reviewed => "Reviewed",
+            AssignmentStatus.Complete => "Complete",
+            AssignmentStatus.Skipped => "Skipped",
+            _ => status.ToString()
+        };
+    }
 }

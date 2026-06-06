@@ -99,6 +99,49 @@ public sealed record LessonResourceCommand(
     bool IsPhysicalResource,
     string SourceNote);
 
+public sealed record CreateAssignmentCommand(
+    Guid CourseId,
+    Guid ModuleId,
+    string Title,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    DateOnly? DueDate,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<Guid> LinkedLessonIds,
+    string RequiredOutput,
+    string ParentNotes,
+    bool IsPortfolioCandidate,
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentStatus Status);
+
+public sealed record UpdateAssignmentCommand(
+    Guid CourseId,
+    Guid ModuleId,
+    Guid AssignmentId,
+    string Title,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    DateOnly? DueDate,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<Guid> LinkedLessonIds,
+    string RequiredOutput,
+    string ParentNotes,
+    bool IsPortfolioCandidate,
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentStatus Status);
+
+public sealed record ReorderAssignmentsCommand(Guid CourseId, Guid ModuleId, IReadOnlyList<Guid> AssignmentIds);
+
+public sealed record DeleteAssignmentCommand(Guid CourseId, Guid ModuleId, Guid AssignmentId, string ConfirmationText);
+
 public sealed record CoursePackSelectionCommand(string TemplateId, string OptionId);
 
 public sealed record ImportCoursePackCommand(

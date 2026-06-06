@@ -62,6 +62,7 @@ public sealed record StudentModulePage(
     IReadOnlyList<StudentModuleObjectiveView> LearningObjectives,
     IReadOnlyList<StudentModuleResourceView> Resources,
     IReadOnlyList<StudentLessonView> Lessons,
+    IReadOnlyList<StudentAssignmentView> Assignments,
     string AssignmentEvidencePlaceholder);
 
 public sealed record StudentModuleLink(
@@ -101,3 +102,18 @@ public sealed record StudentLessonResourceView(
     string FileName,
     bool IsPhysicalResource,
     string SourceNote);
+
+public sealed record StudentAssignmentView(
+    int SequenceOrder,
+    string Title,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    DateOnly? DueDate,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<string> RelatedLessonTitles,
+    string RequiredOutput,
+    bool IsPortfolioCandidate,
+    AssignmentStatus Status);

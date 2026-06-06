@@ -217,6 +217,41 @@ else
                         </ul>
                     }
                 </section>
+
+                <section class="form-section">
+                    <div class="section-heading-row">
+                        <h2>Assignments</h2>
+                        @if (CanEdit)
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="CreateAssignment">New assignment</button>
+                        }
+                    </div>
+                    @if (selectedModule.Assignments.Count == 0)
+                    {
+                        <p>No assignments have been added for this module.</p>
+                    }
+                    else
+                    {
+                        <ul class="module-nav-list">
+                            @foreach (var assignment in selectedModule.Assignments.OrderBy(assignment => assignment.SequenceOrder))
+                            {
+                                <li>
+                                    <button class="btn btn-outline-secondary btn-sm module-nav-button" @onclick="() => OpenAssignment(assignment.Id)">
+                                        @assignment.SequenceOrder. @assignment.Title
+                                    </button>
+                                    @if (CanEdit)
+                                    {
+                                        <div class="module-order-actions">
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveAssignment(assignment.Id, -1)">Up</button>
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveAssignment(assignment.Id, 1)">Down</button>
+                                            <button class="btn btn-danger btn-sm" @onclick="() => OpenDeleteAssignmentModal(assignment.Id)">Delete</button>
+                                        </div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
             }
         </aside>
     </div>
@@ -252,6 +287,22 @@ else
             </section>
         </div>
     }
+
+    @if (deleteAssignmentId.HasValue)
+    {
+        <div class="modal-backdrop-panel" role="presentation">
+            <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-assignment-heading">
+                <h2 id="delete-assignment-heading">Delete assignment?</h2>
+                <p>This permanently removes the selected assignment from the module. Type Delete to confirm.</p>
+                <label class="form-label" for="delete-assignment-confirmation">Confirmation</label>
+                <input id="delete-assignment-confirmation" class="form-control" @bind="deleteAssignmentConfirmation" />
+                <div class="modal-actions">
+                    <button class="btn btn-outline-secondary" @onclick="CloseDeleteAssignmentModal">Cancel</button>
+                    <button class="btn btn-danger" disabled="@(!CanConfirmAssignmentDelete())" @onclick="DeleteAssignment">Delete</button>
+                </div>
+            </section>
+        </div>
+    }
 }
 
 @code {
@@ -270,6 +321,8 @@ else
     private string deleteConfirmation = "";
     private Guid? deleteLessonId;
     private string deleteLessonConfirmation = "";
+    private Guid? deleteAssignmentId;
+    private string deleteAssignmentConfirmation = "";
     private bool newModuleRouteHandled;
 
     private bool CanEdit => Session.IsParentAdmin;
@@ -354,6 +407,53 @@ else
         }
     }
 
+    private async Task CreateAssignment()
+    {
+        if (!CanEdit || selectedModule is null)
+        {
+            return;
+        }
+
+        var objective = selectedModule.LearningObjectiveItems.FirstOrDefault()?.Text ?? "";
+        var lessonId = selectedModule.Lessons.OrderBy(lesson => lesson.SequenceOrder).FirstOrDefault()?.Id;
+        var result = await CourseService.CreateAssignmentAsync(
+            ParentUser(),
+            new CreateAssignmentCommand(
+                CourseId,
+                selectedModule.Id,
+                "New assignment",
+                AssignmentType.PortfolioArtifact,
+                InstructionalMethodProfile.Hybrid,
+                "Add student-facing assignment instructions.",
+                "",
+                "",
+                null,
+                string.IsNullOrWhiteSpace(objective) ? [] : [objective],
+                lessonId.HasValue ? [lessonId.Value] : [],
+                "Add the expected student work or evidence.",
+                "",
+                false,
+                null,
+                null,
+                AssignmentStatus.Planned));
+        if (!result.Succeeded)
+        {
+            messages.Clear();
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{selectedModule.Id}/assignments/{result.Value}");
+    }
+
+    private void OpenAssignment(Guid assignmentId)
+    {
+        if (selectedModule is not null)
+        {
+            NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{selectedModule.Id}/assignments/{assignmentId}");
+        }
+    }
+
     private async Task MoveLesson(Guid lessonId, int direction)
     {
         if (!CanEdit || selectedModule is null)
@@ -373,6 +473,27 @@ else
         await Run(() => CourseService.ReorderLessonsAsync(
             ParentUser(),
             new ReorderLessonsCommand(CourseId, selectedModule.Id, lessons.Select(item => item.Id).ToArray())));
+    }
+
+    private async Task MoveAssignment(Guid assignmentId, int direction)
+    {
+        if (!CanEdit || selectedModule is null)
+        {
+            return;
+        }
+
+        var assignments = selectedModule.Assignments.OrderBy(item => item.SequenceOrder).ToList();
+        var index = assignments.FindIndex(item => item.Id == assignmentId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= assignments.Count)
+        {
+            return;
+        }
+
+        (assignments[index], assignments[targetIndex]) = (assignments[targetIndex], assignments[index]);
+        await Run(() => CourseService.ReorderAssignmentsAsync(
+            ParentUser(),
+            new ReorderAssignmentsCommand(CourseId, selectedModule.Id, assignments.Select(item => item.Id).ToArray())));
     }
 
     private async Task AutoSaveModule()
@@ -495,6 +616,36 @@ else
             ParentUser(),
             new DeleteLessonCommand(CourseId, selectedModule.Id, deleteLessonId.Value, deleteLessonConfirmation)));
         CloseDeleteLessonModal();
+    }
+
+    private void OpenDeleteAssignmentModal(Guid assignmentId)
+    {
+        deleteAssignmentId = assignmentId;
+        deleteAssignmentConfirmation = "";
+    }
+
+    private void CloseDeleteAssignmentModal()
+    {
+        deleteAssignmentId = null;
+        deleteAssignmentConfirmation = "";
+    }
+
+    private bool CanConfirmAssignmentDelete()
+    {
+        return string.Equals(deleteAssignmentConfirmation, "Delete", StringComparison.Ordinal);
+    }
+
+    private async Task DeleteAssignment()
+    {
+        if (!deleteAssignmentId.HasValue || selectedModule is null)
+        {
+            return;
+        }
+
+        await Run(() => CourseService.DeleteAssignmentAsync(
+            ParentUser(),
+            new DeleteAssignmentCommand(CourseId, selectedModule.Id, deleteAssignmentId.Value, deleteAssignmentConfirmation)));
+        CloseDeleteAssignmentModal();
     }
 
     private async Task Run(Func<Task<OperationResult>> action)

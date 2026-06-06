@@ -40,6 +40,12 @@ Grades should be connected to evidence whenever practical:
 - Missing grades must not silently convert to zero or pass.
 - Null grade values must be represented as explicit states such as not graded, excused, incomplete, or not applicable.
 
+## Assignment Status
+
+Assignment status is a planning and workflow state, not a grade. Planned points and planned weight may prepare an assignment for future grading, but they must not affect a course grade until the parent/admin explicitly records graded work under a defined grading basis.
+
+Assignments may support later assessment records, rubric reviews, portfolio artifacts, or gradebook entries. Those later records must keep their own explicit parent/admin approval boundary.
+
 ## Progress Evaluations
 
 Progress evaluations summarize learning over a period and may support report cards, portfolio exports, and graduation packets. They are not substitutes for source evidence when source evidence exists.

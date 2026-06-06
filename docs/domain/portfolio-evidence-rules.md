@@ -46,6 +46,12 @@ Collections group artifacts for review or export. Examples:
 - Homesteading projects.
 - Graduation packet selections.
 
+## Assignment Candidates
+
+Assignments may be marked as portfolio candidates when their expected output is likely to become useful evidence. That marker does not create a portfolio artifact by itself.
+
+Creating a portfolio artifact should remain a separate parent/admin action so the parent can confirm the actual work, context, date, files, tags, and export selection.
+
 ## Export Rule
 
 Portfolio export must preserve artifact context, not only files. Each exported artifact should have enough metadata for a future reader to understand what it is evidence of.

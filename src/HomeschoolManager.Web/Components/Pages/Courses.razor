@@ -4,9 +4,11 @@
 @using HomeschoolManager.Application.Courses
 @using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
+@using Microsoft.JSInterop
 @inject CourseService CourseService
 @inject SessionState Session
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Courses</PageTitle>
 
@@ -109,6 +111,9 @@
             @if (selectedPack is not null)
             {
                 <p>@selectedPack.Description</p>
+                <button class="btn btn-outline-secondary btn-sm mb-2" @onclick="ExportSelectedPack">
+                    Export .coursepack
+                </button>
                 <p>@selectedTemplateIds.Count selected course(s), @CreditText(SelectedPackCreditTotal()) planned credits</p>
                 @if (Session.IsParentAdmin)
                 {
@@ -340,6 +345,24 @@
 
         messages.Add(new PageMessage($"Imported {result.Value} course(s).", "alert alert-success"));
         await Refresh();
+    }
+
+    private async Task ExportSelectedPack()
+    {
+        messages.Clear();
+        var result = CourseService.ExportCoursePack(selectedPackId);
+        if (!result.Succeeded || result.Value is null)
+        {
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            result.Value.FileName,
+            result.Value.ContentType,
+            Convert.ToBase64String(result.Value.Content));
+        messages.Add(new PageMessage($"Exported {result.Value.FileName}.", "alert alert-success"));
     }
 
     private void SelectPack()

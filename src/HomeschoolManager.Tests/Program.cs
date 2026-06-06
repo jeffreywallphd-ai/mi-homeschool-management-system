@@ -10,6 +10,7 @@ using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using HomeschoolManager.Infrastructure.Configuration;
+using System.Text.Json;
 
 var tests = new List<(string Name, Func<Task> Test)>
 {
@@ -117,11 +118,24 @@ var tests = new List<(string Name, Func<Task> Test)>
                 AssertTrue(option.Modules.All(module => module.Resources.Count > 0), $"Pack modules should include concrete resources for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Modules.All(module => module.Lessons.Count >= module.LearningObjectives.Count), $"Pack modules should include at least one lesson per module objective for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Modules.SelectMany(module => module.Lessons).All(lesson => lesson.Resources.Count > 0), $"Pack lessons should include resources for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => module.Assignments.Count > 0), $"Pack modules should include assignments for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.SelectMany(module => module.Assignments).All(assignment => assignment.Variants.Any(variant => variant.MethodProfile == InstructionalMethodProfile.Hybrid)), $"Pack assignments should include a hybrid variant for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.SelectMany(module => module.Assignments).All(assignment => assignment.Variants.Select(variant => variant.MethodProfile).Distinct().Count() >= 4), $"Pack assignments should include multiple instructional method variants for {template.TemplateId}/{option.OptionId}.");
                 foreach (var module in option.Modules)
                 {
                     foreach (var objective in module.LearningObjectives)
                     {
                         AssertTrue(module.Lessons.Any(lesson => lesson.LinkedModuleObjective == objective.Text), $"Each module objective should have a linked lesson for {template.TemplateId}/{option.OptionId}: {objective.Text}");
+                        AssertTrue(module.Assignments.SelectMany(assignment => assignment.Variants).Any(variant => variant.LinkedModuleObjectives.Contains(objective.Text)), $"Each module objective should be covered by an assignment variant for {template.TemplateId}/{option.OptionId}: {objective.Text}");
+                    }
+
+                    foreach (var assignment in module.Assignments)
+                    {
+                        foreach (var variant in assignment.Variants)
+                        {
+                            AssertTrue(variant.LinkedModuleObjectives.Count > 0, $"Assignment variants should link module objectives for {template.TemplateId}/{option.OptionId}.");
+                            AssertTrue(variant.LinkedLessonIds.All(sourceLessonId => module.Lessons.Any(lesson => lesson.LessonId == sourceLessonId)), $"Assignment variants should only link existing source lessons for {template.TemplateId}/{option.OptionId}.");
+                        }
                     }
                 }
                 foreach (var courseObjective in option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -137,6 +151,36 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         return Task.CompletedTask;
     })),
+    ("Default Michigan course pack exports as JSON coursepack", () =>
+    {
+        var repository = CreateRepositoryAsync().GetAwaiter().GetResult();
+        var service = new CourseService(repository);
+        var result = service.ExportCoursePack(DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertTrue(result.Succeeded, "Course pack export should succeed.");
+        if (result.Value is null)
+        {
+            throw new InvalidOperationException("Course pack export did not return a file.");
+        }
+
+        AssertTrue(result.Value.FileName.EndsWith(".coursepack", StringComparison.Ordinal), "Course pack export should use the .coursepack extension.");
+        AssertEqual("application/json", result.Value.ContentType, "Course pack export should be JSON.");
+        AssertFalse(result.Value.IsArchive, "Current course pack export should not be a zip archive.");
+
+        using var document = JsonDocument.Parse(result.Value.Content);
+        var root = document.RootElement;
+        AssertEqual("homeschool-manager.coursepack", root.GetProperty("format").GetString() ?? "", "Unexpected course pack export format.");
+        AssertEqual(1, root.GetProperty("formatVersion").GetInt32(), "Unexpected course pack export version.");
+        AssertEqual("json", root.GetProperty("packageMode").GetString() ?? "", "Current export should be JSON mode.");
+        var pack = root.GetProperty("pack");
+        AssertEqual(DefaultCoursePacks.MichiganCollegeReadyPackId, pack.GetProperty("id").GetString() ?? "", "Export should include the selected pack id.");
+        AssertTrue(pack.GetProperty("courses").GetArrayLength() > 0, "Export should include courses.");
+        var firstCourse = pack.GetProperty("courses")[0];
+        AssertTrue(firstCourse.GetProperty("options").GetArrayLength() > 0, "Export should include course options.");
+        var firstModule = firstCourse.GetProperty("modules")[0];
+        AssertTrue(firstModule.GetProperty("lessons").GetArrayLength() > 0, "Export should include lessons.");
+        AssertTrue(firstModule.GetProperty("assignments").GetArrayLength() > 0, "Export should include assignments.");
+        return Task.CompletedTask;
+    }),
     ("Student role cannot seed Michigan requirements", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -229,6 +273,42 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 1, "Lesson", "", "", [resource]));
         AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 1, "Lesson", "Intro", "", []));
         _ = new Lesson(Guid.NewGuid(), moduleId, "source-lesson", 1, "Lesson", "Intro", "Objective", [resource]);
+        return Task.CompletedTask;
+    }),
+    ("Assignments require module ownership instructions output and valid links", () =>
+    {
+        var moduleId = Guid.NewGuid();
+        var lessonId = Guid.NewGuid();
+        var lesson = new Lesson(
+            lessonId,
+            moduleId,
+            "source-lesson",
+            1,
+            "Lesson",
+            "Introductory lesson text.",
+            "Explain the concept.",
+            LessonResources("OpenStax section").Select(command => new LessonResource(
+                Guid.NewGuid(),
+                command.Name,
+                command.Type,
+                command.Url,
+                command.FilePath,
+                command.IsPhysicalResource,
+                command.SourceNote)).ToArray());
+
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), Guid.Empty, "", 1, "Assignment", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 0, "Assignment", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 1, "", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 1, "Assignment", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 1, "Assignment", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 1, "Assignment", (AssignmentType)99, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, null, null, AssignmentStatus.Planned));
+        AssertThrows<DomainException>(() => new ModuleAssignment(Guid.NewGuid(), moduleId, "", 1, "Assignment", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain the concept."], [lessonId], "Written reflection.", "", false, -1, null, AssignmentStatus.Planned));
+
+        var module = new LearningModule(moduleId, Guid.NewGuid(), "", 1, "Module", "Overview", "", "Instructions", "Topics", "Explain the concept.", "", "", ModuleStatus.Active, lessons: [lesson]);
+        var assignment = new ModuleAssignment(Guid.NewGuid(), module.Id, "source-assignment", 1, "Reflection", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Explain the idea in your own words.", "30 minutes", "After lesson 1", null, ["Explain the concept."], [lesson.Id], "One paragraph response.", "Parent review.", true, 10, null, AssignmentStatus.Planned);
+        AssertThrows<DomainException>(() => module.WithAssignments([assignment with { ModuleId = Guid.NewGuid() }]));
+        AssertThrows<DomainException>(() => module.WithAssignments([assignment with { LinkedLessonIds = [Guid.NewGuid()] }]));
+        _ = module.WithAssignments([assignment]);
         return Task.CompletedTask;
     }),
     ("Requirement mapping requires course and requirement area", () =>
@@ -427,6 +507,139 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(delete.Succeeded, "Lesson delete failed.");
         AssertFalse((await service.ListLessonsAsync(course.Value, module.Value)).Any(lesson => lesson.Id == secondLesson.Value), "Deleted lesson should be removed.");
     }),
+    ("Parent can create update and reorder assignments while student cannot mutate them", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                [],
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await service.CreateLessonAsync(
+            parent,
+            new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+
+        var denied = await service.CreateAssignmentAsync(
+            student,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain the cell structures from the lesson.",
+                "30 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "Written reflection.",
+                "",
+                true,
+                10,
+                null,
+                AssignmentStatus.Planned));
+        AssertFalse(denied.Succeeded, "Student should not create assignments.");
+
+        var first = await service.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain the cell structures from the lesson.",
+                "30 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "Written reflection.",
+                "Parent should check vocabulary.",
+                true,
+                10,
+                null,
+                AssignmentStatus.Planned));
+        AssertTrue(first.Succeeded, "Assignment create failed.");
+        var second = await service.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell diagram",
+                AssignmentType.PortfolioArtifact,
+                InstructionalMethodProfile.ProjectBasedApplied,
+                "Create and label a cell diagram.",
+                "45 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "Labeled diagram.",
+                "",
+                true,
+                15,
+                null,
+                AssignmentStatus.Assigned));
+        AssertTrue(second.Succeeded, "Second assignment create failed.");
+
+        var update = await service.UpdateAssignmentAsync(
+            parent,
+            new UpdateAssignmentCommand(
+                course.Value,
+                module.Value,
+                first.Value,
+                "Cell structure reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain the function of each cell structure in your own words.",
+                "40 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "One-page written reflection.",
+                "Look for structure/function connections.",
+                true,
+                12,
+                null,
+                AssignmentStatus.Assigned));
+        AssertTrue(update.Succeeded, "Assignment update failed.");
+        AssertFalse((await service.UpdateAssignmentAsync(
+            student,
+            new UpdateAssignmentCommand(course.Value, module.Value, first.Value, "Denied", AssignmentType.Reflection, InstructionalMethodProfile.Hybrid, "Instructions", "", "", null, ["Explain cell structure."], [lesson.Value], "Output.", "", false, null, null, AssignmentStatus.Planned))).Succeeded, "Student should not update assignments.");
+
+        var reorder = await service.ReorderAssignmentsAsync(parent, new ReorderAssignmentsCommand(course.Value, module.Value, [second.Value, first.Value]));
+        AssertTrue(reorder.Succeeded, "Assignment reorder failed.");
+        var assignments = await service.ListAssignmentsAsync(course.Value, module.Value);
+        AssertEqual("Cell diagram", assignments[0].Title, "Assignments should reorder.");
+        AssertEqual("Cell structure reflection", assignments[1].Title, "Assignment update should persist.");
+        AssertTrue(assignments[1].LinkedLessonIds.Contains(lesson.Value), "Assignment should keep lesson links.");
+        AssertTrue(assignments[1].IsPortfolioCandidate, "Portfolio marker should persist.");
+
+        var deleteDenied = await service.DeleteAssignmentAsync(parent, new DeleteAssignmentCommand(course.Value, module.Value, second.Value, "delete"));
+        AssertFalse(deleteDenied.Succeeded, "Assignment delete should require exact confirmation.");
+        var delete = await service.DeleteAssignmentAsync(parent, new DeleteAssignmentCommand(course.Value, module.Value, second.Value, "Delete"));
+        AssertTrue(delete.Succeeded, "Assignment delete failed.");
+        AssertFalse((await service.ListAssignmentsAsync(course.Value, module.Value)).Any(assignment => assignment.Id == second.Value), "Deleted assignment should be removed.");
+    }),
     ("Module autosave preserves existing lessons", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -459,6 +672,27 @@ var tests = new List<(string Name, Func<Task> Test)>
                 "Explain constitutional principles.",
                 LessonResources("OpenStax U.S. Constitution")));
         AssertTrue(lesson.Succeeded, "Lesson create failed.");
+        var assignment = await service.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Constitution reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain constitutional principles using the lesson source.",
+                "30 minutes",
+                "After lesson 1",
+                null,
+                ["Explain constitutional principles."],
+                [lesson.Value],
+                "Written reflection.",
+                "",
+                true,
+                10,
+                null,
+                AssignmentStatus.Planned));
+        AssertTrue(assignment.Succeeded, "Assignment create failed.");
 
         var update = await service.UpdateLearningModuleAsync(
             parent,
@@ -479,6 +713,9 @@ var tests = new List<(string Name, Func<Task> Test)>
         var lessons = await service.ListLessonsAsync(course.Value, module.Value);
         AssertEqual(1, lessons.Count, "Module update should preserve existing lessons.");
         AssertEqual("The constitutional convention", lessons[0].Title, "Existing lesson content should be preserved.");
+        var assignments = await service.ListAssignmentsAsync(course.Value, module.Value);
+        AssertEqual(1, assignments.Count, "Module update should preserve existing assignments.");
+        AssertEqual("Constitution reflection", assignments[0].Title, "Existing assignment content should be preserved.");
     }),
     ("Student course client reads courses syllabi and modules without inferred grades", async () =>
     {
@@ -530,6 +767,9 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(module.Value.LearningObjectives.Count > 0, "Module page should include objectives.");
         AssertTrue(module.Value.Lessons.Count > 0, "Module page should include lessons.");
         AssertTrue(module.Value.Lessons.All(lesson => lesson.Resources.Count > 0), "Student lessons should include lesson resources.");
+        AssertTrue(module.Value.Assignments.Count > 0, "Student module page should include assignments.");
+        AssertTrue(module.Value.Assignments.All(assignment => !string.IsNullOrWhiteSpace(assignment.RequiredOutput)), "Student assignments should include expected work.");
+        AssertTrue(module.Value.Assignments.All(assignment => assignment.RelatedLessonTitles.Count > 0), "Student assignments should connect to lesson materials.");
 
         var parentPreview = await studentService.GetCourseAsync(parent, firstCourse.CourseId, primaryStudent.Id);
         AssertTrue(parentPreview.Succeeded, "Parent should be able to preview student course read model.");
@@ -1006,6 +1246,81 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertFalse(string.IsNullOrWhiteSpace(detail.LearningObjectives), "Backfill should fill learning objectives.");
         AssertTrue(string.IsNullOrWhiteSpace(detail.MajorResources), "Backfill should not restore retired curriculum resources.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.PlannedSequence), "Backfill should fill planned sequence.");
+    })),
+    ("Imported course module backfill adds assignments linked to local lessons", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var pack = DefaultCoursePacks.All.First(item => item.Id == DefaultCoursePacks.MichiganCollegeReadyPackId);
+        var template = pack.Courses.First(item => item.TemplateId == "math-12");
+        var option = template.DefaultOption;
+        var sourceModule = option.Modules.First();
+        var courseId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
+        var existingLesson = new Lesson(
+            Guid.NewGuid(),
+            moduleId,
+            sourceModule.Lessons[0].LessonId,
+            1,
+            sourceModule.Lessons[0].Title,
+            sourceModule.Lessons[0].IntroductoryText,
+            sourceModule.Lessons[0].LinkedModuleObjective,
+            LessonResources("Legacy source").Select(command => new LessonResource(
+                Guid.NewGuid(),
+                command.Name,
+                command.Type,
+                command.Url,
+                command.FilePath,
+                command.IsPhysicalResource,
+                command.SourceNote)).ToArray());
+        var existingModule = new LearningModule(
+            moduleId,
+            courseId,
+            sourceModule.ModuleId,
+            sourceModule.SequenceOrder,
+            sourceModule.Title,
+            sourceModule.Description,
+            sourceModule.EstimatedLength,
+            sourceModule.Instructions,
+            "",
+            string.Join(Environment.NewLine, sourceModule.LearningObjectives.Select(objective => objective.Text)),
+            "",
+            sourceModule.AssignmentEvidencePlaceholder,
+            ModuleStatus.Active,
+            learningObjectiveItems: sourceModule.LearningObjectives.Select(objective => new ModuleLearningObjective(objective.Text, objective.LinkedCourseObjective)).ToArray(),
+            lessons: [existingLesson]);
+
+        await repository.SaveCourseAsync(new Course(
+            courseId,
+            student.Id,
+            schoolYear.Id,
+            option.Title,
+            option.SubjectAreas,
+            option.Duration,
+            option.PlannedCreditValue,
+            pack.Id,
+            template.TemplateId,
+            option.Description,
+            option.CurriculumPlan,
+            [],
+            [existingModule]));
+
+        var requirementService = new RequirementService(repository);
+        AssertTrue((await requirementService.SeedMichiganAsync(UserContext.ParentAdmin("Parent"))).Succeeded, "Michigan seed failed.");
+        var service = new CourseService(repository);
+        var modules = await service.ListModulesAsync(courseId);
+        var module = modules.First(item => item.SourceModuleId == sourceModule.ModuleId);
+        AssertTrue(module.Lessons.Count >= sourceModule.Lessons.Count, "Backfill should add missing pack lessons.");
+        AssertTrue(module.Assignments.Count > 0, "Backfill should add pack assignments.");
+        AssertTrue(module.Assignments.All(assignment => assignment.LinkedLessonIds.Count > 0), "Backfilled assignments should link to local lessons.");
+        AssertTrue(module.Assignments.All(assignment => assignment.LinkedLessonIds.All(lessonId => module.Lessons.Any(lesson => lesson.Id == lessonId))), "Backfilled assignment lesson links should point to local lessons.");
     })),
     ("Imported course detail backfill upgrades legacy pack defaults", (Func<Task>)(async () =>
     {

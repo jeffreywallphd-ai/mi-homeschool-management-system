@@ -7,12 +7,19 @@ using HomeschoolManager.Domain.Common;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace HomeschoolManager.Application.Courses;
 
 public sealed class CourseService
 {
     private readonly IHomeschoolRepository repository;
+    private static readonly JsonSerializerOptions CoursePackJsonOptions = CreateCoursePackJsonOptions();
+
     public event Action? CourseNavigationChanged;
 
     public CourseService(IHomeschoolRepository repository)
@@ -187,6 +194,49 @@ public sealed class CourseService
                     option.Duration,
                     option.PlannedCreditValue,
                     option.Description.Description)).ToArray())).ToArray());
+    }
+
+    public OperationResult<CoursePackExportFile> ExportCoursePack(string packId)
+    {
+        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == packId);
+        if (pack is null)
+        {
+            return OperationResult<CoursePackExportFile>.Failure("Course pack was not found.");
+        }
+
+        var export = new CoursePackJsonEnvelope(
+            "homeschool-manager.coursepack",
+            1,
+            DateTimeOffset.UtcNow,
+            "json",
+            "Future exports with attached lesson or assignment files should use a zip archive containing this JSON plus files.",
+            pack);
+        var json = JsonSerializer.Serialize(export, CoursePackJsonOptions);
+        var fileName = $"{SafeFileName(pack.Id)}.coursepack";
+        return OperationResult<CoursePackExportFile>.Success(new CoursePackExportFile(
+            fileName,
+            "application/json",
+            Encoding.UTF8.GetBytes(json),
+            false));
+    }
+
+    private static CoursePackExportFile ExportCoursePackArchivePlaceholder(CoursePackDefinition pack)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry($"{SafeFileName(pack.Id)}.coursepack");
+            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
+            writer.Write(JsonSerializer.Serialize(new CoursePackJsonEnvelope(
+                "homeschool-manager.coursepack",
+                1,
+                DateTimeOffset.UtcNow,
+                "zip",
+                "Archive export is reserved for course packs with attached lesson or assignment files.",
+                pack), CoursePackJsonOptions));
+        }
+
+        return new CoursePackExportFile($"{SafeFileName(pack.Id)}.coursepack.zip", "application/zip", stream.ToArray(), true);
     }
 
     public async Task<OperationResult<int>> ImportCoursePackAsync(
@@ -373,7 +423,7 @@ public sealed class CourseService
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
-        return course?.Modules.Select(module => ToModuleView(module, schoolYear)).ToArray() ?? [];
+        return course?.Modules.Select(module => ToModuleView(module, schoolYear, course)).ToArray() ?? [];
     }
 
     public async Task<LearningModuleView?> GetModuleDetailAsync(
@@ -386,7 +436,7 @@ public sealed class CourseService
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         return course?.Modules
             .Where(module => module.Id == moduleId)
-            .Select(module => ToModuleView(module, schoolYear))
+            .Select(module => ToModuleView(module, schoolYear, course))
             .FirstOrDefault();
     }
 
@@ -478,7 +528,8 @@ public sealed class CourseService
                 command.TermId,
                 BuildObjectiveItems(command.LearningObjectives),
                 BuildResourceItems(command.Resources),
-                existing.Lessons);
+                existing.Lessons,
+                existing.Assignments);
             var modules = course.Modules
                 .Select(module => module.Id == command.ModuleId ? updatedModule : module)
                 .ToArray();
@@ -731,6 +782,197 @@ public sealed class CourseService
         return OperationResult.Success();
     }
 
+    public async Task<IReadOnlyList<AssignmentView>> ListAssignmentsAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var module = await GetModuleAsync(courseId, moduleId, cancellationToken);
+        return module?.Assignments.Select(ToAssignmentView).ToArray() ?? [];
+    }
+
+    public async Task<AssignmentView?> GetAssignmentDetailAsync(
+        Guid courseId,
+        Guid moduleId,
+        Guid assignmentId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var module = await GetModuleAsync(courseId, moduleId, cancellationToken);
+        return module?.Assignments
+            .Where(assignment => assignment.Id == assignmentId)
+            .Select(ToAssignmentView)
+            .FirstOrDefault();
+    }
+
+    public async Task<OperationResult<Guid>> CreateAssignmentAsync(
+        UserContext user,
+        CreateAssignmentCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<Guid>.Failure(authorized.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<Guid>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var assignment = BuildAssignment(
+                module.Id,
+                "",
+                module.Assignments.Count + 1,
+                command.Title,
+                command.Type,
+                command.MethodProfile,
+                command.Instructions,
+                command.EstimatedEffort,
+                command.DueTimingLabel,
+                command.DueDate,
+                command.LinkedModuleObjectives,
+                command.LinkedLessonIds,
+                command.RequiredOutput,
+                command.ParentNotes,
+                command.IsPortfolioCandidate,
+                command.PlannedPoints,
+                command.PlannedWeight,
+                command.Status);
+            await SaveModuleAsync(course, module.WithAssignments(module.Assignments.Concat([assignment]).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<Guid>.Success(assignment.Id);
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<Guid>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> UpdateAssignmentAsync(
+        UserContext user,
+        UpdateAssignmentCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        var existing = module?.Assignments.FirstOrDefault(assignment => assignment.Id == command.AssignmentId);
+        if (course is null || module is null || existing is null)
+        {
+            return OperationResult.Failure("Assignment was not found.");
+        }
+
+        try
+        {
+            var updatedAssignment = BuildAssignment(
+                module.Id,
+                existing.SourceAssignmentId,
+                existing.SequenceOrder,
+                command.Title,
+                command.Type,
+                command.MethodProfile,
+                command.Instructions,
+                command.EstimatedEffort,
+                command.DueTimingLabel,
+                command.DueDate,
+                command.LinkedModuleObjectives,
+                command.LinkedLessonIds,
+                command.RequiredOutput,
+                command.ParentNotes,
+                command.IsPortfolioCandidate,
+                command.PlannedPoints,
+                command.PlannedWeight,
+                command.Status) with { Id = existing.Id };
+            var assignments = module.Assignments
+                .Select(assignment => assignment.Id == command.AssignmentId ? updatedAssignment : assignment)
+                .ToArray();
+            await SaveModuleAsync(course, module.WithAssignments(assignments), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> ReorderAssignmentsAsync(
+        UserContext user,
+        ReorderAssignmentsCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null)
+        {
+            return OperationResult.Failure("Learning module was not found.");
+        }
+
+        if (command.AssignmentIds.Count != module.Assignments.Count ||
+            command.AssignmentIds.Distinct().Count() != command.AssignmentIds.Count ||
+            command.AssignmentIds.Any(id => module.Assignments.All(assignment => assignment.Id != id)))
+        {
+            return OperationResult.Failure("Assignment order must include each module assignment exactly once.");
+        }
+
+        var assignmentsById = module.Assignments.ToDictionary(assignment => assignment.Id);
+        var reordered = command.AssignmentIds
+            .Select((id, index) => assignmentsById[id] with { SequenceOrder = index + 1 })
+            .ToArray();
+        await SaveModuleAsync(course, module.WithAssignments(reordered), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
+    public async Task<OperationResult> DeleteAssignmentAsync(
+        UserContext user,
+        DeleteAssignmentCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!string.Equals(command.ConfirmationText, "Delete", StringComparison.Ordinal))
+        {
+            return OperationResult.Failure("Type Delete to confirm assignment deletion.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null || module.Assignments.All(assignment => assignment.Id != command.AssignmentId))
+        {
+            return OperationResult.Failure("Assignment was not found.");
+        }
+
+        var assignments = module.Assignments
+            .Where(assignment => assignment.Id != command.AssignmentId)
+            .ToArray();
+        await SaveModuleAsync(course, module.WithAssignments(assignments), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
     public async Task<OperationResult> SetRequirementMappingsAsync(
         UserContext user,
         SetCourseRequirementMappingsCommand command,
@@ -850,7 +1092,7 @@ public sealed class CourseService
             course.CurriculumPlan.PlannedSequence,
             course.CurriculumPlan.ParentNotes,
             BuildTermViews(schoolYear),
-            course.Modules.Select(module => ToModuleView(module, schoolYear)).ToArray(),
+            course.Modules.Select(module => ToModuleView(module, schoolYear, course)).ToArray(),
             mappingViews);
     }
 
@@ -874,7 +1116,10 @@ public sealed class CourseService
         await repository.SaveCourseAsync(course.WithModules(modules), cancellationToken);
     }
 
-    private static LearningModuleView ToModuleView(LearningModule module, SchoolYear? schoolYear = null)
+    private static LearningModuleView ToModuleView(
+        LearningModule module,
+        SchoolYear? schoolYear = null,
+        Course? course = null)
     {
         var termName = schoolYear?.Terms.FirstOrDefault(term => term.Id == module.TermId)?.Name ?? "";
         return new LearningModuleView(
@@ -899,7 +1144,9 @@ public sealed class CourseService
                 .ToArray(),
             module.AssignmentEvidencePlaceholder,
             module.Status,
-            module.Lessons.Select(ToLessonView).ToArray());
+            module.Lessons.Select(ToLessonView).ToArray(),
+            module.Assignments.Select(ToAssignmentView).ToArray(),
+            AssignmentVariantsFor(course, module));
     }
 
     private static LessonView ToLessonView(Lesson lesson)
@@ -922,6 +1169,111 @@ public sealed class CourseService
                     resource.IsPhysicalResource,
                     resource.SourceNote))
                 .ToArray());
+    }
+
+    private static AssignmentView ToAssignmentView(ModuleAssignment assignment)
+    {
+        return new AssignmentView(
+            assignment.Id,
+            assignment.ModuleId,
+            assignment.SourceAssignmentId,
+            assignment.SequenceOrder,
+            assignment.Title,
+            assignment.Type,
+            assignment.MethodProfile,
+            assignment.Instructions,
+            assignment.EstimatedEffort,
+            assignment.DueTimingLabel,
+            assignment.DueDate,
+            assignment.LinkedModuleObjectives,
+            assignment.LinkedLessonIds,
+            assignment.RequiredOutput,
+            assignment.ParentNotes,
+            assignment.IsPortfolioCandidate,
+            assignment.PlannedPoints,
+            assignment.PlannedWeight,
+            assignment.Status);
+    }
+
+    private static IReadOnlyList<AssignmentVariantView> AssignmentVariantsFor(
+        Course? course,
+        LearningModule module)
+    {
+        if (course is null)
+        {
+            return [];
+        }
+
+        var option = FindSourceOption(course);
+        var templateModule = option?.Modules.FirstOrDefault(item =>
+            string.Equals(item.ModuleId, module.SourceModuleId, StringComparison.OrdinalIgnoreCase));
+        if (templateModule is null)
+        {
+            return [];
+        }
+
+        return templateModule.Assignments
+            .SelectMany(assignment => assignment.Variants
+                .Select(variant => new AssignmentVariantView(
+                    variant.VariantId,
+                    assignment.AssignmentId,
+                    variant.Title,
+                    variant.Type,
+                    variant.MethodProfile,
+                    variant.Instructions,
+                    variant.EstimatedEffort,
+                    variant.DueTimingLabel,
+                    variant.LinkedModuleObjectives,
+                    variant.LinkedLessonIds,
+                    variant.RequiredOutput,
+                    variant.ParentNotes,
+                    variant.IsPortfolioCandidate,
+                    variant.PlannedPoints,
+                    variant.PlannedWeight,
+                    variant.Status)))
+            .ToArray();
+    }
+
+    private static ModuleAssignment BuildAssignment(
+        Guid moduleId,
+        string sourceAssignmentId,
+        int sequenceOrder,
+        string title,
+        AssignmentType type,
+        InstructionalMethodProfile methodProfile,
+        string instructions,
+        string estimatedEffort,
+        string dueTimingLabel,
+        DateOnly? dueDate,
+        IReadOnlyList<string> linkedModuleObjectives,
+        IReadOnlyList<Guid> linkedLessonIds,
+        string requiredOutput,
+        string parentNotes,
+        bool isPortfolioCandidate,
+        decimal? plannedPoints,
+        decimal? plannedWeight,
+        AssignmentStatus status)
+    {
+        return new ModuleAssignment(
+            Guid.NewGuid(),
+            moduleId,
+            sourceAssignmentId,
+            sequenceOrder,
+            title,
+            type,
+            methodProfile,
+            instructions,
+            estimatedEffort,
+            dueTimingLabel,
+            dueDate,
+            linkedModuleObjectives,
+            linkedLessonIds,
+            requiredOutput,
+            parentNotes,
+            isPortfolioCandidate,
+            plannedPoints,
+            plannedWeight,
+            status);
     }
 
     private static IReadOnlyList<CourseTermView> BuildTermViews(SchoolYear? schoolYear)
@@ -1098,6 +1450,7 @@ public sealed class CourseService
             .Select(module =>
             {
                 var moduleId = Guid.NewGuid();
+                var lessons = BuildLessons(moduleId, module.Lessons);
                 return new LearningModule(
                     moduleId,
                     courseId,
@@ -1119,7 +1472,8 @@ public sealed class CourseService
                     module.Resources
                         .Select(item => new ModuleResource(item.Name, item.Link, "", item.IsPhysicalResource))
                         .ToArray(),
-                    BuildLessons(moduleId, module.Lessons));
+                    lessons,
+                    BuildAssignments(moduleId, module.Assignments, lessons));
             })
             .ToArray();
     }
@@ -1138,20 +1492,23 @@ public sealed class CourseService
             if (existing is not null)
             {
                 var mergedExisting = MergeImportedLessons(existing, packModule);
+                mergedExisting = MergeImportedAssignments(mergedExisting, packModule);
                 var shouldUpgrade =
                     ModuleUsesLegacyText(existing) ||
                     existing.TermId is null ||
                     existing.MajorTopics.Length > 0 ||
-                    existing.Lessons.Count == 0;
+                    existing.Lessons.Count == 0 ||
+                    existing.Assignments.Count == 0;
                 if (shouldUpgrade)
                 {
                     modules = modules
                         .Select(module => module.Id == existing.Id
-                            ? packModule with { Id = existing.Id, SequenceOrder = existing.SequenceOrder, Lessons = mergedExisting.Lessons }
+                            ? packModule with { Id = existing.Id, SequenceOrder = existing.SequenceOrder, Lessons = mergedExisting.Lessons, Assignments = mergedExisting.Assignments }
                             : module)
                         .ToList();
                 }
-                else if (mergedExisting.Lessons.Count != existing.Lessons.Count)
+                else if (mergedExisting.Lessons.Count != existing.Lessons.Count ||
+                    mergedExisting.Assignments.Count != existing.Assignments.Count)
                 {
                     modules = modules
                         .Select(module => module.Id == existing.Id
@@ -1200,6 +1557,35 @@ public sealed class CourseService
         return existing.WithLessons(lessons);
     }
 
+    private static LearningModule MergeImportedAssignments(LearningModule existing, LearningModule packModule)
+    {
+        var assignments = existing.Assignments.ToList();
+        foreach (var packAssignment in packModule.Assignments)
+        {
+            if (string.IsNullOrWhiteSpace(packAssignment.SourceAssignmentId))
+            {
+                continue;
+            }
+
+            var existingAssignment = assignments.FirstOrDefault(assignment =>
+                string.Equals(assignment.SourceAssignmentId, packAssignment.SourceAssignmentId, StringComparison.OrdinalIgnoreCase));
+            if (existingAssignment is not null)
+            {
+                continue;
+            }
+
+            assignments.Add(packAssignment with
+            {
+                Id = Guid.NewGuid(),
+                ModuleId = existing.Id,
+                SequenceOrder = assignments.Count + 1,
+                LinkedLessonIds = MapAssignmentLessonLinks(packAssignment.LinkedLessonIds, packModule.Lessons, existing.Lessons)
+            });
+        }
+
+        return existing.WithAssignments(assignments);
+    }
+
     private static IReadOnlyList<Lesson> BuildLessons(
         Guid moduleId,
         IReadOnlyList<CourseTemplateLessonDefinition> lessons)
@@ -1224,6 +1610,68 @@ public sealed class CourseService
                         resource.IsPhysicalResource,
                         resource.SourceNote))
                     .ToArray()))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ModuleAssignment> BuildAssignments(
+        Guid moduleId,
+        IReadOnlyList<CourseTemplateAssignmentDefinition> assignments,
+        IReadOnlyList<Lesson> lessons)
+    {
+        return assignments
+            .OrderBy(assignment => assignment.SequenceOrder)
+            .Select(assignment =>
+            {
+                var variant = assignment.Variants.FirstOrDefault(item => item.MethodProfile == InstructionalMethodProfile.Hybrid)
+                    ?? assignment.Variants.First();
+                return BuildAssignment(
+                    moduleId,
+                    assignment.AssignmentId,
+                    assignment.SequenceOrder,
+                    variant.Title,
+                    variant.Type,
+                    variant.MethodProfile,
+                    variant.Instructions,
+                    variant.EstimatedEffort,
+                    variant.DueTimingLabel,
+                    null,
+                    variant.LinkedModuleObjectives,
+                    MapAssignmentLessonLinks(variant.LinkedLessonIds, lessons),
+                    variant.RequiredOutput,
+                    variant.ParentNotes,
+                    variant.IsPortfolioCandidate,
+                    variant.PlannedPoints,
+                    variant.PlannedWeight,
+                    variant.Status);
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<Guid> MapAssignmentLessonLinks(
+        IReadOnlyList<string> sourceLessonIds,
+        IReadOnlyList<Lesson> lessons)
+    {
+        return sourceLessonIds
+            .Select(sourceLessonId => lessons.FirstOrDefault(lesson =>
+                string.Equals(lesson.SourceLessonId, sourceLessonId, StringComparison.OrdinalIgnoreCase))?.Id ?? Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<Guid> MapAssignmentLessonLinks(
+        IReadOnlyList<Guid> packLessonIds,
+        IReadOnlyList<Lesson> packLessons,
+        IReadOnlyList<Lesson> existingLessons)
+    {
+        var sourceIds = packLessonIds
+            .Select(packLessonId => packLessons.FirstOrDefault(lesson => lesson.Id == packLessonId)?.SourceLessonId ?? "")
+            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+            .ToArray();
+
+        return sourceIds
+            .Select(sourceId => existingLessons.FirstOrDefault(lesson =>
+                string.Equals(lesson.SourceLessonId, sourceId, StringComparison.OrdinalIgnoreCase))?.Id ?? Guid.Empty)
+            .Where(id => id != Guid.Empty)
             .ToArray();
     }
 
@@ -1318,14 +1766,22 @@ public sealed class CourseService
         var objectiveKey = string.Join(";", module.LearningObjectiveItems.Select(item => $"{item.Text}->{item.LinkedCourseObjective}"));
         var resourceKey = string.Join(";", module.ResourceItems.Select(item => $"{item.Name}->{item.Link}->{item.FilePath}->{item.IsPhysicalResource}"));
         var lessonKey = string.Join(";", module.Lessons.Select(LessonKey));
+        var assignmentKey = string.Join(";", module.Assignments.Select(AssignmentKey));
         var termKey = module.TermId.HasValue ? module.TermId.Value.ToString("N") : "";
-        return $"{module.Id:N}:{module.SourceModuleId}:{module.SequenceOrder}:{module.Title}:{module.Description}:{termKey}:{module.EstimatedLength}:{module.Instructions}:{module.MajorTopics}:{module.LearningObjectives}:{objectiveKey}:{module.Resources}:{resourceKey}:{lessonKey}:{module.AssignmentEvidencePlaceholder}:{module.Status}";
+        return $"{module.Id:N}:{module.SourceModuleId}:{module.SequenceOrder}:{module.Title}:{module.Description}:{termKey}:{module.EstimatedLength}:{module.Instructions}:{module.MajorTopics}:{module.LearningObjectives}:{objectiveKey}:{module.Resources}:{resourceKey}:{lessonKey}:{assignmentKey}:{module.AssignmentEvidencePlaceholder}:{module.Status}";
     }
 
     private static string LessonKey(Lesson lesson)
     {
         var resourceKey = string.Join(";", lesson.Resources.Select(resource => $"{resource.Name}->{resource.Type}->{resource.Url}->{resource.FilePath}->{resource.IsPhysicalResource}->{resource.SourceNote}"));
         return $"{lesson.Id:N}:{lesson.SourceLessonId}:{lesson.SequenceOrder}:{lesson.Title}:{lesson.IntroductoryText}:{lesson.LinkedModuleObjective}:{resourceKey}";
+    }
+
+    private static string AssignmentKey(ModuleAssignment assignment)
+    {
+        var objectiveKey = string.Join(";", assignment.LinkedModuleObjectives);
+        var lessonKey = string.Join(";", assignment.LinkedLessonIds.Order());
+        return $"{assignment.Id:N}:{assignment.SourceAssignmentId}:{assignment.SequenceOrder}:{assignment.Title}:{assignment.Type}:{assignment.MethodProfile}:{assignment.Instructions}:{assignment.EstimatedEffort}:{assignment.DueTimingLabel}:{assignment.DueDate}:{objectiveKey}:{lessonKey}:{assignment.RequiredOutput}:{assignment.ParentNotes}:{assignment.IsPortfolioCandidate}:{assignment.PlannedPoints}:{assignment.PlannedWeight}:{assignment.Status}";
     }
 
     private static int AreaOrder(Guid requirementAreaId, IReadOnlyList<RequirementArea> areas)
@@ -1483,4 +1939,30 @@ public sealed class CourseService
     {
         await MichiganRequirementSeedRefresh.EnsureCurrentAsync(repository, cancellationToken);
     }
+
+    private static JsonSerializerOptions CreateCoursePackJsonOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    private static string SafeFileName(string value)
+    {
+        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9._-]+", "-");
+        normalized = normalized.Trim('-', '.', '_');
+        return string.IsNullOrWhiteSpace(normalized) ? "course-pack" : normalized;
+    }
+
+    private sealed record CoursePackJsonEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset ExportedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        CoursePackDefinition Pack);
 }

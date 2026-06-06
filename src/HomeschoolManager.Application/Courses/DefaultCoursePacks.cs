@@ -321,6 +321,7 @@ public static class DefaultCoursePacks
                 var topicText = moduleTopics.Length == 0 ? title : string.Join("; ", moduleTopics);
                 var moduleObjectives = ModuleObjectivesFor(title, topicText, courseObjectives, index - 1, moduleCount);
                 var parsedModuleResources = ModuleResourcesFor(title, moduleResources.Length == 0 ? resources : moduleResources);
+                var lessons = LessonsFor(optionId, index, title, topicText, moduleObjectives, parsedModuleResources);
                 return new CourseTemplateModuleDefinition(
                     $"{optionId}-module-{index}",
                     index,
@@ -331,11 +332,164 @@ public static class DefaultCoursePacks
                     $"Introduce the module focus, use guided instruction and discussion, assign practice or applied work, review evidence with the student, and connect the module back to the {subjectText} course record.",
                     moduleObjectives,
                     parsedModuleResources,
-                    LessonsFor(optionId, index, title, topicText, moduleObjectives, parsedModuleResources),
+                    lessons,
+                    AssignmentsFor(optionId, index, title, topicText, moduleObjectives, lessons),
                     "Planned assignment/evidence placeholder: parent may add readings, practice work, projects, discussions, assessments, portfolio artifacts, or demonstrations for this module.",
                     ModuleStatus.Planned);
             })
             .ToArray();
+    }
+
+    private static IReadOnlyList<CourseTemplateAssignmentDefinition> AssignmentsFor(
+        string optionId,
+        int moduleIndex,
+        string courseTitle,
+        string topicText,
+        IReadOnlyList<CourseTemplateModuleObjectiveDefinition> objectives,
+        IReadOnlyList<CourseTemplateLessonDefinition> lessons)
+    {
+        var linkedObjectives = objectives.Select(objective => objective.Text).ToArray();
+        var linkedLessonIds = lessons.Select(lesson => lesson.LessonId).ToArray();
+        return [
+            new CourseTemplateAssignmentDefinition(
+                $"{optionId}-module-{moduleIndex}-assignment-1",
+                1,
+                AssignmentVariantsFor(courseTitle, topicText, linkedObjectives, linkedLessonIds))
+        ];
+    }
+
+    private static IReadOnlyList<CourseTemplateAssignmentVariantDefinition> AssignmentVariantsFor(
+        string courseTitle,
+        string topicText,
+        IReadOnlyList<string> linkedObjectives,
+        IReadOnlyList<string> linkedLessonIds)
+    {
+        return [
+            AssignmentVariant(
+                "hybrid",
+                AssignmentType.PortfolioArtifact,
+                InstructionalMethodProfile.Hybrid,
+                $"{topicText} learning evidence portfolio",
+                $"Complete the module lessons on {topicText}. Create a concise evidence packet that includes notes from the readings or videos, one worked example or source analysis, one short written explanation, and a reflection on how the module objectives connect to the course.",
+                "2-4 focused work sessions",
+                "End of module",
+                linkedObjectives,
+                linkedLessonIds,
+                $"Portfolio-ready packet with notes, completed practice or analysis, written explanation, and reflection for {topicText}.",
+                "Hybrid assignment balances reading, practice, discussion/reflection, and parent-reviewed evidence.",
+                true,
+                20,
+                null),
+            AssignmentVariant(
+                "explicit-guided-practice",
+                AssignmentType.ProblemSet,
+                InstructionalMethodProfile.ExplicitGuidedPractice,
+                $"{topicText} guided practice check",
+                $"After parent instruction or modeled examples, complete guided questions for each lesson on {topicText}. Correct mistakes, annotate revisions, and write a brief summary of the pattern or idea you practiced.",
+                "1-3 focused work sessions",
+                "After guided practice",
+                linkedObjectives,
+                linkedLessonIds,
+                "Completed guided questions, corrected work, and a short summary of what was learned.",
+                "Best for explicit teaching followed by guided practice and parent feedback.",
+                false,
+                15,
+                null),
+            AssignmentVariant(
+                "project-applied",
+                AssignmentType.Project,
+                InstructionalMethodProfile.ProjectBasedApplied,
+                $"{topicText} applied project",
+                $"Use the module lessons to create a small applied product, demonstration, model, case study, presentation, or design that shows how {topicText} works in a realistic context.",
+                "3-5 focused work sessions",
+                "End of module",
+                linkedObjectives,
+                linkedLessonIds,
+                "Applied product or demonstration with a short explanation and evidence of revision.",
+                "Best for project-based or applied learning where the product demonstrates understanding.",
+                true,
+                25,
+                null),
+            AssignmentVariant(
+                "inquiry-discussion",
+                AssignmentType.Discussion,
+                InstructionalMethodProfile.InquiryDiscussion,
+                $"{topicText} inquiry response",
+                $"Develop two strong questions from the module lessons, gather evidence from the resources, discuss or conference with the parent, and write a reasoned response that uses specific evidence.",
+                "1-2 focused work sessions",
+                "After lesson discussion",
+                linkedObjectives,
+                linkedLessonIds,
+                "Discussion notes and an evidence-based written response.",
+                "Best for inquiry, discussion, source analysis, and claim-evidence reasoning.",
+                false,
+                15,
+                null),
+            AssignmentVariant(
+                "independent-study",
+                AssignmentType.ReadingResponse,
+                InstructionalMethodProfile.IndependentStudy,
+                $"{topicText} independent study log",
+                $"Work independently through the related lessons. Keep a study log with resource notes, vocabulary or key ideas, self-check questions, and a final synthesis paragraph.",
+                "2-3 focused work sessions",
+                "Independent study checkpoint",
+                linkedObjectives,
+                linkedLessonIds,
+                "Study log, self-check notes, and final synthesis paragraph.",
+                "Best when the student works through lesson resources with parent review afterward.",
+                false,
+                15,
+                null),
+            AssignmentVariant(
+                "mastery-practice",
+                AssignmentType.QuizOrTestPrep,
+                InstructionalMethodProfile.MasteryPractice,
+                $"{topicText} mastery check",
+                $"Complete a focused practice or review set for {topicText}. Revise incorrect work, explain corrections, and finish with a short demonstration that you can meet the linked objectives.",
+                "1-3 focused work sessions",
+                "Before module completion",
+                linkedObjectives,
+                linkedLessonIds,
+                "Practice set, corrections, and short mastery demonstration.",
+                "Best for correction cycles, objective checks, and parent-reviewed mastery evidence.",
+                false,
+                15,
+                null)
+        ];
+    }
+
+    private static CourseTemplateAssignmentVariantDefinition AssignmentVariant(
+        string variantId,
+        AssignmentType type,
+        InstructionalMethodProfile methodProfile,
+        string title,
+        string instructions,
+        string estimatedEffort,
+        string dueTimingLabel,
+        IReadOnlyList<string> linkedObjectives,
+        IReadOnlyList<string> linkedLessonIds,
+        string requiredOutput,
+        string parentNotes,
+        bool isPortfolioCandidate,
+        decimal? plannedPoints,
+        decimal? plannedWeight)
+    {
+        return new CourseTemplateAssignmentVariantDefinition(
+            variantId,
+            type,
+            methodProfile,
+            title,
+            instructions,
+            estimatedEffort,
+            dueTimingLabel,
+            linkedObjectives,
+            linkedLessonIds,
+            requiredOutput,
+            parentNotes,
+            isPortfolioCandidate,
+            plannedPoints,
+            plannedWeight,
+            AssignmentStatus.Planned);
     }
 
     private static int? TermNumberFor(int index, int moduleCount, CourseDuration duration)

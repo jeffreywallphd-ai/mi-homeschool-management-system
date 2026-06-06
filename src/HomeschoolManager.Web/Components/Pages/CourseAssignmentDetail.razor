@@ -1,0 +1,456 @@
+@page "/courses/{CourseId:guid}/modules/{ModuleId:guid}/assignments/{AssignmentId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@inject CourseService CourseService
+@inject SessionState Session
+@inject NavigationManager NavigationManager
+
+<PageTitle>Assignment Detail</PageTitle>
+
+@if (module is null || assignment is null)
+{
+    <h1>Assignment not found</h1>
+    <p>The requested assignment could not be loaded.</p>
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>@assignment.Title</h1>
+            <p>@module.Title</p>
+        </div>
+        @if (messages.Count > 0)
+        {
+            <section class="page-header-message" aria-live="polite">
+                @foreach (var message in messages)
+                {
+                    <div class="@message.CssClass">@message.Text</div>
+                }
+            </section>
+        }
+    </div>
+
+    @if (!CanEdit)
+    {
+        <div class="alert alert-warning">Sign in as parent/admin to edit assignments.</div>
+    }
+
+    <div class="content-workbench course-detail-workbench">
+        <main class="workbench-main">
+            <section class="form-section">
+                <h2>Assignment Identity</h2>
+                @if (module.AssignmentVariants.Count > 0 && CanEdit)
+                {
+                    <label class="form-label" for="assignment-variant">Built-in variant</label>
+                    <select id="assignment-variant" class="form-select" value="@selectedVariantId" @onchange="ApplyVariant">
+                        <option value="">Custom assignment</option>
+                        @foreach (var variant in module.AssignmentVariants)
+                        {
+                            <option value="@variant.VariantId">@MethodProfileLabel(variant.MethodProfile): @variant.Title</option>
+                        }
+                    </select>
+                }
+
+                <label class="form-label" for="assignment-title">Title <span class="required-marker">*</span></label>
+                <input id="assignment-title" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.Title" @bind:after="AutoSaveAssignment" />
+                @ValidationFor("assignment.Title")
+
+                <label class="form-label" for="assignment-type">Type</label>
+                <select id="assignment-type" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.Type" @bind:after="AutoSaveAssignment">
+                    @foreach (var type in Enum.GetValues<AssignmentType>())
+                    {
+                        <option value="@type">@AssignmentTypeLabel(type)</option>
+                    }
+                </select>
+
+                <label class="form-label" for="assignment-method">Instructional method profile</label>
+                <select id="assignment-method" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.MethodProfile" @bind:after="AutoSaveAssignment">
+                    @foreach (var profile in Enum.GetValues<InstructionalMethodProfile>())
+                    {
+                        <option value="@profile">@MethodProfileLabel(profile)</option>
+                    }
+                </select>
+
+                <label class="form-label" for="assignment-status">Status</label>
+                <select id="assignment-status" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.Status" @bind:after="AutoSaveAssignment">
+                    @foreach (var status in Enum.GetValues<AssignmentStatus>())
+                    {
+                        <option value="@status">@StatusLabel(status)</option>
+                    }
+                </select>
+            </section>
+
+            <section class="form-section">
+                <h2>Student Instructions</h2>
+                <label class="form-label" for="assignment-instructions">Instructions <span class="required-marker">*</span></label>
+                <textarea id="assignment-instructions" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.Instructions" @bind:after="AutoSaveAssignment"></textarea>
+                @ValidationFor("assignment.Instructions")
+
+                <label class="form-label" for="assignment-output">Required output or evidence <span class="required-marker">*</span></label>
+                <textarea id="assignment-output" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RequiredOutput" @bind:after="AutoSaveAssignment"></textarea>
+                @ValidationFor("assignment.RequiredOutput")
+            </section>
+
+            <section class="form-section">
+                <h2>Timing and Planning</h2>
+                <label class="form-label" for="assignment-effort">Estimated effort</label>
+                <input id="assignment-effort" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.EstimatedEffort" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-due-label">Due timing label</label>
+                <input id="assignment-due-label" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.DueTimingLabel" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-due-date">Due date</label>
+                <input id="assignment-due-date" class="form-control" type="date" disabled="@(!CanEdit)" @bind="assignmentForm.DueDate" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-points">Planned points</label>
+                <input id="assignment-points" class="form-control" type="number" min="0" step="0.1" disabled="@(!CanEdit)" @bind="assignmentForm.PlannedPoints" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-weight">Planned weight</label>
+                <input id="assignment-weight" class="form-control" type="number" min="0" step="0.1" disabled="@(!CanEdit)" @bind="assignmentForm.PlannedWeight" @bind:after="AutoSaveAssignment" />
+
+                <div class="form-check mt-2">
+                    <input id="assignment-portfolio" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.IsPortfolioCandidate" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-portfolio">Portfolio-worthy evidence candidate</label>
+                </div>
+            </section>
+        </main>
+
+        <aside class="workbench-support">
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Objectives</h2>
+                </div>
+                @if (module.LearningObjectiveItems.Count == 0)
+                {
+                    <p>No module objectives are available.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @foreach (var objective in module.LearningObjectiveItems)
+                        {
+                            var objectiveText = objective.Text;
+                            <li>
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="checkbox" disabled="@(!CanEdit)" checked="@assignmentForm.LinkedModuleObjectives.Contains(objectiveText)" @onchange="async _ => await ToggleObjective(objectiveText)" />
+                                    @objectiveText
+                                </label>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Related Lessons</h2>
+                    <button class="btn btn-outline-primary btn-sm" @onclick="BackToModule">Back to module</button>
+                </div>
+                @if (module.Lessons.Count == 0)
+                {
+                    <p>No lessons are available.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @foreach (var lesson in module.Lessons.OrderBy(item => item.SequenceOrder))
+                        {
+                            var lessonId = lesson.Id;
+                            <li>
+                                <label class="form-check-label">
+                                    <input class="form-check-input" type="checkbox" disabled="@(!CanEdit)" checked="@assignmentForm.LinkedLessonIds.Contains(lessonId)" @onchange="async _ => await ToggleLesson(lessonId)" />
+                                    @lesson.SequenceOrder. @lesson.Title
+                                </label>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="form-section">
+                <h2>Parent Notes</h2>
+                <label class="visually-hidden" for="assignment-parent-notes">Parent notes</label>
+                <textarea id="assignment-parent-notes" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ParentNotes" @bind:after="AutoSaveAssignment"></textarea>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid ModuleId { get; set; }
+
+    [Parameter]
+    public Guid AssignmentId { get; set; }
+
+    private LearningModuleView? module;
+    private AssignmentView? assignment;
+    private AssignmentFormModel assignmentForm = new();
+    private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
+    private string selectedVariantId = "";
+
+    private bool CanEdit => Session.IsParentAdmin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        if (!CanEdit)
+        {
+            module = null;
+            assignment = null;
+            if (!Session.IsAuthenticated)
+            {
+                NavigationManager.NavigateTo("/login", replace: true);
+            }
+
+            return;
+        }
+
+        module = await CourseService.GetModuleDetailAsync(CourseId, ModuleId);
+        assignment = module?.Assignments.FirstOrDefault(item => item.Id == AssignmentId);
+        assignmentForm = assignment is null
+            ? new AssignmentFormModel()
+            : new AssignmentFormModel
+            {
+                Title = assignment.Title,
+                Type = assignment.Type,
+                MethodProfile = assignment.MethodProfile,
+                Instructions = assignment.Instructions,
+                EstimatedEffort = assignment.EstimatedEffort,
+                DueTimingLabel = assignment.DueTimingLabel,
+                DueDate = assignment.DueDate,
+                LinkedModuleObjectives = assignment.LinkedModuleObjectives.ToList(),
+                LinkedLessonIds = assignment.LinkedLessonIds.ToList(),
+                RequiredOutput = assignment.RequiredOutput,
+                ParentNotes = assignment.ParentNotes,
+                IsPortfolioCandidate = assignment.IsPortfolioCandidate,
+                PlannedPoints = assignment.PlannedPoints,
+                PlannedWeight = assignment.PlannedWeight,
+                Status = assignment.Status
+            };
+    }
+
+    private async Task AutoSaveAssignment()
+    {
+        if (!CanEdit || assignment is null || !ValidateAssignment())
+        {
+            return;
+        }
+
+        await Run(() => CourseService.UpdateAssignmentAsync(
+            ParentUser(),
+            new UpdateAssignmentCommand(
+                CourseId,
+                ModuleId,
+                AssignmentId,
+                assignmentForm.Title,
+                assignmentForm.Type,
+                assignmentForm.MethodProfile,
+                assignmentForm.Instructions,
+                assignmentForm.EstimatedEffort,
+                assignmentForm.DueTimingLabel,
+                assignmentForm.DueDate,
+                assignmentForm.LinkedModuleObjectives,
+                assignmentForm.LinkedLessonIds,
+                assignmentForm.RequiredOutput,
+                assignmentForm.ParentNotes,
+                assignmentForm.IsPortfolioCandidate,
+                assignmentForm.PlannedPoints,
+                assignmentForm.PlannedWeight,
+                assignmentForm.Status)));
+    }
+
+    private async Task ApplyVariant(ChangeEventArgs eventArgs)
+    {
+        selectedVariantId = eventArgs.Value?.ToString() ?? "";
+        var variant = module?.AssignmentVariants.FirstOrDefault(item => item.VariantId == selectedVariantId);
+        if (variant is null)
+        {
+            return;
+        }
+
+        assignmentForm.Title = variant.Title;
+        assignmentForm.Type = variant.Type;
+        assignmentForm.MethodProfile = variant.MethodProfile;
+        assignmentForm.Instructions = variant.Instructions;
+        assignmentForm.EstimatedEffort = variant.EstimatedEffort;
+        assignmentForm.DueTimingLabel = variant.DueTimingLabel;
+        assignmentForm.DueDate = null;
+        assignmentForm.LinkedModuleObjectives = variant.LinkedModuleObjectives.ToList();
+        assignmentForm.LinkedLessonIds = variant.LinkedSourceLessonIds
+            .Select(sourceId => module?.Lessons.FirstOrDefault(lesson => string.Equals(lesson.SourceLessonId, sourceId, StringComparison.OrdinalIgnoreCase))?.Id ?? Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToList();
+        assignmentForm.RequiredOutput = variant.RequiredOutput;
+        assignmentForm.ParentNotes = variant.ParentNotes;
+        assignmentForm.IsPortfolioCandidate = variant.IsPortfolioCandidate;
+        assignmentForm.PlannedPoints = variant.PlannedPoints;
+        assignmentForm.PlannedWeight = variant.PlannedWeight;
+        assignmentForm.Status = variant.Status;
+        await AutoSaveAssignment();
+    }
+
+    private async Task ToggleObjective(string objective)
+    {
+        if (assignmentForm.LinkedModuleObjectives.Contains(objective))
+        {
+            assignmentForm.LinkedModuleObjectives.Remove(objective);
+        }
+        else
+        {
+            assignmentForm.LinkedModuleObjectives.Add(objective);
+        }
+
+        await AutoSaveAssignment();
+    }
+
+    private async Task ToggleLesson(Guid lessonId)
+    {
+        if (assignmentForm.LinkedLessonIds.Contains(lessonId))
+        {
+            assignmentForm.LinkedLessonIds.Remove(lessonId);
+        }
+        else
+        {
+            assignmentForm.LinkedLessonIds.Add(lessonId);
+        }
+
+        await AutoSaveAssignment();
+    }
+
+    private async Task Run(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await Refresh();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private void BackToModule()
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{ModuleId}");
+    }
+
+    private bool ValidateAssignment()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+
+        if (string.IsNullOrWhiteSpace(assignmentForm.Title))
+        {
+            fieldErrors["assignment.Title"] = "Title is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(assignmentForm.Instructions))
+        {
+            fieldErrors["assignment.Instructions"] = "Instructions are required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(assignmentForm.RequiredOutput))
+        {
+            fieldErrors["assignment.RequiredOutput"] = "Required output is required.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required assignment fields.", "alert alert-danger"));
+        return false;
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private UserContext ParentUser()
+    {
+        return Session.CurrentUser ?? UserContext.Student("Anonymous");
+    }
+
+    private static string AssignmentTypeLabel(AssignmentType type)
+    {
+        return type switch
+        {
+            AssignmentType.ReadingResponse => "Reading response",
+            AssignmentType.ProblemSet => "Problem set",
+            AssignmentType.LabOrSimulation => "Lab or simulation",
+            AssignmentType.QuizOrTestPrep => "Quiz or test prep",
+            AssignmentType.PortfolioArtifact => "Portfolio artifact",
+            AssignmentType.PracticalDemonstration => "Practical demonstration",
+            _ => type.ToString()
+        };
+    }
+
+    private static string MethodProfileLabel(InstructionalMethodProfile profile)
+    {
+        return profile switch
+        {
+            InstructionalMethodProfile.Hybrid => "Hybrid",
+            InstructionalMethodProfile.ExplicitGuidedPractice => "Explicit / guided practice",
+            InstructionalMethodProfile.ProjectBasedApplied => "Project-based / applied",
+            InstructionalMethodProfile.InquiryDiscussion => "Inquiry / discussion",
+            InstructionalMethodProfile.IndependentStudy => "Independent study",
+            InstructionalMethodProfile.MasteryPractice => "Mastery practice",
+            _ => profile.ToString()
+        };
+    }
+
+    private static string StatusLabel(AssignmentStatus status)
+    {
+        return status switch
+        {
+            AssignmentStatus.Planned => "Planned",
+            AssignmentStatus.Assigned => "Assigned",
+            AssignmentStatus.Submitted => "Submitted",
+            AssignmentStatus.Reviewed => "Reviewed",
+            AssignmentStatus.Complete => "Complete",
+            AssignmentStatus.Skipped => "Skipped",
+            _ => status.ToString()
+        };
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
+
+    private sealed class AssignmentFormModel
+    {
+        public string Title { get; set; } = "";
+        public AssignmentType Type { get; set; } = AssignmentType.PortfolioArtifact;
+        public InstructionalMethodProfile MethodProfile { get; set; } = InstructionalMethodProfile.Hybrid;
+        public string Instructions { get; set; } = "";
+        public string EstimatedEffort { get; set; } = "";
+        public string DueTimingLabel { get; set; } = "";
+        public DateOnly? DueDate { get; set; }
+        public List<string> LinkedModuleObjectives { get; set; } = [];
+        public List<Guid> LinkedLessonIds { get; set; } = [];
+        public string RequiredOutput { get; set; } = "";
+        public string ParentNotes { get; set; } = "";
+        public bool IsPortfolioCandidate { get; set; }
+        public decimal? PlannedPoints { get; set; }
+        public decimal? PlannedWeight { get; set; }
+        public AssignmentStatus Status { get; set; } = AssignmentStatus.Planned;
+    }
+}

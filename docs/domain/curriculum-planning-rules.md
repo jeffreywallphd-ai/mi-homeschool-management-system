@@ -55,8 +55,9 @@ A learning module may include:
 - Itemized learning objectives.
 - Optional alignment from a module objective to a course learning objective.
 - Lessons tied to module learning objectives.
+- Module-owned assignments tied to objectives and, where useful, lessons.
 - Status of planned, active, or complete.
-- Assignment/evidence placeholder.
+- Assignment/evidence notes for later evidence workflows.
 
 Learning modules must not include a separate goals field. Module learning objectives are the purpose statement for the module.
 
@@ -64,7 +65,7 @@ Module learning objectives may be module-specific or linked to course learning o
 
 Lessons contain the concrete readings, videos, files, or physical resources the student should use. Course-level resources describe the syllabus-level resource pool; lesson resources describe the specific student work.
 
-Module learning objectives and lesson resources should remain itemized enough for later assignment, evidence, and portfolio workflows.
+Module learning objectives and lesson resources should remain itemized enough for assignments, evidence, and portfolio workflows.
 
 ## Lessons
 
@@ -78,6 +79,29 @@ A lesson may include:
 
 Lesson resources may be readings, textbook chapters, articles, videos, websites, files, or physical resources.
 
+## Assignments
+
+An assignment is module-owned work the student is expected to complete. It may link to one or more module objectives and one or more lessons.
+
+An assignment may include:
+
+- Title.
+- Sequence order within the module.
+- Assignment type.
+- Instructional method profile.
+- Student-facing instructions.
+- Estimated effort.
+- Due date or timing label.
+- Linked module objectives.
+- Linked lesson ids.
+- Required output or evidence expectation.
+- Parent notes.
+- Portfolio-candidate marker.
+- Planned points or planned weight.
+- Status.
+
+Assignment status and planned points are planning fields. They must not create a grade, credit award, or evidence record without a later explicit parent/admin action.
+
 ## Requirement Mapping
 
 Requirement mappings are separate from course identity. A course can support several requirement areas with coverage levels of primary, secondary, or supporting.
@@ -88,7 +112,7 @@ Course packs are importable templates. Imported courses become editable parent-o
 
 Built-in course pack defaults may populate blank course description and curriculum plan fields for already imported courses. This migration-style backfill must preserve parent-entered text.
 
-Built-in course pack defaults may add missing source-backed learning modules or lessons to already imported courses, but must not overwrite parent-created or parent-edited modules or lessons.
+Built-in course pack defaults may add missing source-backed learning modules, lessons, or assignments to already imported courses, but must not overwrite parent-created or parent-edited modules, lessons, or assignments.
 
 ## Contract Rule
 

@@ -49,6 +49,7 @@ public sealed record CourseTemplateModuleDefinition(
     IReadOnlyList<CourseTemplateModuleObjectiveDefinition> LearningObjectives,
     IReadOnlyList<CourseTemplateModuleResourceDefinition> Resources,
     IReadOnlyList<CourseTemplateLessonDefinition> Lessons,
+    IReadOnlyList<CourseTemplateAssignmentDefinition> Assignments,
     string AssignmentEvidencePlaceholder,
     ModuleStatus Status);
 
@@ -70,6 +71,28 @@ public sealed record CourseTemplateLessonResourceDefinition(
     string Url,
     bool IsPhysicalResource,
     string SourceNote);
+
+public sealed record CourseTemplateAssignmentDefinition(
+    string AssignmentId,
+    int SequenceOrder,
+    IReadOnlyList<CourseTemplateAssignmentVariantDefinition> Variants);
+
+public sealed record CourseTemplateAssignmentVariantDefinition(
+    string VariantId,
+    AssignmentType Type,
+    InstructionalMethodProfile MethodProfile,
+    string Title,
+    string Instructions,
+    string EstimatedEffort,
+    string DueTimingLabel,
+    IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<string> LinkedLessonIds,
+    string RequiredOutput,
+    string ParentNotes,
+    bool IsPortfolioCandidate,
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentStatus Status);
 
 public sealed record CourseTemplateRequirementMapping(
     string RequirementAreaView,

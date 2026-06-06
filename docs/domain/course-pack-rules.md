@@ -32,8 +32,10 @@ A course pack must define:
 - Assessment methods.
 - Grading basis.
 - Curriculum plan fields: goals, learning objectives, planned sequence, and parent notes.
-- Learning module definitions with title, description, sequence order, optional term number, estimated length, instructions, itemized learning objectives, source-backed lessons, status, and assignment/evidence placeholder.
+- Learning module definitions with title, description, sequence order, optional term number, estimated length, instructions, itemized learning objectives, source-backed lessons, source-backed assignments, status, and assignment/evidence notes.
 - Lesson definitions with title, sequence order, introductory text, optional linked module objective, and one or more itemized resources.
+- Assignment definitions with stable source assignment id, sequence order, and method-profile variants.
+- Assignment variant definitions with assignment type, method profile, title, instructions, estimated effort, timing label, linked module objectives, linked source lesson ids, required output, parent notes, portfolio-candidate marker, planned points or weight, and status.
 - Optional requirement mappings by view, area name, coverage level, and notes.
 - Optional course choices for a template slot, with stable option ids and one default option.
 
@@ -50,6 +52,8 @@ Learning modules must not include module goals or module major-topic fields. Mod
 Module learning objectives may optionally link to course learning objectives. Default-pack modules should include at least one linked objective per module and should support each course objective through at least two module objectives.
 
 Lesson resources should be concrete readings, videos, files, or physical resources for the lesson. Course-level texts/resources remain syllabus-level materials.
+
+Assignments should be concrete student work connected to module objectives. Default-pack assignments should link to relevant lesson source ids so student-facing assignments point back to the readings, videos, or resources the student should use.
 
 Instructional methods, assessment methods, and grading basis may include a hybrid option that broadly combines common methods, evidence types, or grading bases.
 
@@ -68,13 +72,30 @@ Instructional methods, assessment methods, and grading basis may include a hybri
 - Imported courses become editable course records regardless of whether they came from a fixed template or a selected option.
 - Built-in pack updates may backfill blank imported-course detail fields, but must not overwrite parent-entered text.
 - Built-in pack updates may replace recognizable legacy built-in default text with the newer built-in default format.
-- Built-in pack updates may add missing source-backed learning modules or lessons to imported courses, but must not overwrite parent-created or parent-edited modules or lessons.
+- Built-in pack updates may add missing source-backed learning modules, lessons, or assignments to imported courses, but must not overwrite parent-created or parent-edited modules, lessons, or assignments.
 
 ## Installed Pack Terminology
 
 Importing a pack means creating editable courses from a pack that is already available in the app.
 
 Installing a pack is reserved for a later feature where the parent adds a pack created outside the built-in library.
+
+## Export Rules
+
+An exported course pack should use a `.coursepack` extension and contain JSON using a versioned envelope around the course pack contract.
+
+The JSON envelope should include:
+
+- Format identifier.
+- Format version.
+- Export timestamp.
+- Package mode.
+- Archive note.
+- Pack payload.
+
+Current built-in pack export may write a single JSON `.coursepack` file because built-in lesson and assignment resources are links or physical-resource references, not attached files.
+
+Future exports that include attached lesson files, assignment files, or other course-pack files should use a zip archive containing the `.coursepack` JSON plus the referenced files. The JSON contract should remain the manifest inside that archive.
 
 ## Default Pack Rule
 
@@ -83,6 +104,8 @@ The default Michigan pack should represent a transcript-recognizable planning st
 The default Michigan pack should total 8 planned credits and keep history separate from government/civics/economics.
 
 Default government/civics and U.S. history options should map U.S. Constitution and Michigan Constitution coverage from the Michigan seed.
+
+Default-pack modules should include at least one assignment. Built-in assignments should include a hybrid variant and additional variants for common instructional method profiles so parent/admin users can adapt the work to the course method.
 
 The pack must not claim that imported courses satisfy graduation requirements, legal requirements, college admission requirements, or transcript acceptance standards.
 

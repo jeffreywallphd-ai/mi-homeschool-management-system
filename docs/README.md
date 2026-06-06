@@ -106,6 +106,7 @@ Implementation roadmaps are currently defined by:
 - [Course Curriculum Planning Roadmap](roadmaps/course-curriculum-planning-roadmap.md)
 - [Course Learning Modules Roadmap](roadmaps/course-learning-modules-roadmap.md)
 - [Course Module Lessons Roadmap](roadmaps/course-module-lessons-roadmap.md)
+- [Course Module Assignments Roadmap](roadmaps/course-module-assignments-roadmap.md)
 - [Student Course Client Roadmap](roadmaps/student-course-client-roadmap.md)
 
 Operations requirements are currently defined by:

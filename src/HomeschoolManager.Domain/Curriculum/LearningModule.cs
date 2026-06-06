@@ -19,6 +19,7 @@ public sealed record LearningModule
     public string Resources { get; init; }
     public IReadOnlyList<ModuleResource> ResourceItems { get; init; }
     public IReadOnlyList<Lesson> Lessons { get; init; }
+    public IReadOnlyList<ModuleAssignment> Assignments { get; init; }
     public string AssignmentEvidencePlaceholder { get; init; }
     public ModuleStatus Status { get; init; }
 
@@ -39,7 +40,8 @@ public sealed record LearningModule
         Guid? termId = null,
         IReadOnlyList<ModuleLearningObjective>? learningObjectiveItems = null,
         IReadOnlyList<ModuleResource>? resourceItems = null,
-        IReadOnlyList<Lesson>? lessons = null)
+        IReadOnlyList<Lesson>? lessons = null,
+        IReadOnlyList<ModuleAssignment>? assignments = null)
     {
         if (courseId == Guid.Empty)
         {
@@ -71,13 +73,33 @@ public sealed record LearningModule
         ResourceItems = NormalizeResources(resourceItems, resources);
         Resources = Lines(ResourceItems.Select(SerializeResource));
         Lessons = NormalizeLessons(LessonsForModule(lessons ?? [], Id));
+        Assignments = NormalizeAssignments(AssignmentsForModule(assignments ?? [], Id, Lessons));
         AssignmentEvidencePlaceholder = assignmentEvidencePlaceholder.Trim();
         Status = status;
     }
 
     public LearningModule WithLessons(IReadOnlyList<Lesson> lessons)
     {
-        return this with { Lessons = NormalizeLessons(LessonsForModule(lessons, Id)) };
+        var normalizedLessons = NormalizeLessons(LessonsForModule(lessons, Id));
+        var validLessonIds = normalizedLessons.Select(lesson => lesson.Id).ToHashSet();
+        var assignments = Assignments
+            .Select(assignment => assignment with
+            {
+                LinkedLessonIds = assignment.LinkedLessonIds
+                    .Where(validLessonIds.Contains)
+                    .ToArray()
+            })
+            .ToArray();
+        return this with
+        {
+            Lessons = normalizedLessons,
+            Assignments = NormalizeAssignments(AssignmentsForModule(assignments, Id, normalizedLessons))
+        };
+    }
+
+    public LearningModule WithAssignments(IReadOnlyList<ModuleAssignment> assignments)
+    {
+        return this with { Assignments = NormalizeAssignments(AssignmentsForModule(assignments, Id, Lessons)) };
     }
 
     private static IReadOnlyList<ModuleLearningObjective> NormalizeLearningObjectives(
@@ -159,6 +181,47 @@ public sealed record LearningModule
             .OrderBy(lesson => lesson.SequenceOrder)
             .ThenBy(lesson => lesson.Title, StringComparer.OrdinalIgnoreCase)
             .Select((lesson, index) => lesson with { SequenceOrder = index + 1 })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ModuleAssignment> AssignmentsForModule(
+        IReadOnlyList<ModuleAssignment> assignments,
+        Guid moduleId,
+        IReadOnlyList<Lesson> lessons)
+    {
+        var invalidAssignment = assignments.FirstOrDefault(assignment => assignment.ModuleId != moduleId);
+        if (invalidAssignment is not null)
+        {
+            throw new DomainException("Assignments must belong to the module being updated.");
+        }
+
+        var duplicateSourceId = assignments
+            .Where(assignment => !string.IsNullOrWhiteSpace(assignment.SourceAssignmentId))
+            .GroupBy(assignment => assignment.SourceAssignmentId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateSourceId is not null)
+        {
+            throw new DomainException("A module can only have one assignment per source assignment id.");
+        }
+
+        var knownLessonIds = lessons.Select(lesson => lesson.Id).ToHashSet();
+        var invalidLinkedLesson = assignments
+            .SelectMany(assignment => assignment.LinkedLessonIds)
+            .FirstOrDefault(lessonId => !knownLessonIds.Contains(lessonId));
+        if (invalidLinkedLesson != Guid.Empty)
+        {
+            throw new DomainException("Assignment lesson links must belong to the same module.");
+        }
+
+        return assignments;
+    }
+
+    private static IReadOnlyList<ModuleAssignment> NormalizeAssignments(IReadOnlyList<ModuleAssignment> assignments)
+    {
+        return assignments
+            .OrderBy(assignment => assignment.SequenceOrder)
+            .ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase)
+            .Select((assignment, index) => assignment with { SequenceOrder = index + 1 })
             .ToArray();
     }
 
