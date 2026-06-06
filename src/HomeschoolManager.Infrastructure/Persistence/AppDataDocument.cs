@@ -15,6 +15,8 @@ public sealed class AppDataDocument
 
     public Student? Student { get; set; }
 
+    public List<Student> Students { get; set; } = [];
+
     public SchoolYear? SchoolYear { get; set; }
 
     public List<RequirementSet> RequirementSets { get; set; } = [];

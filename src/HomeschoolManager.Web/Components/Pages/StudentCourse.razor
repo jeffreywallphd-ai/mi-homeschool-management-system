@@ -1,0 +1,222 @@
+@page "/student/courses/{CourseId:guid}"
+@page "/student/{StudentId:guid}/courses/{CourseId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(course?.Title ?? "Student Course")</PageTitle>
+
+@if (!canView)
+{
+    <h1>Course</h1>
+    <div class="alert alert-warning">Sign in to view this course.</div>
+}
+else if (course is null)
+{
+    <h1>Course not found</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>@course.Title</h1>
+            <p>@DurationText(course.Duration), @course.PlannedCreditValue.ToString("0.0") credits</p>
+        </div>
+    </div>
+
+    @if (Session.IsParentAdmin)
+    {
+        <div class="alert alert-info student-preview-banner">Previewing the student view as parent/admin.</div>
+    }
+
+    <div class="student-page-grid student-course-page-grid">
+        <main class="student-main-column">
+            <section class="form-section">
+                <h2>Course Description</h2>
+                <p>@course.Description</p>
+            </section>
+
+            <section class="form-section">
+                <h2>Learning Objectives</h2>
+                @if (course.LearningObjectives.Count == 0)
+                {
+                    <p>No learning objectives have been added yet.</p>
+                }
+                else
+                {
+                    <ul class="student-readable-list">
+                        @foreach (var objective in course.LearningObjectives)
+                        {
+                            <li>@objective</li>
+                        }
+                    </ul>
+                }
+                <a class="btn btn-primary mt-3" href="@($"student/{course.StudentId}/courses/{CourseId}/syllabus")">Open syllabus</a>
+            </section>
+        </main>
+
+        <aside class="student-support-column">
+            <section class="support-card">
+                <h2>Course Status</h2>
+                <dl class="student-detail-facts">
+                    <div>
+                        <dt>Current grade</dt>
+                        <dd>@course.CurrentGrade</dd>
+                    </div>
+                    <div>
+                        <dt>Modules</dt>
+                        <dd>@course.Modules.Count</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="support-card">
+                <h2>Modules</h2>
+                @if (course.Modules.Count == 0)
+                {
+                    <p>No modules have been added yet.</p>
+                }
+                else
+                {
+                    @if (course.TermNames.Count > 0)
+                    {
+                        @foreach (var termName in course.TermNames)
+                        {
+                            var modules = ModulesForTerm(termName).ToArray();
+                            <div class="student-module-term-group">
+                                <h3>@termName</h3>
+                                @if (modules.Length == 0)
+                                {
+                                    <p>No modules are currently placed in this semester.</p>
+                                }
+                                else
+                                {
+                                    @ModuleList(modules)
+                                }
+                            </div>
+                        }
+
+                        var unplacedModules = course.Modules
+                            .Where(module => string.IsNullOrWhiteSpace(module.TermName))
+                            .ToArray();
+                        @if (unplacedModules.Length > 0)
+                        {
+                            <div class="student-module-term-group">
+                                <h3>Unscheduled</h3>
+                                @ModuleList(unplacedModules)
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        @ModuleList(course.Modules)
+                    }
+                }
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentCoursePage? course;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent || Session.IsParentAdmin;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.GetCourseAsync(
+            Session.CurrentUser,
+            CourseId,
+            StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded)
+        {
+            course = result.Value;
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private IEnumerable<StudentModuleLink> ModulesForTerm(string termName)
+    {
+        return course?.Modules.Where(module =>
+            string.Equals(module.TermName, termName, StringComparison.OrdinalIgnoreCase)) ?? [];
+    }
+
+    private RenderFragment ModuleList(IReadOnlyList<StudentModuleLink> modules) => builder =>
+    {
+        builder.OpenElement(0, "ol");
+        builder.AddAttribute(1, "class", "student-module-links");
+        var sequence = 2;
+        foreach (var module in modules)
+        {
+            builder.OpenElement(sequence++, "li");
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", $"student/{course?.StudentId}/courses/{CourseId}/modules/{module.ModuleId}");
+            builder.OpenElement(sequence++, "strong");
+            builder.AddContent(sequence++, module.Title);
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "span");
+            builder.AddContent(sequence++, ModuleMeta(module));
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
+    }
+
+    private static string ModuleMeta(StudentModuleLink module)
+    {
+        var parts = new List<string> { StatusText(module.Status) };
+        if (!string.IsNullOrWhiteSpace(module.TermName))
+        {
+            parts.Add(module.TermName);
+        }
+
+        return string.Join(" | ", parts);
+    }
+
+    private static string StatusText(ModuleStatus status)
+    {
+        return status switch
+        {
+            ModuleStatus.Planned => "Planned",
+            ModuleStatus.Active => "Active",
+            ModuleStatus.Complete => "Complete",
+            _ => status.ToString()
+        };
+    }
+}

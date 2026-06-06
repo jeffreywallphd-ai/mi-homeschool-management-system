@@ -20,4 +20,5 @@ public sealed record SetupDetail(
     DateOnly FirstTermStart,
     DateOnly FirstTermEnd,
     DateOnly SecondTermStart,
-    DateOnly SecondTermEnd);
+    DateOnly SecondTermEnd,
+    IReadOnlyList<StudentSetupItem>? Students = null);

@@ -9,4 +9,10 @@ public sealed record SetupSummary(
     string ParentGuardianName,
     string SchoolName,
     string StudentName,
-    string SchoolYearName);
+    string SchoolYearName,
+    int StudentCount = 0);
+
+public sealed record StudentSetupItem(Guid Id, string FirstName, string LastName, int GradeLevel)
+{
+    public string DisplayName => $"{FirstName} {LastName}";
+}

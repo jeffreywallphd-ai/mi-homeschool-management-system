@@ -35,7 +35,54 @@ public sealed record CourseDetail(
     string MajorResources,
     string PlannedSequence,
     string ParentNotes,
+    IReadOnlyList<CourseTermView> Terms,
+    IReadOnlyList<LearningModuleView> Modules,
     IReadOnlyList<CourseRequirementMappingView> Mappings);
+
+public sealed record CourseTermView(Guid Id, string Name, DateOnly StartDate, DateOnly EndDate);
+
+public sealed record LearningModuleView(
+    Guid Id,
+    Guid CourseId,
+    string SourceModuleId,
+    int SequenceOrder,
+    string Title,
+    string Description,
+    Guid? TermId,
+    string TermName,
+    string EstimatedLength,
+    string Instructions,
+    string MajorTopics,
+    string LearningObjectives,
+    IReadOnlyList<ModuleLearningObjectiveView> LearningObjectiveItems,
+    string Resources,
+    IReadOnlyList<ModuleResourceView> ResourceItems,
+    string AssignmentEvidencePlaceholder,
+    ModuleStatus Status,
+    IReadOnlyList<LessonView> Lessons);
+
+public sealed record ModuleLearningObjectiveView(string Text, string LinkedCourseObjective);
+
+public sealed record ModuleResourceView(string Name, string Link, string FilePath, bool IsPhysicalResource);
+
+public sealed record LessonView(
+    Guid Id,
+    Guid ModuleId,
+    string SourceLessonId,
+    int SequenceOrder,
+    string Title,
+    string IntroductoryText,
+    string LinkedModuleObjective,
+    IReadOnlyList<LessonResourceView> Resources);
+
+public sealed record LessonResourceView(
+    Guid Id,
+    string Name,
+    LessonResourceType Type,
+    string Url,
+    string FilePath,
+    bool IsPhysicalResource,
+    string SourceNote);
 
 public sealed record CoverageSummaryItem(
     Guid RequirementAreaId,

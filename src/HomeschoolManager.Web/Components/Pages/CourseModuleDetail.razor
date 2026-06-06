@@ -1,0 +1,713 @@
+@page "/courses/{CourseId:guid}/modules"
+@page "/courses/{CourseId:guid}/modules/new"
+@page "/courses/{CourseId:guid}/modules/{ModuleId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@inject CourseService CourseService
+@inject SessionState Session
+@inject NavigationManager NavigationManager
+
+<PageTitle>Course Module</PageTitle>
+
+@if (course is null)
+{
+    <h1>Course not found</h1>
+    <p>The requested course could not be loaded.</p>
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>@HeaderTitle()</h1>
+            <p>@course.Title</p>
+        </div>
+        @if (messages.Count > 0)
+        {
+            <section class="page-header-message" aria-live="polite">
+                @foreach (var message in messages)
+                {
+                    <div class="@message.CssClass">@message.Text</div>
+                }
+            </section>
+        }
+    </div>
+
+    @if (!CanEdit)
+    {
+        <div class="alert alert-warning">Sign in as parent/admin to edit learning modules.</div>
+    }
+
+    <div class="content-workbench course-detail-workbench">
+        <main class="workbench-main">
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Modules</h2>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-primary btn-sm" @onclick="CreateModule">New module</button>
+                    }
+                </div>
+                @if (course.Modules.Count == 0)
+                {
+                    <p>No modules have been added for this course.</p>
+                }
+                else
+                {
+                    <ul class="module-nav-list">
+                        @foreach (var module in OrderedModules())
+                        {
+                            <li>
+                                <button class="@ModuleButtonCss(module.Id)" @onclick="() => OpenModule(module.Id)">
+                                    @module.SequenceOrder. @module.Title
+                                </button>
+                                @if (CanEdit)
+                                {
+                                    <div class="module-order-actions">
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveModule(module.Id, -1)">Up</button>
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveModule(module.Id, 1)">Down</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => OpenDeleteModal(module.Id)">Delete</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @if (selectedModule is not null)
+            {
+                <section class="form-section">
+                    <h2>Module identity</h2>
+                    <label class="form-label" for="module-title">Title <span class="required-marker">*</span></label>
+                    <input id="module-title" class="form-control" disabled="@(!CanEdit)" @bind="moduleForm.Title" @bind:after="AutoSaveModule" />
+                    @ValidationFor("module.Title")
+                    @if (ShouldShowSemesterPlacement())
+                    {
+                        <label class="form-label" for="module-term">Semester</label>
+                        <select id="module-term" class="form-select" disabled="@(!CanEdit)" @bind="moduleForm.TermId" @bind:after="AutoSaveModule">
+                            <option value="">Unassigned</option>
+                            @foreach (var term in course.Terms)
+                            {
+                                <option value="@term.Id">@term.Name</option>
+                            }
+                        </select>
+                    }
+                    <label class="form-label" for="module-status">Status</label>
+                    <select id="module-status" class="form-select" disabled="@(!CanEdit)" @bind="moduleForm.Status" @bind:after="AutoSaveModule">
+                        <option value="@ModuleStatus.Planned">Planned</option>
+                        <option value="@ModuleStatus.Active">Active</option>
+                        <option value="@ModuleStatus.Complete">Complete</option>
+                    </select>
+                    <label class="form-label" for="module-estimated-length">Estimated length</label>
+                    <input id="module-estimated-length" class="form-control" disabled="@(!CanEdit)" @bind="moduleForm.EstimatedLength" @bind:after="AutoSaveModule" />
+                    <label class="form-label" for="module-description">Description</label>
+                    <textarea id="module-description" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="moduleForm.Description" @bind:after="AutoSaveModule"></textarea>
+                </section>
+
+                <section class="form-section">
+                    <h2>Instructions</h2>
+                    <label class="form-label" for="module-instructions">Instructions <span class="required-marker">*</span></label>
+                    <textarea id="module-instructions" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="moduleForm.Instructions" @bind:after="AutoSaveModule"></textarea>
+                    @ValidationFor("module.Instructions")
+                    <label class="form-label" for="module-evidence">Assignment/evidence placeholder</label>
+                    <textarea id="module-evidence" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="moduleForm.AssignmentEvidencePlaceholder" @bind:after="AutoSaveModule"></textarea>
+                </section>
+            }
+        </main>
+
+        <aside class="workbench-support">
+            @if (selectedModule is null)
+            {
+                <section class="status-panel">
+                    <h2>Module details</h2>
+                    <p>Select or create a module to edit its details.</p>
+                </section>
+            }
+            else
+            {
+                <section class="form-section">
+                    <div class="section-heading-row">
+                        <h2>Learning objectives</h2>
+                        @if (CanEdit)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleObjectiveForm">@ObjectiveToggleText()</button>
+                        }
+                    </div>
+                    @ValidationFor("module.Objectives")
+                    @if (moduleForm.Objectives.Count == 0)
+                    {
+                        <p>No module objectives have been added.</p>
+                    }
+                    else
+                    {
+                        <ul class="itemized-editor-list stacked-editor-list">
+                            @for (var index = 0; index < moduleForm.Objectives.Count; index++)
+                            {
+                                var objectiveIndex = index;
+                                var objective = moduleForm.Objectives[index];
+                                <li>
+                                    <div class="itemized-editor-content">
+                                        <span>@objective.Text</span>
+                                        @if (!string.IsNullOrWhiteSpace(objective.LinkedCourseObjective))
+                                        {
+                                            <small>Aligned to: @objective.LinkedCourseObjective</small>
+                                        }
+                                    </div>
+                                    @if (CanEdit)
+                                    {
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Remove</button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (moduleForm.ShowObjectiveForm && CanEdit)
+                    {
+                        <div class="inline-entry-form">
+                            <label class="form-label" for="module-objective-text">Objective</label>
+                            <input id="module-objective-text" class="form-control" @bind="moduleForm.NewObjectiveText" />
+                            <label class="form-label" for="course-objective-link">Linked course objective</label>
+                            <select id="course-objective-link" class="form-select" @bind="moduleForm.NewLinkedCourseObjective">
+                                <option value="">Module specific objective</option>
+                                @foreach (var objective in CourseObjectives())
+                                {
+                                    <option value="@objective">@objective</option>
+                                }
+                            </select>
+                            <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
+                        </div>
+                    }
+                </section>
+
+                <section class="form-section">
+                    <div class="section-heading-row">
+                        <h2>Lessons</h2>
+                        @if (CanEdit)
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="CreateLesson">New lesson</button>
+                        }
+                    </div>
+                    @if (selectedModule.Lessons.Count == 0)
+                    {
+                        <p>No lessons have been added for this module.</p>
+                    }
+                    else
+                    {
+                        <ul class="module-nav-list">
+                            @foreach (var lesson in selectedModule.Lessons.OrderBy(lesson => lesson.SequenceOrder))
+                            {
+                                <li>
+                                    <button class="btn btn-outline-secondary btn-sm module-nav-button" @onclick="() => OpenLesson(lesson.Id)">
+                                        @lesson.SequenceOrder. @lesson.Title
+                                    </button>
+                                    @if (CanEdit)
+                                    {
+                                        <div class="module-order-actions">
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveLesson(lesson.Id, -1)">Up</button>
+                                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveLesson(lesson.Id, 1)">Down</button>
+                                            <button class="btn btn-danger btn-sm" @onclick="() => OpenDeleteLessonModal(lesson.Id)">Delete</button>
+                                        </div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </aside>
+    </div>
+
+    @if (deleteModuleId.HasValue)
+    {
+        <div class="modal-backdrop-panel" role="presentation">
+            <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-module-heading">
+                <h2 id="delete-module-heading">Delete module?</h2>
+                <p>This permanently removes the selected module from the course. Type Delete to confirm.</p>
+                <label class="form-label" for="delete-confirmation">Confirmation</label>
+                <input id="delete-confirmation" class="form-control" @bind="deleteConfirmation" />
+                <div class="modal-actions">
+                    <button class="btn btn-outline-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                    <button class="btn btn-danger" disabled="@(!CanConfirmDelete())" @onclick="DeleteModule">Delete</button>
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (deleteLessonId.HasValue)
+    {
+        <div class="modal-backdrop-panel" role="presentation">
+            <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-lesson-heading">
+                <h2 id="delete-lesson-heading">Delete lesson?</h2>
+                <p>This permanently removes the selected lesson from the module. Type Delete to confirm.</p>
+                <label class="form-label" for="delete-lesson-confirmation">Confirmation</label>
+                <input id="delete-lesson-confirmation" class="form-control" @bind="deleteLessonConfirmation" />
+                <div class="modal-actions">
+                    <button class="btn btn-outline-secondary" @onclick="CloseDeleteLessonModal">Cancel</button>
+                    <button class="btn btn-danger" disabled="@(!CanConfirmLessonDelete())" @onclick="DeleteLesson">Delete</button>
+                </div>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid? ModuleId { get; set; }
+
+    private HomeschoolManager.Application.Courses.CourseDetail? course;
+    private LearningModuleView? selectedModule;
+    private ModuleFormModel moduleForm = new();
+    private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
+    private Guid? deleteModuleId;
+    private string deleteConfirmation = "";
+    private Guid? deleteLessonId;
+    private string deleteLessonConfirmation = "";
+    private bool newModuleRouteHandled;
+
+    private bool CanEdit => Session.IsParentAdmin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsNewModuleRoute() && !newModuleRouteHandled)
+        {
+            newModuleRouteHandled = true;
+            await Refresh();
+            await CreateModule();
+            return;
+        }
+
+        await Refresh();
+    }
+
+    private async Task CreateModule()
+    {
+        if (!CanEdit)
+        {
+            messages.Clear();
+            messages.Add(new PageMessage("Sign in as parent/admin to create learning modules.", "alert alert-danger"));
+            return;
+        }
+
+        var result = await CourseService.CreateLearningModuleAsync(
+            ParentUser(),
+            new CreateLearningModuleCommand(
+                CourseId,
+                "New module",
+                "",
+                DefaultTermId(),
+                "",
+                "Add module instructions.",
+                [new ModuleLearningObjectiveCommand("Add module learning objective.", "")],
+                [],
+                "Add planned assignments or evidence for this module.",
+                ModuleStatus.Planned));
+        if (!result.Succeeded)
+        {
+            messages.Clear();
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{result.Value}");
+    }
+
+    private async Task CreateLesson()
+    {
+        if (!CanEdit || selectedModule is null)
+        {
+            return;
+        }
+
+        var objective = selectedModule.LearningObjectiveItems.FirstOrDefault()?.Text ?? "";
+        var result = await CourseService.CreateLessonAsync(
+            ParentUser(),
+            new CreateLessonCommand(
+                CourseId,
+                selectedModule.Id,
+                "New lesson",
+                "Add a short introduction that explains the lesson topic and what the student should focus on.",
+                objective,
+                [new LessonResourceCommand("Parent-selected lesson resource", LessonResourceType.PhysicalResource, "", "", true, "Parent-selected resource.")]));
+        if (!result.Succeeded)
+        {
+            messages.Clear();
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{selectedModule.Id}/lessons/{result.Value}");
+    }
+
+    private void OpenLesson(Guid lessonId)
+    {
+        if (selectedModule is not null)
+        {
+            NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{selectedModule.Id}/lessons/{lessonId}");
+        }
+    }
+
+    private async Task MoveLesson(Guid lessonId, int direction)
+    {
+        if (!CanEdit || selectedModule is null)
+        {
+            return;
+        }
+
+        var lessons = selectedModule.Lessons.OrderBy(item => item.SequenceOrder).ToList();
+        var index = lessons.FindIndex(item => item.Id == lessonId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= lessons.Count)
+        {
+            return;
+        }
+
+        (lessons[index], lessons[targetIndex]) = (lessons[targetIndex], lessons[index]);
+        await Run(() => CourseService.ReorderLessonsAsync(
+            ParentUser(),
+            new ReorderLessonsCommand(CourseId, selectedModule.Id, lessons.Select(item => item.Id).ToArray())));
+    }
+
+    private async Task AutoSaveModule()
+    {
+        if (!CanEdit || selectedModule is null || !ValidateModule())
+        {
+            return;
+        }
+
+        await AutoSave(() => CourseService.UpdateLearningModuleAsync(
+            ParentUser(),
+            new UpdateLearningModuleCommand(
+                CourseId,
+                selectedModule.Id,
+                moduleForm.Title,
+                moduleForm.Description,
+                moduleForm.TermId,
+                moduleForm.EstimatedLength,
+                moduleForm.Instructions,
+                moduleForm.Objectives
+                    .Select(item => new ModuleLearningObjectiveCommand(item.Text, item.LinkedCourseObjective))
+                    .ToArray(),
+                moduleForm.Resources
+                    .Select(item => new ModuleResourceCommand(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+                    .ToArray(),
+                moduleForm.AssignmentEvidencePlaceholder,
+                moduleForm.Status)));
+    }
+
+    private async Task MoveModule(Guid moduleId, int direction)
+    {
+        if (!CanEdit || course is null)
+        {
+            return;
+        }
+
+        var modules = OrderedModules().ToList();
+        var index = modules.FindIndex(module => module.Id == moduleId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= modules.Count)
+        {
+            return;
+        }
+
+        (modules[index], modules[targetIndex]) = (modules[targetIndex], modules[index]);
+        await Run(() => CourseService.ReorderLearningModulesAsync(
+            ParentUser(),
+            new ReorderLearningModulesCommand(CourseId, modules.Select(module => module.Id).ToArray())));
+        OpenModule(moduleId);
+    }
+
+    private async Task DeleteModule()
+    {
+        if (!deleteModuleId.HasValue)
+        {
+            return;
+        }
+
+        var deletingCurrent = selectedModule?.Id == deleteModuleId.Value;
+        await Run(() => CourseService.DeleteLearningModuleAsync(
+            ParentUser(),
+            new DeleteLearningModuleCommand(CourseId, deleteModuleId.Value, deleteConfirmation)));
+        CloseDeleteModal();
+        if (deletingCurrent)
+        {
+            var nextModuleId = OrderedModules().FirstOrDefault()?.Id;
+            NavigationManager.NavigateTo(nextModuleId.HasValue
+                ? $"/courses/{CourseId}/modules/{nextModuleId.Value}"
+                : $"/courses/{CourseId}/modules");
+        }
+    }
+
+    private void OpenModule(Guid moduleId)
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{moduleId}");
+    }
+
+    private void OpenDeleteModal(Guid moduleId)
+    {
+        deleteModuleId = moduleId;
+        deleteConfirmation = "";
+    }
+
+    private void CloseDeleteModal()
+    {
+        deleteModuleId = null;
+        deleteConfirmation = "";
+    }
+
+    private bool CanConfirmDelete()
+    {
+        return string.Equals(deleteConfirmation, "Delete", StringComparison.Ordinal);
+    }
+
+    private void OpenDeleteLessonModal(Guid lessonId)
+    {
+        deleteLessonId = lessonId;
+        deleteLessonConfirmation = "";
+    }
+
+    private void CloseDeleteLessonModal()
+    {
+        deleteLessonId = null;
+        deleteLessonConfirmation = "";
+    }
+
+    private bool CanConfirmLessonDelete()
+    {
+        return string.Equals(deleteLessonConfirmation, "Delete", StringComparison.Ordinal);
+    }
+
+    private async Task DeleteLesson()
+    {
+        if (!deleteLessonId.HasValue || selectedModule is null)
+        {
+            return;
+        }
+
+        await Run(() => CourseService.DeleteLessonAsync(
+            ParentUser(),
+            new DeleteLessonCommand(CourseId, selectedModule.Id, deleteLessonId.Value, deleteLessonConfirmation)));
+        CloseDeleteLessonModal();
+    }
+
+    private async Task Run(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await Refresh();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task AutoSave(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await Refresh();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task Refresh()
+    {
+        course = await CourseService.GetCourseDetailAsync(CourseId);
+        if (course is null)
+        {
+            return;
+        }
+
+        var targetModuleId = ModuleId ?? OrderedModules().FirstOrDefault()?.Id;
+        selectedModule = targetModuleId.HasValue
+            ? course.Modules.FirstOrDefault(module => module.Id == targetModuleId.Value)
+            : null;
+        LoadSelectedModuleForm();
+    }
+
+    private void LoadSelectedModuleForm()
+    {
+        moduleForm = selectedModule is null
+            ? new ModuleFormModel()
+            : new ModuleFormModel
+            {
+                Title = selectedModule.Title,
+                Description = selectedModule.Description,
+                TermId = selectedModule.TermId,
+                EstimatedLength = selectedModule.EstimatedLength,
+                Instructions = selectedModule.Instructions,
+                Objectives = selectedModule.LearningObjectiveItems
+                    .Select(item => new ObjectiveFormItem(item.Text, item.LinkedCourseObjective))
+                    .ToList(),
+                Resources = selectedModule.ResourceItems
+                    .Select(item => new ResourceFormItem(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+                    .ToList(),
+                AssignmentEvidencePlaceholder = selectedModule.AssignmentEvidencePlaceholder,
+                Status = selectedModule.Status
+            };
+    }
+
+    private IEnumerable<LearningModuleView> OrderedModules()
+    {
+        return course is null
+            ? Enumerable.Empty<LearningModuleView>()
+            : course.Modules.OrderBy(module => module.SequenceOrder);
+    }
+
+    private IEnumerable<string> CourseObjectives()
+    {
+        return SplitLines(course?.LearningObjectives ?? "");
+    }
+
+    private bool ShouldShowSemesterPlacement()
+    {
+        return course?.Terms.Count >= 2;
+    }
+
+    private Guid? DefaultTermId()
+    {
+        return ShouldShowSemesterPlacement()
+            ? course?.Terms.OrderBy(term => term.StartDate).FirstOrDefault()?.Id
+            : null;
+    }
+
+    private bool IsNewModuleRoute()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        return uri.AbsolutePath.EndsWith("/modules/new", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string HeaderTitle()
+    {
+        return selectedModule is null ? "Course modules" : selectedModule.Title;
+    }
+
+    private string ModuleButtonCss(Guid moduleId)
+    {
+        return selectedModule?.Id == moduleId
+            ? "btn btn-primary btn-sm module-nav-button"
+            : "btn btn-outline-secondary btn-sm module-nav-button";
+    }
+
+    private string ObjectiveToggleText()
+    {
+        return moduleForm.ShowObjectiveForm ? "Hide" : "Add";
+    }
+
+    private void ToggleObjectiveForm()
+    {
+        moduleForm.ShowObjectiveForm = !moduleForm.ShowObjectiveForm;
+    }
+
+    private async Task AddObjective()
+    {
+        var text = moduleForm.NewObjectiveText.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        moduleForm.Objectives.Add(new ObjectiveFormItem(text, moduleForm.NewLinkedCourseObjective));
+        moduleForm.NewObjectiveText = "";
+        moduleForm.NewLinkedCourseObjective = "";
+        await AutoSaveModule();
+    }
+
+    private async Task RemoveObjective(int index)
+    {
+        if (index >= 0 && index < moduleForm.Objectives.Count)
+        {
+            moduleForm.Objectives.RemoveAt(index);
+            await AutoSaveModule();
+        }
+    }
+
+    private UserContext ParentUser()
+    {
+        return Session.CurrentUser ?? UserContext.Student("Anonymous");
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private bool ValidateModule()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+
+        if (string.IsNullOrWhiteSpace(moduleForm.Title))
+        {
+            fieldErrors["module.Title"] = "Title is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(moduleForm.Instructions))
+        {
+            fieldErrors["module.Instructions"] = "Instructions are required.";
+        }
+
+        if (moduleForm.Objectives.Count == 0 || moduleForm.Objectives.All(item => string.IsNullOrWhiteSpace(item.Text)))
+        {
+            fieldErrors["module.Objectives"] = "At least one learning objective is required.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required module fields.", "alert alert-danger"));
+        return false;
+    }
+
+    private static IEnumerable<string> SplitLines(string value)
+    {
+        return value
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
+    private sealed record ObjectiveFormItem(string Text, string LinkedCourseObjective);
+    private sealed record ResourceFormItem(string Name, string Link, string FilePath, bool IsPhysicalResource);
+
+    private sealed class ModuleFormModel
+    {
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public Guid? TermId { get; set; }
+        public string EstimatedLength { get; set; } = "";
+        public string Instructions { get; set; } = "";
+        public List<ObjectiveFormItem> Objectives { get; set; } = [];
+        public bool ShowObjectiveForm { get; set; }
+        public string NewObjectiveText { get; set; } = "";
+        public string NewLinkedCourseObjective { get; set; } = "";
+        public List<ResourceFormItem> Resources { get; set; } = [];
+        public bool ShowResourceForm { get; set; }
+        public string NewResourceName { get; set; } = "";
+        public string NewResourceLink { get; set; } = "";
+        public bool NewResourceIsPhysical { get; set; }
+        public string AssignmentEvidencePlaceholder { get; set; } = "";
+        public ModuleStatus Status { get; set; } = ModuleStatus.Planned;
+    }
+}

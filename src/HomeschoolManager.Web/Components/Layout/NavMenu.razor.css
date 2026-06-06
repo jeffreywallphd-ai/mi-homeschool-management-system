@@ -81,6 +81,56 @@
     color: white;
 }
 
+.student-preview-nav summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.student-preview-nav summary::-webkit-details-marker {
+    display: none;
+}
+
+.student-preview-empty {
+    display: block;
+    color: #d7d7d7;
+    font-size: 0.85rem;
+    margin-left: 0.75rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.course-subnav {
+    margin: 0.35rem 0 0.75rem;
+}
+
+.course-subnav-heading {
+    color: #d7d7d7;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0.4rem 0 0.25rem;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+}
+
+.course-modules-heading {
+    margin-top: 0.8rem;
+}
+
+.course-subnav ::deep .course-subnav-link {
+    color: #d7d7d7;
+    font-size: 0.88rem;
+    line-height: 1.2;
+    margin-left: 0.75rem;
+    overflow-wrap: anywhere;
+    padding: 0.35rem 0.5rem;
+}
+
+.course-subnav ::deep .course-subnav-link.active,
+.course-subnav ::deep .course-subnav-link:hover {
+    background-color: rgba(255,255,255,0.14);
+    color: white;
+}
+
 .nav-scrollable {
     display: none;
 }

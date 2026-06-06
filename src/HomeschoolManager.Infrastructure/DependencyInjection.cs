@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddSingleton<AppDataPaths>();
         services.AddSingleton<IHomeschoolRepository, JsonHomeschoolRepository>();
         services.AddScoped<CourseService>();
+        services.AddScoped<StudentCourseService>();
         services.AddScoped<SetupService>();
         services.AddScoped<RequirementService>();
         services.AddScoped<LocalAccessService>();

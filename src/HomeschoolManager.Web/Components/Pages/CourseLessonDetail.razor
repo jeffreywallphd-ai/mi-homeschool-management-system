@@ -1,0 +1,504 @@
+@page "/courses/{CourseId:guid}/modules/{ModuleId:guid}/lessons/{LessonId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Infrastructure.Persistence
+@using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject CourseService CourseService
+@inject SessionState Session
+@inject NavigationManager NavigationManager
+@inject AppDataPaths AppDataPaths
+
+<PageTitle>Lesson Detail</PageTitle>
+
+@if (module is null || lesson is null)
+{
+    <h1>Lesson not found</h1>
+    <p>The requested lesson could not be loaded.</p>
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>@lesson.Title</h1>
+            <p>@module.Title</p>
+        </div>
+        @if (messages.Count > 0)
+        {
+            <section class="page-header-message" aria-live="polite">
+                @foreach (var message in messages)
+                {
+                    <div class="@message.CssClass">@message.Text</div>
+                }
+            </section>
+        }
+    </div>
+
+    @if (!CanEdit)
+    {
+        <div class="alert alert-warning">Sign in as parent/admin to edit lessons.</div>
+    }
+
+    <div class="content-workbench course-detail-workbench">
+        <main class="workbench-main">
+            <section class="form-section">
+                <h2>Lesson Identity</h2>
+                <label class="form-label" for="lesson-title">Title <span class="required-marker">*</span></label>
+                <input id="lesson-title" class="form-control" disabled="@(!CanEdit)" @bind="lessonForm.Title" @bind:after="AutoSaveLesson" />
+                @ValidationFor("lesson.Title")
+
+                <label class="form-label" for="lesson-objective">Linked module objective</label>
+                <select id="lesson-objective" class="form-select" disabled="@(!CanEdit)" @bind="lessonForm.LinkedModuleObjective" @bind:after="AutoSaveLesson">
+                    <option value="">No objective link</option>
+                    @foreach (var objective in module.LearningObjectiveItems)
+                    {
+                        <option value="@objective.Text">@objective.Text</option>
+                    }
+                </select>
+
+                <label class="form-label" for="lesson-intro">Introductory text <span class="required-marker">*</span></label>
+                <textarea id="lesson-intro" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.IntroductoryText" @bind:after="AutoSaveLesson"></textarea>
+                @ValidationFor("lesson.IntroductoryText")
+            </section>
+
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Lesson Resources</h2>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleResourceForm">@ResourceToggleText()</button>
+                    }
+                </div>
+                @ValidationFor("lesson.Resources")
+                @if (lessonForm.Resources.Count == 0)
+                {
+                    <p>No lesson resources have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.Resources.Count; index++)
+                        {
+                            var resourceIndex = index;
+                            var resource = lessonForm.Resources[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@resource.Name</strong>
+                                    <small>@ResourceTypeLabel(resource.Type)</small>
+                                    @if (!string.IsNullOrWhiteSpace(resource.Url))
+                                    {
+                                        <a href="@resource.Url" target="_blank" rel="noopener">View</a>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(resource.FilePath))
+                                    {
+                                        <small>File: @Path.GetFileName(resource.FilePath)</small>
+                                    }
+                                    @if (resource.IsPhysicalResource)
+                                    {
+                                        <small>Physical resource</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(resource.SourceNote))
+                                    {
+                                        <small>@resource.SourceNote</small>
+                                    }
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Remove</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (lessonForm.ShowResourceForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-resource-name">Name</label>
+                        <input id="lesson-resource-name" class="form-control" @bind="lessonForm.NewResourceName" />
+                        <label class="form-label" for="lesson-resource-type">Type</label>
+                        <select id="lesson-resource-type" class="form-select" @bind="lessonForm.NewResourceType">
+                            @foreach (var type in Enum.GetValues<LessonResourceType>())
+                            {
+                                <option value="@type">@ResourceTypeLabel(type)</option>
+                            }
+                        </select>
+                        <label class="form-label" for="lesson-resource-url">Link</label>
+                        <input id="lesson-resource-url" class="form-control" type="url" @bind="lessonForm.NewResourceUrl" />
+                        <label class="form-label" for="lesson-resource-file">File upload</label>
+                        <InputFile id="lesson-resource-file" class="form-control" OnChange="SelectResourceFile" />
+                        <div class="form-check mt-2">
+                            <input id="lesson-resource-physical" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceIsPhysical" />
+                            <label class="form-check-label" for="lesson-resource-physical">Physical resource</label>
+                        </div>
+                        <label class="form-label" for="lesson-resource-note">Source note</label>
+                        <input id="lesson-resource-note" class="form-control" @bind="lessonForm.NewResourceSourceNote" />
+                        <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
+                    </div>
+                }
+            </section>
+        </main>
+
+        <aside class="workbench-support">
+            <section class="form-section">
+                <div class="section-heading-row">
+                    <h2>Module Lessons</h2>
+                    <button class="btn btn-outline-primary btn-sm" @onclick="BackToModule">Back to module</button>
+                </div>
+                <ul class="module-nav-list">
+                    @foreach (var item in module.Lessons.OrderBy(item => item.SequenceOrder))
+                    {
+                        <li>
+                            <button class="@LessonButtonCss(item.Id)" @onclick="() => OpenLesson(item.Id)">
+                                @item.SequenceOrder. @item.Title
+                            </button>
+                            @if (CanEdit)
+                            {
+                                <div class="module-order-actions">
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveLesson(item.Id, -1)">Up</button>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveLesson(item.Id, 1)">Down</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => OpenDeleteModal(item.Id)">Delete</button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        </aside>
+    </div>
+
+    @if (deleteLessonId.HasValue)
+    {
+        <div class="modal-backdrop-panel" role="presentation">
+            <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-lesson-heading">
+                <h2 id="delete-lesson-heading">Delete lesson?</h2>
+                <p>This permanently removes the selected lesson from the module. Type Delete to confirm.</p>
+                <label class="form-label" for="delete-confirmation">Confirmation</label>
+                <input id="delete-confirmation" class="form-control" @bind="deleteConfirmation" />
+                <div class="modal-actions">
+                    <button class="btn btn-outline-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                    <button class="btn btn-danger" disabled="@(!CanConfirmDelete())" @onclick="DeleteLesson">Delete</button>
+                </div>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid ModuleId { get; set; }
+
+    [Parameter]
+    public Guid LessonId { get; set; }
+
+    private LearningModuleView? module;
+    private LessonView? lesson;
+    private LessonFormModel lessonForm = new();
+    private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
+    private Guid? deleteLessonId;
+    private string deleteConfirmation = "";
+    private IBrowserFile? pendingResourceFile;
+
+    private bool CanEdit => Session.IsParentAdmin;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Refresh();
+    }
+
+    private async Task AutoSaveLesson()
+    {
+        if (!CanEdit || lesson is null || !ValidateLesson())
+        {
+            return;
+        }
+
+        await AutoSave(() => CourseService.UpdateLessonAsync(
+            ParentUser(),
+            new UpdateLessonCommand(
+                CourseId,
+                ModuleId,
+                LessonId,
+                lessonForm.Title,
+                lessonForm.IntroductoryText,
+                lessonForm.LinkedModuleObjective,
+                lessonForm.Resources.Select(ToCommand).ToArray())));
+    }
+
+    private async Task MoveLesson(Guid lessonId, int direction)
+    {
+        if (!CanEdit || module is null)
+        {
+            return;
+        }
+
+        var lessons = module.Lessons.OrderBy(item => item.SequenceOrder).ToList();
+        var index = lessons.FindIndex(item => item.Id == lessonId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= lessons.Count)
+        {
+            return;
+        }
+
+        (lessons[index], lessons[targetIndex]) = (lessons[targetIndex], lessons[index]);
+        await Run(() => CourseService.ReorderLessonsAsync(
+            ParentUser(),
+            new ReorderLessonsCommand(CourseId, ModuleId, lessons.Select(item => item.Id).ToArray())));
+        OpenLesson(lessonId);
+    }
+
+    private async Task DeleteLesson()
+    {
+        if (!deleteLessonId.HasValue)
+        {
+            return;
+        }
+
+        var deletingCurrent = LessonId == deleteLessonId.Value;
+        await Run(() => CourseService.DeleteLessonAsync(
+            ParentUser(),
+            new DeleteLessonCommand(CourseId, ModuleId, deleteLessonId.Value, deleteConfirmation)));
+        CloseDeleteModal();
+        if (deletingCurrent)
+        {
+            var nextLessonId = module?.Lessons.OrderBy(item => item.SequenceOrder).FirstOrDefault()?.Id;
+            NavigationManager.NavigateTo(nextLessonId.HasValue
+                ? $"/courses/{CourseId}/modules/{ModuleId}/lessons/{nextLessonId.Value}"
+                : $"/courses/{CourseId}/modules/{ModuleId}");
+        }
+    }
+
+    private async Task Refresh()
+    {
+        module = await CourseService.GetModuleDetailAsync(CourseId, ModuleId);
+        lesson = module?.Lessons.FirstOrDefault(item => item.Id == LessonId);
+        lessonForm = lesson is null
+            ? new LessonFormModel()
+            : new LessonFormModel
+            {
+                Title = lesson.Title,
+                IntroductoryText = lesson.IntroductoryText,
+                LinkedModuleObjective = lesson.LinkedModuleObjective,
+                Resources = lesson.Resources
+                    .Select(resource => new LessonResourceFormItem(
+                        resource.Name,
+                        resource.Type,
+                        resource.Url,
+                        resource.FilePath,
+                        resource.IsPhysicalResource,
+                        resource.SourceNote))
+                    .ToList()
+            };
+    }
+
+    private async Task Run(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await Refresh();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task AutoSave(Func<Task<OperationResult>> action)
+    {
+        await Run(action);
+    }
+
+    private void OpenLesson(Guid lessonId)
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{ModuleId}/lessons/{lessonId}");
+    }
+
+    private void BackToModule()
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{ModuleId}");
+    }
+
+    private void OpenDeleteModal(Guid lessonId)
+    {
+        deleteLessonId = lessonId;
+        deleteConfirmation = "";
+    }
+
+    private void CloseDeleteModal()
+    {
+        deleteLessonId = null;
+        deleteConfirmation = "";
+    }
+
+    private bool CanConfirmDelete()
+    {
+        return string.Equals(deleteConfirmation, "Delete", StringComparison.Ordinal);
+    }
+
+    private string LessonButtonCss(Guid lessonId)
+    {
+        return lesson?.Id == lessonId
+            ? "btn btn-primary btn-sm module-nav-button"
+            : "btn btn-outline-secondary btn-sm module-nav-button";
+    }
+
+    private string ResourceToggleText()
+    {
+        return lessonForm.ShowResourceForm ? "Hide" : "Add";
+    }
+
+    private void ToggleResourceForm()
+    {
+        lessonForm.ShowResourceForm = !lessonForm.ShowResourceForm;
+    }
+
+    private void SelectResourceFile(InputFileChangeEventArgs eventArgs)
+    {
+        pendingResourceFile = eventArgs.File;
+        if (string.IsNullOrWhiteSpace(lessonForm.NewResourceName))
+        {
+            lessonForm.NewResourceName = eventArgs.File.Name;
+        }
+
+        lessonForm.NewResourceType = LessonResourceType.File;
+    }
+
+    private async Task AddResource()
+    {
+        var name = lessonForm.NewResourceName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        var filePath = pendingResourceFile is null ? "" : await SaveResourceFileAsync(pendingResourceFile);
+        lessonForm.Resources.Add(new LessonResourceFormItem(
+            name,
+            lessonForm.NewResourceType,
+            lessonForm.NewResourceUrl.Trim(),
+            filePath,
+            lessonForm.NewResourceIsPhysical || lessonForm.NewResourceType == LessonResourceType.PhysicalResource,
+            lessonForm.NewResourceSourceNote.Trim()));
+        lessonForm.NewResourceName = "";
+        lessonForm.NewResourceUrl = "";
+        lessonForm.NewResourceIsPhysical = false;
+        lessonForm.NewResourceSourceNote = "";
+        lessonForm.NewResourceType = LessonResourceType.Reading;
+        pendingResourceFile = null;
+        await AutoSaveLesson();
+    }
+
+    private async Task<string> SaveResourceFileAsync(IBrowserFile file)
+    {
+        var safeFileName = string.Join("_", file.Name.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+        var folder = Path.Combine(AppDataPaths.DataRoot, "files", "curriculum", "lesson-resources", CourseId.ToString("N"), ModuleId.ToString("N"), LessonId.ToString("N"));
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"{Guid.NewGuid():N}_{safeFileName}");
+        await using var source = file.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+        await using var target = File.Create(path);
+        await source.CopyToAsync(target);
+        return path;
+    }
+
+    private async Task RemoveResource(int index)
+    {
+        if (index >= 0 && index < lessonForm.Resources.Count)
+        {
+            lessonForm.Resources.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private bool ValidateLesson()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        if (string.IsNullOrWhiteSpace(lessonForm.Title))
+        {
+            fieldErrors["lesson.Title"] = "Title is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(lessonForm.IntroductoryText))
+        {
+            fieldErrors["lesson.IntroductoryText"] = "Introductory text is required.";
+        }
+
+        if (lessonForm.Resources.Count == 0)
+        {
+            fieldErrors["lesson.Resources"] = "At least one lesson resource is required.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required lesson fields.", "alert alert-danger"));
+        return false;
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private UserContext ParentUser()
+    {
+        return Session.CurrentUser ?? UserContext.Student("Anonymous");
+    }
+
+    private static LessonResourceCommand ToCommand(LessonResourceFormItem item)
+    {
+        return new LessonResourceCommand(
+            item.Name,
+            item.Type,
+            item.Url,
+            item.FilePath,
+            item.IsPhysicalResource,
+            item.SourceNote);
+    }
+
+    private static string ResourceTypeLabel(LessonResourceType type)
+    {
+        return type switch
+        {
+            LessonResourceType.TextbookChapter => "Textbook chapter",
+            LessonResourceType.PhysicalResource => "Physical resource",
+            _ => type.ToString()
+        };
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
+    private sealed record LessonResourceFormItem(
+        string Name,
+        LessonResourceType Type,
+        string Url,
+        string FilePath,
+        bool IsPhysicalResource,
+        string SourceNote);
+
+    private sealed class LessonFormModel
+    {
+        public string Title { get; set; } = "";
+        public string IntroductoryText { get; set; } = "";
+        public string LinkedModuleObjective { get; set; } = "";
+        public List<LessonResourceFormItem> Resources { get; set; } = [];
+        public bool ShowResourceForm { get; set; }
+        public string NewResourceName { get; set; } = "";
+        public LessonResourceType NewResourceType { get; set; } = LessonResourceType.Reading;
+        public string NewResourceUrl { get; set; } = "";
+        public bool NewResourceIsPhysical { get; set; }
+        public string NewResourceSourceNote { get; set; } = "";
+    }
+}

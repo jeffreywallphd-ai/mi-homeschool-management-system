@@ -74,7 +74,7 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(checklist.Any(item => item.View == "MMC Reference" && item.Name == "Personal Finance"), "Missing MMC personal finance reference area.");
         AssertFalse(checklist.Any(item => item.View != "Statutory" && item.Name == "English Language Arts"), "English Language Arts should be represented by statutory English subject rows.");
     }),
-    ("Default Michigan course pack mappings match seeded requirement areas", () =>
+    ("Default Michigan course pack mappings match seeded requirement areas", (Func<Task>)(() =>
     {
         var seededAreas = MichiganRequirementSeed.CreateAreas()
             .Select(area => $"{area.View}:{area.Name}")
@@ -110,13 +110,33 @@ var tests = new List<(string Name, Func<Task> Test)>
                 AssertFalse(option.CurriculumPlan.LearningObjectives.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase), $"Learning objectives should avoid generic recordkeeping language for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(string.IsNullOrWhiteSpace(option.CurriculumPlan.MajorResources), $"Major resources should be retired for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.PlannedSequence), $"Missing planned sequence for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.Count >= 3, $"Every default-pack option should include learning modules for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => module.SequenceOrder >= 1), $"Pack module order should be valid for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => !string.IsNullOrWhiteSpace(module.Instructions)), $"Pack modules should include instructions for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => module.LearningObjectives.Count > 0), $"Pack modules should include learning objectives for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => module.Resources.Count > 0), $"Pack modules should include concrete resources for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.All(module => module.Lessons.Count >= module.LearningObjectives.Count), $"Pack modules should include at least one lesson per module objective for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.SelectMany(module => module.Lessons).All(lesson => lesson.Resources.Count > 0), $"Pack lessons should include resources for {template.TemplateId}/{option.OptionId}.");
+                foreach (var module in option.Modules)
+                {
+                    foreach (var objective in module.LearningObjectives)
+                    {
+                        AssertTrue(module.Lessons.Any(lesson => lesson.LinkedModuleObjective == objective.Text), $"Each module objective should have a linked lesson for {template.TemplateId}/{option.OptionId}: {objective.Text}");
+                    }
+                }
+                foreach (var courseObjective in option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var linkedCount = option.Modules.SelectMany(module => module.LearningObjectives).Count(objective => objective.LinkedCourseObjective == courseObjective);
+                    AssertTrue(linkedCount >= 2, $"Course objective should be supported by at least two module objectives for {template.TemplateId}/{option.OptionId}: {courseObjective}");
+                }
+                AssertTrue(option.Modules.All(module => !string.IsNullOrWhiteSpace(module.AssignmentEvidencePlaceholder)), $"Pack modules should include assignment/evidence placeholders for {template.TemplateId}/{option.OptionId}.");
             }
         }
 
         AssertEqual(8m, pack.Courses.Sum(course => course.DefaultOption.PlannedCreditValue), "Default pack should total eight planned credits.");
 
         return Task.CompletedTask;
-    }),
+    })),
     ("Student role cannot seed Michigan requirements", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -172,6 +192,45 @@ var tests = new List<(string Name, Func<Task> Test)>
         _ = new Course(Guid.NewGuid(), studentId, schoolYearId, "Biology", ["Science"], CourseDuration.TwoSemesters, 1, null, null, null, null, []);
         return Task.CompletedTask;
     }),
+    ("Learning module requires course, title, instructions, objectives, and valid order", () =>
+    {
+        var courseId = Guid.NewGuid();
+        AssertThrows<DomainException>(() => new LearningModule(Guid.NewGuid(), Guid.Empty, "", 1, "Foundations", "", "", "Read and discuss.", "Topic", "Explain core ideas.", "", "", ModuleStatus.Planned));
+        AssertThrows<DomainException>(() => new LearningModule(Guid.NewGuid(), courseId, "", 0, "Foundations", "", "", "Read and discuss.", "Topic", "Explain core ideas.", "", "", ModuleStatus.Planned));
+        AssertThrows<DomainException>(() => new LearningModule(Guid.NewGuid(), courseId, "", 1, "", "", "", "Read and discuss.", "Topic", "Explain core ideas.", "", "", ModuleStatus.Planned));
+        AssertThrows<DomainException>(() => new LearningModule(Guid.NewGuid(), courseId, "", 1, "Foundations", "", "", "", "Topic", "Explain core ideas.", "", "", ModuleStatus.Planned));
+        AssertThrows<DomainException>(() => new LearningModule(Guid.NewGuid(), courseId, "", 1, "Foundations", "", "", "Read and discuss.", "Topic", "", "", "", ModuleStatus.Planned));
+        _ = new LearningModule(Guid.NewGuid(), courseId, "", 1, "Foundations", "", "", "Read and discuss.", "Topic", "Explain core ideas.", "", "Draft assignment evidence.", ModuleStatus.Planned);
+        return Task.CompletedTask;
+    }),
+    ("Course modules are course-owned and ordered without goals", () =>
+    {
+        var courseId = Guid.NewGuid();
+        var course = new Course(courseId, Guid.NewGuid(), Guid.NewGuid(), "Biology", ["Science"], CourseDuration.TwoSemesters, 1, null, null, null, null, []);
+        var second = new LearningModule(Guid.NewGuid(), course.Id, "second", 2, "Second", "", "", "Instruction", "Topic", "Objective", "", "", ModuleStatus.Planned);
+        var first = new LearningModule(Guid.NewGuid(), course.Id, "first", 1, "First", "", "", "Instruction", "Topic", "Objective", "", "", ModuleStatus.Planned);
+        var otherCourseModule = new LearningModule(Guid.NewGuid(), Guid.NewGuid(), "other", 1, "Other", "", "", "Instruction", "Topic", "Objective", "", "", ModuleStatus.Planned);
+
+        var updated = course.WithModules([second, first]);
+        AssertEqual("First", updated.Modules[0].Title, "Modules should be ordered by sequence.");
+        AssertEqual(1, updated.Modules[0].SequenceOrder, "Module sequence should be normalized.");
+        AssertFalse(typeof(LearningModule).GetProperties().Any(property => property.Name == "Goals"), "Learning modules should not include a goals field.");
+        AssertThrows<DomainException>(() => course.WithModules([otherCourseModule]));
+        AssertThrows<DomainException>(() => course.WithModules([first, first with { Id = Guid.NewGuid() }]));
+        return Task.CompletedTask;
+    }),
+    ("Lessons require module ownership intro text and resources", () =>
+    {
+        var moduleId = Guid.NewGuid();
+        var resource = new LessonResource(Guid.NewGuid(), "OpenStax section", LessonResourceType.TextbookChapter, "https://openstax.org/", "", false, "Source note");
+        AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), Guid.Empty, "", 1, "Lesson", "Intro", "", [resource]));
+        AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 0, "Lesson", "Intro", "", [resource]));
+        AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 1, "", "Intro", "", [resource]));
+        AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 1, "Lesson", "", "", [resource]));
+        AssertThrows<DomainException>(() => new Lesson(Guid.NewGuid(), moduleId, "", 1, "Lesson", "Intro", "", []));
+        _ = new Lesson(Guid.NewGuid(), moduleId, "source-lesson", 1, "Lesson", "Intro", "Objective", [resource]);
+        return Task.CompletedTask;
+    }),
     ("Requirement mapping requires course and requirement area", () =>
     {
         AssertThrows<DomainException>(() => new RequirementMapping(Guid.NewGuid(), Guid.Empty, Guid.NewGuid(), CoverageLevel.Primary, ""));
@@ -214,6 +273,266 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual("Biology", courses[0].Title, "Unexpected course title.");
         AssertEqual("Life science overview.", courses[0].Description, "Unexpected course description.");
         AssertEqual(1, courses[0].SubjectAreas.Count, "Unexpected subject area count.");
+    }),
+    ("Parent can create update and reorder modules while student cannot mutate them", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+
+        var courseResult = await service.CreateCourseAsync(parent, new CreateCourseCommand("Civics", "Government course.", [], CourseDuration.OneSemester, 0.5m));
+        AssertTrue(courseResult.Succeeded, "Parent should create course.");
+        var courseId = courseResult.Value;
+
+        var denied = await service.CreateLearningModuleAsync(student, new CreateLearningModuleCommand(
+            courseId,
+            "Constitutional Foundations",
+            "Overview",
+            null,
+            "2 weeks",
+            "Read, discuss, and summarize source material.",
+            Objectives("Explain constitutional principles."),
+            Resources("Primary source excerpts"),
+            "Short written explanation.",
+            ModuleStatus.Planned));
+        AssertFalse(denied.Succeeded, "Student should not create modules.");
+
+        var first = await service.CreateLearningModuleAsync(parent, new CreateLearningModuleCommand(
+            courseId,
+            "Constitutional Foundations",
+            "Overview",
+            null,
+            "2 weeks",
+            "Read, discuss, and summarize source material.",
+            Objectives("Explain constitutional principles."),
+            Resources("Primary source excerpts"),
+            "Short written explanation.",
+            ModuleStatus.Planned));
+        var second = await service.CreateLearningModuleAsync(parent, new CreateLearningModuleCommand(
+            courseId,
+            "Civic Participation",
+            "Participation overview",
+            null,
+            "2 weeks",
+            "Compare civic actions and document a response.",
+            Objectives("Evaluate civic participation options."),
+            Resources("iCivics resources"),
+            "Reflection placeholder.",
+            ModuleStatus.Planned));
+        AssertTrue(first.Succeeded, "First module should create.");
+        AssertTrue(second.Succeeded, "Second module should create.");
+
+        var updateDenied = await service.UpdateLearningModuleAsync(student, new UpdateLearningModuleCommand(
+            courseId,
+            first.Value,
+            "Denied",
+            "",
+            null,
+            "",
+            "Instruction",
+            Objectives("Objective"),
+            Resources("Resource"),
+            "",
+            ModuleStatus.Active));
+        AssertFalse(updateDenied.Succeeded, "Student should not update modules.");
+
+        var update = await service.UpdateLearningModuleAsync(parent, new UpdateLearningModuleCommand(
+            courseId,
+            first.Value,
+            "Constitutional Foundations",
+            "Overview",
+            null,
+            "3 weeks",
+            "Read, discuss, summarize, and compare constitutional sources.",
+            Objectives("Explain constitutional principles.", "Compare U.S. and Michigan constitutional structures."),
+            Resources("Primary source excerpts"),
+            "Short written explanation.",
+            ModuleStatus.Active));
+        AssertTrue(update.Succeeded, "Parent should update module.");
+
+        var reorder = await service.ReorderLearningModulesAsync(parent, new ReorderLearningModulesCommand(courseId, [second.Value, first.Value]));
+        AssertTrue(reorder.Succeeded, "Parent should reorder modules.");
+
+        var modules = await service.ListModulesAsync(courseId);
+        AssertEqual("Civic Participation", modules[0].Title, "Modules should be reordered.");
+        AssertEqual(1, modules[0].SequenceOrder, "Reordered module sequence should normalize.");
+        AssertEqual((int)ModuleStatus.Active, (int)modules[1].Status, "Module update should persist.");
+
+        var detail = await service.GetModuleDetailAsync(courseId, first.Value);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Module detail was not found.");
+        }
+
+        AssertTrue(detail.LearningObjectives.Contains("Michigan constitutional structures", StringComparison.OrdinalIgnoreCase), "Module detail should include updated objectives.");
+        var deleteDenied = await service.DeleteLearningModuleAsync(parent, new DeleteLearningModuleCommand(courseId, first.Value, "delete"));
+        AssertFalse(deleteDenied.Succeeded, "Module deletion should require exact confirmation text.");
+        var deleteResult = await service.DeleteLearningModuleAsync(parent, new DeleteLearningModuleCommand(courseId, first.Value, "Delete"));
+        AssertTrue(deleteResult.Succeeded, "Parent should delete module after confirmation.");
+        AssertFalse((await service.ListModulesAsync(courseId)).Any(module => module.Id == first.Value), "Deleted module should be removed.");
+    })),
+    ("Parent can create update and reorder lessons while student cannot mutate them", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                [],
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+
+        var studentCreate = await service.CreateLessonAsync(
+            UserContext.Student("Student"),
+            new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertFalse(studentCreate.Succeeded, "Student should not create lessons.");
+
+        var firstLesson = await service.CreateLessonAsync(
+            parent,
+            new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertTrue(firstLesson.Succeeded, "Lesson create failed.");
+        var secondLesson = await service.CreateLessonAsync(
+            parent,
+            new CreateLessonCommand(course.Value, module.Value, "Cell evidence", "Use diagrams to explain cell structures.", "Explain cell structure.", LessonResources("Cell diagram")));
+        AssertTrue(secondLesson.Succeeded, "Second lesson create failed.");
+
+        var update = await service.UpdateLessonAsync(
+            parent,
+            new UpdateLessonCommand(course.Value, module.Value, firstLesson.Value, "Cell structure and function", "Read, watch, and summarize cell structures.", "Explain cell structure.", LessonResources("OpenStax Biology 2e")));
+        AssertTrue(update.Succeeded, "Lesson update failed.");
+        var reorder = await service.ReorderLessonsAsync(parent, new ReorderLessonsCommand(course.Value, module.Value, [secondLesson.Value, firstLesson.Value]));
+        AssertTrue(reorder.Succeeded, "Lesson reorder failed.");
+
+        var lessons = await service.ListLessonsAsync(course.Value, module.Value);
+        AssertEqual("Cell evidence", lessons[0].Title, "Lessons should reorder.");
+        AssertEqual("Cell structure and function", lessons[1].Title, "Lesson update should persist.");
+
+        var deleteDenied = await service.DeleteLessonAsync(parent, new DeleteLessonCommand(course.Value, module.Value, secondLesson.Value, "delete"));
+        AssertFalse(deleteDenied.Succeeded, "Lesson delete should require exact confirmation.");
+        var delete = await service.DeleteLessonAsync(parent, new DeleteLessonCommand(course.Value, module.Value, secondLesson.Value, "Delete"));
+        AssertTrue(delete.Succeeded, "Lesson delete failed.");
+        AssertFalse((await service.ListLessonsAsync(course.Value, module.Value)).Any(lesson => lesson.Id == secondLesson.Value), "Deleted lesson should be removed.");
+    }),
+    ("Module autosave preserves existing lessons", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Civics", "Government overview.", ["Civics"], CourseDuration.OneSemester, 0.5m));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Constitutional foundations",
+                "Study constitutional principles.",
+                null,
+                "2 weeks",
+                "Read, discuss, and write about constitutional foundations.",
+                Objectives("Explain constitutional principles."),
+                [],
+                "Written explanation.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await service.CreateLessonAsync(
+            parent,
+            new CreateLessonCommand(
+                course.Value,
+                module.Value,
+                "The constitutional convention",
+                "Read and explain why the federal Constitution replaced the Articles of Confederation.",
+                "Explain constitutional principles.",
+                LessonResources("OpenStax U.S. Constitution")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+
+        var update = await service.UpdateLearningModuleAsync(
+            parent,
+            new UpdateLearningModuleCommand(
+                course.Value,
+                module.Value,
+                "Constitutional foundations and federalism",
+                "Study constitutional principles and federalism.",
+                null,
+                "3 weeks",
+                "Read, discuss, and write about constitutional foundations and federalism.",
+                Objectives("Explain constitutional principles."),
+                [],
+                "Written explanation and discussion notes.",
+                ModuleStatus.Active));
+        AssertTrue(update.Succeeded, "Module update failed.");
+
+        var lessons = await service.ListLessonsAsync(course.Value, module.Value);
+        AssertEqual(1, lessons.Count, "Module update should preserve existing lessons.");
+        AssertEqual("The constitutional convention", lessons[0].Title, "Existing lesson content should be preserved.");
+    }),
+    ("Student course client reads courses syllabi and modules without inferred grades", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+        var setupService = new SetupService(repository);
+        var courseService = new CourseService(repository);
+        var studentService = new StudentCourseService(repository);
+
+        var import = await courseService.ImportCoursePackAsync(parent, new ImportCoursePackCommand(DefaultCoursePacks.MichiganCollegeReadyPackId, []));
+        AssertTrue(import.Succeeded, "Default pack import should succeed.");
+
+        AssertTrue((await setupService.CreateStudentAsync(parent, new CreateStudentCommand("Younger", "Learner", 9))).Succeeded, "Second child should be added.");
+        var configuredStudents = await setupService.ListStudentsAsync();
+        var primaryStudent = configuredStudents.First(item => item.FirstName == "Student");
+        var secondStudent = configuredStudents.First(item => item.FirstName == "Younger");
+
+        var dashboard = await studentService.ListCoursesAsync(student, primaryStudent.Id);
+        AssertTrue(dashboard.Succeeded, "Student course dashboard should load.");
+        AssertEqual("Student", dashboard.Value!.StudentFirstName, "Dashboard should welcome the selected student.");
+        AssertTrue(dashboard.Value.TermNames.Count == 2, "Dashboard should include configured semester headings.");
+        AssertTrue(dashboard.Value.Courses.Count > 0, "Student should see imported courses.");
+        var firstCourse = dashboard.Value.Courses.First();
+        AssertEqual("No grade yet", firstCourse.CurrentGrade, "Student client should not infer grades before gradebook exists.");
+        AssertTrue(firstCourse.TermNames.Count > 0, "Course cards should expose semester placement.");
+
+        var secondDashboard = await studentService.ListCoursesAsync(student, secondStudent.Id);
+        AssertTrue(secondDashboard.Succeeded, "Second child dashboard should load.");
+        AssertEqual(0, secondDashboard.Value!.Courses.Count, "A child should not see another child's courses.");
+        AssertFalse((await studentService.GetCourseAsync(student, firstCourse.CourseId, secondStudent.Id)).Succeeded, "Wrong child path should not expose the course.");
+
+        var course = await studentService.GetCourseAsync(student, firstCourse.CourseId, primaryStudent.Id);
+        AssertTrue(course.Succeeded, "Student course page should load.");
+        AssertTrue(course.Value!.LearningObjectives.Count > 0, "Student course page should include course objectives.");
+        AssertTrue(course.Value.Modules.Count > 0, "Student course page should include module links.");
+        AssertTrue(course.Value.TermNames.Count == 2, "Student course page should include configured semester headings.");
+
+        var syllabus = await studentService.GetSyllabusAsync(student, firstCourse.CourseId, primaryStudent.Id);
+        AssertTrue(syllabus.Succeeded, "Student syllabus should load.");
+        AssertFalse(string.IsNullOrWhiteSpace(syllabus.Value!.InstructionalMethods), "Syllabus should include instructional methods.");
+        AssertTrue(syllabus.Value.TextsAndResources.Count > 0, "Syllabus should include course resources.");
+        AssertTrue(syllabus.Value.TermNames.Count == 2, "Syllabus should include configured semester headings.");
+
+        var module = await studentService.GetModuleAsync(student, firstCourse.CourseId, course.Value.Modules[0].ModuleId, primaryStudent.Id);
+        AssertTrue(module.Succeeded, "Student module page should load.");
+        AssertFalse(string.IsNullOrWhiteSpace(module.Value!.Instructions), "Module page should include instructions.");
+        AssertTrue(module.Value.LearningObjectives.Count > 0, "Module page should include objectives.");
+        AssertTrue(module.Value.Lessons.Count > 0, "Module page should include lessons.");
+        AssertTrue(module.Value.Lessons.All(lesson => lesson.Resources.Count > 0), "Student lessons should include lesson resources.");
+
+        var parentPreview = await studentService.GetCourseAsync(parent, firstCourse.CourseId, primaryStudent.Id);
+        AssertTrue(parentPreview.Succeeded, "Parent should be able to preview student course read model.");
     }),
     ("Course details and mapping persist and coverage shows unmapped areas", async () =>
     {
@@ -320,6 +639,15 @@ var tests = new List<(string Name, Func<Task> Test)>
         var mathematics = coverage.First(item => item.Name == "Mathematics");
         AssertTrue(mathematics.Source.Contains("Statutory", StringComparison.Ordinal), "Mathematics should include statutory source.");
         AssertEqual(mathematics.CourseTitles.Count, mathematics.CourseTitles.Distinct().Count(), "Coverage summary should not duplicate course titles.");
+
+        var governmentDetail = await courseService.GetCourseDetailAsync(government.Id);
+        if (governmentDetail is null)
+        {
+            throw new InvalidOperationException("Government course detail was not found.");
+        }
+
+        AssertTrue(governmentDetail.Modules.Count >= 3, "Imported default course should include learning modules.");
+        AssertTrue(governmentDetail.Modules.All(module => !string.IsNullOrWhiteSpace(module.Instructions)), "Imported modules should include instructions.");
     })),
     ("Selected course pack import imports only selected templates", (Func<Task>)(async () =>
     {
@@ -433,6 +761,145 @@ var tests = new List<(string Name, Func<Task> Test)>
         }
 
         AssertFalse(detail.Mappings.Any(mapping => mapping.RequirementAreaName == "English Language Arts"), "Stale ELA mappings should be removed from imported course details.");
+    })),
+    ("Imported courses backfill default-pack modules without replacing parent modules", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var courseId = Guid.NewGuid();
+        var parentModule = new LearningModule(
+            Guid.NewGuid(),
+            courseId,
+            "",
+            1,
+            "Parent custom module",
+            "Parent-created module.",
+            "1 week",
+            "Parent-created instructions.",
+            "Parent topic",
+            "Explain the parent-selected topic.",
+            "Parent resource",
+            "Parent evidence placeholder.",
+            ModuleStatus.Active);
+        await repository.SaveCourseAsync(new Course(
+            courseId,
+            student.Id,
+            schoolYear.Id,
+            "Precalculus",
+            ["Mathematics"],
+            CourseDuration.TwoSemesters,
+            1,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "math-12",
+            null,
+            null,
+            [],
+            [parentModule]));
+
+        var service = new CourseService(repository);
+        var detail = await service.GetCourseDetailAsync(courseId);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        AssertTrue(detail.Modules.Any(module => module.Title == "Parent custom module" && module.Instructions == "Parent-created instructions."), "Backfill should preserve parent-created module text.");
+        AssertTrue(detail.Modules.Any(module => !string.IsNullOrWhiteSpace(module.SourceModuleId)), "Backfill should add built-in pack modules.");
+        AssertTrue(detail.Modules.Where(module => !string.IsNullOrWhiteSpace(module.SourceModuleId)).All(module => module.Lessons.Count > 0), "Backfilled source modules should include lessons.");
+        AssertTrue(detail.Modules.SelectMany(module => module.Lessons).All(lesson => lesson.Resources.Count > 0), "Backfilled lessons should include resources.");
+        AssertTrue(detail.Modules.Count > 1, "Backfill should keep parent module and add starter modules.");
+    })),
+    ("Imported source modules with no lessons are backfilled", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var courseId = Guid.NewGuid();
+        var existingPackModule = new LearningModule(
+            Guid.NewGuid(),
+            courseId,
+            "personal-finance-module-1",
+            1,
+            "Budgeting and related topics",
+            "Existing imported module without lesson rows.",
+            "3-5 weeks",
+            "Existing module instructions.",
+            "",
+            "Explain budgeting and credit decisions.",
+            "",
+            "Existing evidence placeholder.",
+            ModuleStatus.Planned,
+            null,
+            [new ModuleLearningObjective("Explain budgeting and credit decisions.", "")],
+            [],
+            []);
+        await repository.SaveCourseAsync(new Course(
+            courseId,
+            student.Id,
+            schoolYear.Id,
+            "Personal Finance",
+            ["Mathematics"],
+            CourseDuration.OneSemester,
+            0.5m,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "personal-finance",
+            null,
+            null,
+            [],
+            [existingPackModule]));
+
+        var service = new CourseService(repository);
+        var detail = await service.GetCourseDetailAsync(courseId);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        var backfilledModule = detail.Modules.First(module => module.SourceModuleId == "personal-finance-module-1");
+        AssertTrue(backfilledModule.Lessons.Count > 0, "Existing imported source modules with empty lessons should be backfilled.");
+        AssertTrue(backfilledModule.Lessons.All(lesson => lesson.Resources.Count > 0), "Backfilled source lessons should include resources.");
+    })),
+    ("Current imported modules with stripped lessons are detected as changed", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var import = await service.ImportCoursePackAsync(parent, new ImportCoursePackCommand(DefaultCoursePacks.MichiganCollegeReadyPackId, []));
+        AssertTrue(import.Succeeded, "Default pack import should succeed.");
+
+        var importedCourse = (await repository.GetCoursesAsync()).First(course =>
+            string.Equals(course.SourceTemplateId, "personal-finance", StringComparison.OrdinalIgnoreCase));
+        AssertTrue(importedCourse.Modules.All(module => module.Lessons.Count > 0), "Imported modules should start with lessons.");
+
+        var strippedModules = importedCourse.Modules
+            .Select(module => module.WithLessons([]))
+            .ToArray();
+        await repository.SaveCourseAsync(importedCourse.WithModules(strippedModules));
+        var strippedCourse = await repository.GetCourseAsync(importedCourse.Id);
+        AssertTrue(strippedCourse?.Modules.All(module => module.Lessons.Count == 0) ?? false, "Test setup should strip lessons from otherwise current imported modules.");
+
+        var detail = await service.GetCourseDetailAsync(importedCourse.Id);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        AssertTrue(detail.Modules.All(module => module.Lessons.Count > 0), "Backfill comparison should detect missing nested lessons and save the repair.");
+        AssertTrue(detail.Modules.SelectMany(module => module.Lessons).All(lesson => lesson.Resources.Count > 0), "Repaired lessons should include resources.");
     })),
     ("Imported government and U.S. history courses backfill constitution mappings", (Func<Task>)(async () =>
     {
@@ -695,4 +1162,27 @@ static Guid DeterministicGuid(string value)
 {
     var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value));
     return new Guid(bytes);
+}
+
+static IReadOnlyList<ModuleLearningObjectiveCommand> Objectives(params string[] objectives)
+{
+    return objectives.Select(objective => new ModuleLearningObjectiveCommand(objective, "")).ToArray();
+}
+
+static IReadOnlyList<ModuleResourceCommand> Resources(params string[] resources)
+{
+    return resources.Select(resource => new ModuleResourceCommand(resource, "", "", true)).ToArray();
+}
+
+static IReadOnlyList<LessonResourceCommand> LessonResources(params string[] resources)
+{
+    return resources
+        .Select(resource => new LessonResourceCommand(
+            resource,
+            LessonResourceType.Reading,
+            "https://example.com/resource",
+            "",
+            false,
+            "Test resource."))
+        .ToArray();
 }

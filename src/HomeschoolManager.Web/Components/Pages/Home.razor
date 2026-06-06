@@ -22,9 +22,20 @@
 @code {
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender && !Session.IsAuthenticated)
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (!Session.IsAuthenticated)
         {
             Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        if (Session.IsStudent)
+        {
+            Navigation.NavigateTo("/student", replace: true);
         }
     }
 }

@@ -4,6 +4,7 @@
 @using HomeschoolManager.Web.Services
 @inject LocalAccessService AccessService
 @inject SessionState Session
+@inject NavigationManager Navigation
 
 <PageTitle>Login</PageTitle>
 
@@ -43,6 +44,7 @@ else
     {
         Session.SignIn(AccessService.CreateParentSession());
         error = "";
+        Navigation.NavigateTo("/");
     }
 
     private void SignInStudent()
@@ -56,6 +58,7 @@ else
 
         Session.SignIn(user);
         error = "";
+        Navigation.NavigateTo("/student");
     }
 
 }

@@ -24,3 +24,6 @@ Product direction and long-term sequencing belong in `docs/product/roadmap.md`. 
 
 - [First Vertical Slice Roadmap](first-vertical-slice-roadmap.md)
 - [Course Curriculum Planning Roadmap](course-curriculum-planning-roadmap.md)
+- [Course Learning Modules Roadmap](course-learning-modules-roadmap.md)
+- [Course Module Lessons Roadmap](course-module-lessons-roadmap.md)
+- [Student Course Client Roadmap](student-course-client-roadmap.md)

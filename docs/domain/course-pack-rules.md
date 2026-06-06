@@ -32,16 +32,24 @@ A course pack must define:
 - Assessment methods.
 - Grading basis.
 - Curriculum plan fields: goals, learning objectives, planned sequence, and parent notes.
+- Learning module definitions with title, description, sequence order, optional term number, estimated length, instructions, itemized learning objectives, source-backed lessons, status, and assignment/evidence placeholder.
+- Lesson definitions with title, sequence order, introductory text, optional linked module objective, and one or more itemized resources.
 - Optional requirement mappings by view, area name, coverage level, and notes.
 - Optional course choices for a template slot, with stable option ids and one default option.
 
-Every selectable option must carry its own title, internal subject labels, duration, planned credit value, description details, curriculum plan fields, and requirement mappings. The default option is the option used for full-pack import unless the parent chooses another option in the UI.
+Every selectable option must carry its own title, internal subject labels, duration, planned credit value, description details, curriculum plan fields, learning modules, and requirement mappings. The default option is the option used for full-pack import unless the parent chooses another option in the UI.
 
 Subject labels are internal support data and should not be the parent-facing requirement coverage mechanism. Coverage summaries and mapping workflows should use explicit requirement mappings.
 
 Requirement mappings must use the exact requirement-area names and views from the pack's target jurisdiction seed. The default built-in pack targets the Michigan seed. Future state packs may be added, but the current UI should remain Michigan-focused.
 
 Learning objectives must be stored as one objective per line. Each objective should complete the sentence "Upon completion of this course students will be able to..." without repeating that lead-in.
+
+Learning modules must not include module goals or module major-topic fields. Module learning objectives are sufficient for module purpose.
+
+Module learning objectives may optionally link to course learning objectives. Default-pack modules should include at least one linked objective per module and should support each course objective through at least two module objectives.
+
+Lesson resources should be concrete readings, videos, files, or physical resources for the lesson. Course-level texts/resources remain syllabus-level materials.
 
 Instructional methods, assessment methods, and grading basis may include a hybrid option that broadly combines common methods, evidence types, or grading bases.
 
@@ -60,6 +68,7 @@ Instructional methods, assessment methods, and grading basis may include a hybri
 - Imported courses become editable course records regardless of whether they came from a fixed template or a selected option.
 - Built-in pack updates may backfill blank imported-course detail fields, but must not overwrite parent-entered text.
 - Built-in pack updates may replace recognizable legacy built-in default text with the newer built-in default format.
+- Built-in pack updates may add missing source-backed learning modules or lessons to imported courses, but must not overwrite parent-created or parent-edited modules or lessons.
 
 ## Installed Pack Terminology
 

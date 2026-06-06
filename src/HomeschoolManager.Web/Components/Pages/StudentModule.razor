@@ -1,0 +1,230 @@
+@page "/student/courses/{CourseId:guid}/modules/{ModuleId:guid}"
+@page "/student/{StudentId:guid}/courses/{CourseId:guid}/modules/{ModuleId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(module is null ? "Course Module" : module.Title)</PageTitle>
+
+@if (!canView)
+{
+    <h1>Course Module</h1>
+    <div class="alert alert-warning">Sign in to view this module.</div>
+}
+else if (module is null)
+{
+    <h1>Module not found</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>@module.SequenceOrder. @module.Title</h1>
+            <p>@module.CourseTitle</p>
+        </div>
+        <a class="btn btn-outline-primary student-header-action" href="@($"student/{module.StudentId}/courses/{CourseId}")">Back to course</a>
+    </div>
+
+    @if (Session.IsParentAdmin)
+    {
+        <div class="alert alert-info student-preview-banner">Previewing the student view as parent/admin.</div>
+    }
+
+    <div class="student-page-grid">
+        <main class="student-main-column">
+            <section class="form-section">
+                <h2>Module Overview</h2>
+                <p>@module.Description</p>
+                <dl class="student-detail-facts">
+                    <div>
+                        <dt>Status</dt>
+                        <dd>@StatusText(module.Status)</dd>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(module.TermName))
+                    {
+                        <div>
+                            <dt>Semester</dt>
+                            <dd>@module.TermName</dd>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(module.EstimatedLength))
+                    {
+                        <div>
+                            <dt>Estimated length</dt>
+                            <dd>@module.EstimatedLength</dd>
+                        </div>
+                    }
+                </dl>
+            </section>
+
+            <section class="form-section">
+                <h2>Instructions</h2>
+                <p>@(string.IsNullOrWhiteSpace(module.Instructions) ? "No instructions have been added yet." : module.Instructions)</p>
+            </section>
+
+            <section class="form-section">
+                <h2>Learning Objectives</h2>
+                @if (module.LearningObjectives.Count == 0)
+                {
+                    <p>No learning objectives have been added yet.</p>
+                }
+                else
+                {
+                    <ul class="student-readable-list">
+                        @foreach (var objective in module.LearningObjectives)
+                        {
+                            <li>
+                                <span>@objective.Text</span>
+                                @if (!string.IsNullOrWhiteSpace(objective.LinkedCourseObjective))
+                                {
+                                    <small>Course objective: @objective.LinkedCourseObjective</small>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="form-section">
+                <h2>Lessons</h2>
+                @if (module.Lessons.Count == 0)
+                {
+                    <p>No lessons have been added yet.</p>
+                }
+                else
+                {
+                    <ol class="student-lesson-list">
+                        @foreach (var lesson in module.Lessons)
+                        {
+                            <li>
+                                <h3>@lesson.Title</h3>
+                                <p>@lesson.IntroductoryText</p>
+                                @if (!string.IsNullOrWhiteSpace(lesson.LinkedModuleObjective))
+                                {
+                                    <small>Objective: @lesson.LinkedModuleObjective</small>
+                                }
+                                <ul class="student-readable-list">
+                                    @foreach (var resource in lesson.Resources)
+                                    {
+                                        <li>@LessonResourceDisplay(resource)</li>
+                                    }
+                                </ul>
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
+        </main>
+
+        <aside class="student-support-column">
+            <section class="support-card">
+                <h2>Assignments and Evidence</h2>
+                <p>@(string.IsNullOrWhiteSpace(module.AssignmentEvidencePlaceholder) ? "Assignment and evidence details will be added here." : module.AssignmentEvidencePlaceholder)</p>
+            </section>
+
+            <nav class="student-module-pager" aria-label="Module navigation">
+                @if (module.PreviousModuleId.HasValue)
+                {
+                    <a class="btn btn-outline-secondary" href="@($"student/{module.StudentId}/courses/{CourseId}/modules/{module.PreviousModuleId.Value}")">Previous module</a>
+                }
+                @if (module.NextModuleId.HasValue)
+                {
+                    <a class="btn btn-primary" href="@($"student/{module.StudentId}/courses/{CourseId}/modules/{module.NextModuleId.Value}")">Next module</a>
+                }
+            </nav>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid ModuleId { get; set; }
+
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentModulePage? module;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent || Session.IsParentAdmin;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.GetModuleAsync(
+            Session.CurrentUser,
+            CourseId,
+            ModuleId,
+            StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded)
+        {
+            module = result.Value;
+            messages.Clear();
+        }
+        else
+        {
+            module = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private static string StatusText(ModuleStatus status)
+    {
+        return status switch
+        {
+            ModuleStatus.Planned => "Planned",
+            ModuleStatus.Active => "Active",
+            ModuleStatus.Complete => "Complete",
+            _ => status.ToString()
+        };
+    }
+
+    private RenderFragment LessonResourceDisplay(StudentLessonResourceView resource) => builder =>
+    {
+        if (!string.IsNullOrWhiteSpace(resource.Url))
+        {
+            builder.OpenElement(0, "a");
+            builder.AddAttribute(1, "href", resource.Url);
+            builder.AddAttribute(2, "target", "_blank");
+            builder.AddAttribute(3, "rel", "noopener");
+            builder.AddContent(4, resource.Name);
+            builder.CloseElement();
+            return;
+        }
+
+        builder.OpenElement(5, "span");
+        builder.AddContent(6, resource.Name);
+        if (resource.IsPhysicalResource)
+        {
+            builder.AddContent(7, " (physical resource)");
+        }
+        else if (!string.IsNullOrWhiteSpace(resource.FileName))
+        {
+            builder.AddContent(8, $" ({resource.FileName})");
+        }
+
+        builder.CloseElement();
+    };
+}

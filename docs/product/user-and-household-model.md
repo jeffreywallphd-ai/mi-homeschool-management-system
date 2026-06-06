@@ -24,9 +24,11 @@ The parent/legal guardian is the homeschool administrator. The parent owns:
 - Official family-issued records.
 - Backup and archive exports.
 
-## Student
+## Students
 
-The first target student is a 12th grader. The model should still support K-12 grade levels so future records can be added without reworking core identity.
+The first target student is a 12th grader. The model should still support multiple homeschooled children with K-12 grade levels so future records can be added without reworking core identity.
+
+Each configured child should have a stable id and student-facing path. Courses, school years, grades, credits, modules, evidence, and generated records should be attributable to the correct child.
 
 Student-facing access may exist for assignments, submissions, feedback, and portfolio review, but the student must not issue official records, alter graduation standards, or finalize credits.
 

@@ -1,0 +1,193 @@
+@page "/student"
+@page "/student/{StudentId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Rendering
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Student Courses</PageTitle>
+
+@if (!canView)
+{
+    <h1>Student Courses</h1>
+    <div class="alert alert-warning">Sign in to view student courses.</div>
+}
+else if (dashboard is null)
+{
+    <h1>Student Courses</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <h1>Welcome @dashboard.StudentFirstName</h1>
+            <p>Choose a course below, then open the syllabus or the next module you need to work on. Each course card shows your current grade status and module count.</p>
+        </div>
+    </div>
+
+    @if (Session.IsParentAdmin)
+    {
+        <div class="alert alert-info student-preview-banner">Previewing the student view as parent/admin.</div>
+    }
+
+    @if (dashboard.Courses.Count == 0)
+    {
+        <section class="status-panel">
+            <h2>No courses yet</h2>
+            <p>Courses created by the parent/admin for this child will appear here.</p>
+        </section>
+    }
+    else if (dashboard.TermNames.Count > 0)
+    {
+        @foreach (var termName in dashboard.TermNames)
+        {
+            var termCourses = CoursesForTerm(termName).ToArray();
+            <section class="student-term-section">
+                <h2>@termName</h2>
+                @if (termCourses.Length == 0)
+                {
+                    <p>No courses are currently placed in this semester.</p>
+                }
+                else
+                {
+                    <div class="student-course-grid" aria-label="@($"{termName} courses")">
+                        @foreach (var course in termCourses)
+                        {
+                            @CourseCard(course)
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        var unplacedCourses = dashboard.Courses
+            .Where(course => course.TermNames.Count == 0)
+            .ToArray();
+        @if (unplacedCourses.Length > 0)
+        {
+            <section class="student-term-section">
+                <h2>Unscheduled</h2>
+                <div class="student-course-grid" aria-label="Unscheduled courses">
+                    @foreach (var course in unplacedCourses)
+                    {
+                        @CourseCard(course)
+                    }
+                </div>
+            </section>
+        }
+    }
+    else
+    {
+        <section class="student-course-grid" aria-label="Student courses">
+            @foreach (var course in dashboard.Courses)
+            {
+                @CourseCard(course)
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentCourseDashboard? dashboard;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent || Session.IsParentAdmin;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.ListCoursesAsync(
+            Session.CurrentUser,
+            StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded && result.Value is not null)
+        {
+            dashboard = result.Value;
+            messages.Clear();
+            if (StudentId == Guid.Empty)
+            {
+                Navigation.NavigateTo($"/student/{dashboard.StudentId}", replace: true);
+            }
+        }
+        else
+        {
+            dashboard = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private IEnumerable<StudentCourseCard> CoursesForTerm(string termName)
+    {
+        return dashboard?.Courses.Where(course =>
+            course.TermNames.Any(name => string.Equals(name, termName, StringComparison.OrdinalIgnoreCase))) ?? [];
+    }
+
+    private RenderFragment CourseCard(StudentCourseCard course) => builder =>
+    {
+        builder.OpenElement(0, "a");
+        builder.AddAttribute(1, "class", "student-course-card");
+        builder.AddAttribute(2, "href", $"student/{course.StudentId}/courses/{course.CourseId}");
+
+        builder.OpenElement(3, "div");
+        builder.AddAttribute(4, "class", "student-card-heading");
+        builder.OpenElement(5, "h3");
+        builder.AddContent(6, course.Title);
+        builder.CloseElement();
+        builder.OpenElement(7, "span");
+        builder.AddAttribute(8, "class", "student-grade-pill");
+        builder.AddContent(9, course.CurrentGrade);
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(10, "p");
+        builder.AddContent(11, course.Description);
+        builder.CloseElement();
+
+        builder.OpenElement(12, "dl");
+        builder.AddAttribute(13, "class", "student-card-facts");
+        Fact(builder, 14, "Length", DurationText(course.Duration));
+        Fact(builder, 20, "Credits", course.PlannedCreditValue.ToString("0.0"));
+        Fact(builder, 26, "Modules", $"{course.CompletedModuleCount} / {course.ModuleCount}");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private static void Fact(RenderTreeBuilder builder, int sequence, string label, string value)
+    {
+        builder.OpenElement(sequence, "div");
+        builder.OpenElement(sequence + 1, "dt");
+        builder.AddContent(sequence + 2, label);
+        builder.CloseElement();
+        builder.OpenElement(sequence + 3, "dd");
+        builder.AddContent(sequence + 4, value);
+        builder.CloseElement();
+        builder.CloseElement();
+    }
+
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
+    }
+}

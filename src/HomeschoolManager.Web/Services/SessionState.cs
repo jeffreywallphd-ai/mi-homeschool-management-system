@@ -12,6 +12,8 @@ public sealed class SessionState
 
     public bool IsParentAdmin => CurrentUser?.IsParentAdmin == true;
 
+    public bool IsStudent => CurrentUser?.Role == UserRole.Student;
+
     public void SignIn(UserContext user)
     {
         CurrentUser = user;

@@ -37,6 +37,68 @@ public sealed record RequirementMappingCommand(Guid RequirementAreaId, CoverageL
 
 public sealed record SetCourseRequirementMappingsCommand(Guid CourseId, IReadOnlyList<RequirementMappingCommand> Mappings);
 
+public sealed record CreateLearningModuleCommand(
+    Guid CourseId,
+    string Title,
+    string Description,
+    Guid? TermId,
+    string EstimatedLength,
+    string Instructions,
+    IReadOnlyList<ModuleLearningObjectiveCommand> LearningObjectives,
+    IReadOnlyList<ModuleResourceCommand> Resources,
+    string AssignmentEvidencePlaceholder,
+    ModuleStatus Status);
+
+public sealed record UpdateLearningModuleCommand(
+    Guid CourseId,
+    Guid ModuleId,
+    string Title,
+    string Description,
+    Guid? TermId,
+    string EstimatedLength,
+    string Instructions,
+    IReadOnlyList<ModuleLearningObjectiveCommand> LearningObjectives,
+    IReadOnlyList<ModuleResourceCommand> Resources,
+    string AssignmentEvidencePlaceholder,
+    ModuleStatus Status);
+
+public sealed record ReorderLearningModulesCommand(Guid CourseId, IReadOnlyList<Guid> ModuleIds);
+
+public sealed record DeleteLearningModuleCommand(Guid CourseId, Guid ModuleId, string ConfirmationText);
+
+public sealed record ModuleLearningObjectiveCommand(string Text, string LinkedCourseObjective);
+
+public sealed record ModuleResourceCommand(string Name, string Link, string FilePath, bool IsPhysicalResource);
+
+public sealed record CreateLessonCommand(
+    Guid CourseId,
+    Guid ModuleId,
+    string Title,
+    string IntroductoryText,
+    string LinkedModuleObjective,
+    IReadOnlyList<LessonResourceCommand> Resources);
+
+public sealed record UpdateLessonCommand(
+    Guid CourseId,
+    Guid ModuleId,
+    Guid LessonId,
+    string Title,
+    string IntroductoryText,
+    string LinkedModuleObjective,
+    IReadOnlyList<LessonResourceCommand> Resources);
+
+public sealed record ReorderLessonsCommand(Guid CourseId, Guid ModuleId, IReadOnlyList<Guid> LessonIds);
+
+public sealed record DeleteLessonCommand(Guid CourseId, Guid ModuleId, Guid LessonId, string ConfirmationText);
+
+public sealed record LessonResourceCommand(
+    string Name,
+    LessonResourceType Type,
+    string Url,
+    string FilePath,
+    bool IsPhysicalResource,
+    string SourceNote);
+
 public sealed record CoursePackSelectionCommand(string TemplateId, string OptionId);
 
 public sealed record ImportCoursePackCommand(

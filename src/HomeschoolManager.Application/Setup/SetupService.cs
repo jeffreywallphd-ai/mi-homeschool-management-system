@@ -11,6 +11,7 @@ namespace HomeschoolManager.Application.Setup;
 public sealed class SetupService
 {
     private readonly IHomeschoolRepository repository;
+    public event Action? StudentsChanged;
 
     public SetupService(IHomeschoolRepository repository)
     {
@@ -22,18 +23,20 @@ public sealed class SetupService
         var household = await repository.GetHouseholdAsync(cancellationToken);
         var schoolProfile = await repository.GetSchoolProfileAsync(cancellationToken);
         var student = await repository.GetStudentAsync(cancellationToken);
+        var students = await repository.GetStudentsAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
 
         return new SetupSummary(
             household is not null,
             schoolProfile is not null,
-            student is not null,
+            students.Count > 0 || student is not null,
             schoolYear is not null,
             household?.Name ?? "",
             household?.ParentGuardianName ?? "",
             schoolProfile?.SchoolName ?? "",
             student is null ? "" : $"{student.FirstName} {student.LastName}",
-            schoolYear?.Name ?? "");
+            schoolYear?.Name ?? "",
+            students.Count);
     }
 
     public async Task<SetupDetail> GetDetailAsync(CancellationToken cancellationToken = default)
@@ -41,6 +44,7 @@ public sealed class SetupService
         var household = await repository.GetHouseholdAsync(cancellationToken);
         var schoolProfile = await repository.GetSchoolProfileAsync(cancellationToken);
         var student = await repository.GetStudentAsync(cancellationToken);
+        var students = await repository.GetStudentsAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         var terms = schoolYear?.Terms.OrderBy(term => term.StartDate).ToArray() ?? [];
         var firstTerm = terms.ElementAtOrDefault(0);
@@ -66,7 +70,14 @@ public sealed class SetupService
             firstTerm?.StartDate ?? new DateOnly(2026, 8, 24),
             firstTerm?.EndDate ?? new DateOnly(2026, 12, 18),
             secondTerm?.StartDate ?? new DateOnly(2027, 1, 11),
-            secondTerm?.EndDate ?? new DateOnly(2027, 5, 28));
+            secondTerm?.EndDate ?? new DateOnly(2027, 5, 28),
+            students.Select(ToSetupItem).ToArray());
+    }
+
+    public async Task<IReadOnlyList<StudentSetupItem>> ListStudentsAsync(CancellationToken cancellationToken = default)
+    {
+        var students = await repository.GetStudentsAsync(cancellationToken);
+        return students.Select(ToSetupItem).ToArray();
     }
 
     public async Task<OperationResult> CreateHouseholdAsync(
@@ -153,6 +164,7 @@ public sealed class SetupService
         {
             var student = new Student(Guid.NewGuid(), household.Id, command.FirstName, command.LastName, command.GradeLevel);
             await repository.SaveStudentAsync(student, cancellationToken);
+            StudentsChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)
@@ -201,5 +213,10 @@ public sealed class SetupService
         {
             return OperationResult.Failure(ex.Message);
         }
+    }
+
+    private static StudentSetupItem ToSetupItem(Student student)
+    {
+        return new StudentSetupItem(student.Id, student.FirstName, student.LastName, student.GradeLevel);
     }
 }

@@ -30,7 +30,7 @@ else
             <ul>
                 <li>Household: @Display(summary.HasHousehold, summary.HouseholdName)</li>
                 <li>School profile: @Display(summary.HasSchoolProfile, summary.SchoolName)</li>
-                <li>Student: @Display(summary.HasStudent, summary.StudentName)</li>
+                <li>Children: @(summary.StudentCount == 0 ? "Not set" : $"{summary.StudentCount} configured")</li>
                 <li>School year: @Display(summary.HasSchoolYear, summary.SchoolYearName)</li>
             </ul>
         }
@@ -77,7 +77,27 @@ else
     </section>
 
     <section class="form-section">
-        <h2>Student</h2>
+        <h2>Children</h2>
+        @if (students.Count == 0)
+        {
+            <p>No children have been added yet.</p>
+        }
+        else
+        {
+            <ul class="itemized-editor-list stacked-editor-list">
+                @foreach (var configuredStudent in students)
+                {
+                    <li>
+                        <div class="itemized-editor-content">
+                            <strong>@configuredStudent.DisplayName</strong>
+                            <small>Grade @configuredStudent.GradeLevel</small>
+                            <small>Student path: /student/@configuredStudent.Id</small>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+        <h3 class="mt-3">Add child</h3>
         <label class="form-label" for="first-name">First name <span class="required-marker">*</span></label>
         <input id="first-name" class="form-control" @bind="student.FirstName" />
         @ValidationFor("student.FirstName")
@@ -137,6 +157,7 @@ else
     private SetupSummary? summary;
     private readonly List<PageMessage> messages = [];
     private readonly Dictionary<string, string> fieldErrors = [];
+    private IReadOnlyList<StudentSetupItem> students = [];
     private HouseholdModel household = new();
     private SchoolModel school = new();
     private StudentModel student = new();
@@ -184,7 +205,10 @@ else
             return;
         }
 
-        await Run(() => SetupService.CreateStudentAsync(ParentUser(), new CreateStudentCommand(student.FirstName, student.LastName, student.GradeLevel)));
+        if (await Run(() => SetupService.CreateStudentAsync(ParentUser(), new CreateStudentCommand(student.FirstName, student.LastName, student.GradeLevel))))
+        {
+            student = new StudentModel();
+        }
     }
 
     private async Task SaveSchoolYear()
@@ -211,7 +235,7 @@ else
         await Run(() => RequirementService.SeedMichiganAsync(ParentUser()));
     }
 
-    private async Task Run(Func<Task<OperationResult>> action)
+    private async Task<bool> Run(Func<Task<OperationResult>> action)
     {
         messages.Clear();
         fieldErrors.Clear();
@@ -220,16 +244,18 @@ else
         {
             messages.Add(new PageMessage("Saved.", "alert alert-success"));
             await RefreshSummary();
-            return;
+            return true;
         }
 
         messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+        return false;
     }
 
     private async Task RefreshSummary()
     {
         summary = await SetupService.GetSummaryAsync();
         var detail = await SetupService.GetDetailAsync();
+        students = detail.Students ?? [];
         household = new HouseholdModel
         {
             HouseholdName = detail.HouseholdName,
@@ -246,12 +272,7 @@ else
             DiplomaIssueCity = detail.DiplomaIssueCity,
             DiplomaIssueState = detail.DiplomaIssueState
         };
-        student = new StudentModel
-        {
-            FirstName = detail.StudentFirstName,
-            LastName = detail.StudentLastName,
-            GradeLevel = detail.StudentGradeLevel
-        };
+        student = new StudentModel();
         year = new SchoolYearModel
         {
             Name = detail.SchoolYearName,

@@ -6,12 +6,14 @@ using HomeschoolManager.Domain.Access;
 using HomeschoolManager.Domain.Common;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
+using HomeschoolManager.Domain.Students;
 
 namespace HomeschoolManager.Application.Courses;
 
 public sealed class CourseService
 {
     private readonly IHomeschoolRepository repository;
+    public event Action? CourseNavigationChanged;
 
     public CourseService(IHomeschoolRepository repository)
     {
@@ -49,7 +51,8 @@ public sealed class CourseService
         }
 
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
-        return ToDetail(course, areas);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        return ToDetail(course, areas, schoolYear);
     }
 
     public async Task<OperationResult<Guid>> CreateCourseAsync(
@@ -89,6 +92,7 @@ public sealed class CourseService
                 null,
                 new CourseDescription(command.Description, "", "", "", "", ""),
                 null,
+                [],
                 []);
 
             await repository.SaveCourseAsync(course, cancellationToken);
@@ -131,9 +135,11 @@ public sealed class CourseService
                 existing.SourceTemplateId,
                 existing.Description,
                 existing.CurriculumPlan,
-                existing.RequirementMappings);
+                existing.RequirementMappings,
+                existing.Modules);
 
             await repository.SaveCourseAsync(updated, cancellationToken);
+            CourseNavigationChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)
@@ -274,6 +280,7 @@ public sealed class CourseService
             {
                 var courseId = Guid.NewGuid();
                 var mappings = BuildMappings(courseId, option, areas);
+                var modules = BuildModules(courseId, option, schoolYear);
                 var course = new Course(
                     courseId,
                     student.Id,
@@ -286,7 +293,8 @@ public sealed class CourseService
                     template.TemplateId,
                     option.Description,
                     option.CurriculumPlan,
-                    mappings);
+                    mappings,
+                    modules);
 
                 await repository.SaveCourseAsync(course, cancellationToken);
                 importedCount++;
@@ -358,6 +366,371 @@ public sealed class CourseService
         return OperationResult.Success();
     }
 
+    public async Task<IReadOnlyList<LearningModuleView>> ListModulesAsync(
+        Guid courseId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        return course?.Modules.Select(module => ToModuleView(module, schoolYear)).ToArray() ?? [];
+    }
+
+    public async Task<LearningModuleView?> GetModuleDetailAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        return course?.Modules
+            .Where(module => module.Id == moduleId)
+            .Select(module => ToModuleView(module, schoolYear))
+            .FirstOrDefault();
+    }
+
+    public async Task<OperationResult<Guid>> CreateLearningModuleAsync(
+        UserContext user,
+        CreateLearningModuleCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<Guid>.Failure(authorized.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult<Guid>.Failure("Course was not found.");
+        }
+
+        try
+        {
+            var module = new LearningModule(
+                Guid.NewGuid(),
+                course.Id,
+                "",
+                course.Modules.Count + 1,
+                command.Title,
+                command.Description,
+                command.EstimatedLength,
+                command.Instructions,
+                "",
+                Lines(command.LearningObjectives.Select(item => item.Text)),
+                Lines(command.Resources.Select(item => item.Name)),
+                command.AssignmentEvidencePlaceholder,
+                command.Status,
+                command.TermId,
+                BuildObjectiveItems(command.LearningObjectives),
+                BuildResourceItems(command.Resources));
+            await repository.SaveCourseAsync(course.WithModules(course.Modules.Concat([module]).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<Guid>.Success(module.Id);
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<Guid>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> UpdateLearningModuleAsync(
+        UserContext user,
+        UpdateLearningModuleCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult.Failure("Course was not found.");
+        }
+
+        var existing = course.Modules.FirstOrDefault(module => module.Id == command.ModuleId);
+        if (existing is null)
+        {
+            return OperationResult.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var updatedModule = new LearningModule(
+                existing.Id,
+                course.Id,
+                existing.SourceModuleId,
+                existing.SequenceOrder,
+                command.Title,
+                command.Description,
+                command.EstimatedLength,
+                command.Instructions,
+                "",
+                Lines(command.LearningObjectives.Select(item => item.Text)),
+                Lines(command.Resources.Select(item => item.Name)),
+                command.AssignmentEvidencePlaceholder,
+                command.Status,
+                command.TermId,
+                BuildObjectiveItems(command.LearningObjectives),
+                BuildResourceItems(command.Resources),
+                existing.Lessons);
+            var modules = course.Modules
+                .Select(module => module.Id == command.ModuleId ? updatedModule : module)
+                .ToArray();
+            await repository.SaveCourseAsync(course.WithModules(modules), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> ReorderLearningModulesAsync(
+        UserContext user,
+        ReorderLearningModulesCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult.Failure("Course was not found.");
+        }
+
+        if (command.ModuleIds.Count != course.Modules.Count ||
+            command.ModuleIds.Distinct().Count() != command.ModuleIds.Count ||
+            command.ModuleIds.Any(id => course.Modules.All(module => module.Id != id)))
+        {
+            return OperationResult.Failure("Module order must include each course module exactly once.");
+        }
+
+        var modulesById = course.Modules.ToDictionary(module => module.Id);
+        var reordered = command.ModuleIds
+            .Select((id, index) => modulesById[id] with { SequenceOrder = index + 1 })
+            .ToArray();
+        await repository.SaveCourseAsync(course.WithModules(reordered), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
+    public async Task<OperationResult> DeleteLearningModuleAsync(
+        UserContext user,
+        DeleteLearningModuleCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!string.Equals(command.ConfirmationText, "Delete", StringComparison.Ordinal))
+        {
+            return OperationResult.Failure("Type Delete to confirm module deletion.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult.Failure("Course was not found.");
+        }
+
+        if (course.Modules.All(module => module.Id != command.ModuleId))
+        {
+            return OperationResult.Failure("Learning module was not found.");
+        }
+
+        var modules = course.Modules
+            .Where(module => module.Id != command.ModuleId)
+            .ToArray();
+        await repository.SaveCourseAsync(course.WithModules(modules), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
+    public async Task<IReadOnlyList<LessonView>> ListLessonsAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var module = await GetModuleAsync(courseId, moduleId, cancellationToken);
+        return module?.Lessons.Select(ToLessonView).ToArray() ?? [];
+    }
+
+    public async Task<LessonView?> GetLessonDetailAsync(
+        Guid courseId,
+        Guid moduleId,
+        Guid lessonId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var module = await GetModuleAsync(courseId, moduleId, cancellationToken);
+        return module?.Lessons
+            .Where(lesson => lesson.Id == lessonId)
+            .Select(ToLessonView)
+            .FirstOrDefault();
+    }
+
+    public async Task<OperationResult<Guid>> CreateLessonAsync(
+        UserContext user,
+        CreateLessonCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<Guid>.Failure(authorized.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<Guid>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var lesson = new Lesson(
+                Guid.NewGuid(),
+                module.Id,
+                "",
+                module.Lessons.Count + 1,
+                command.Title,
+                command.IntroductoryText,
+                command.LinkedModuleObjective,
+                BuildLessonResourceItems(command.Resources));
+            await SaveModuleAsync(course, module.WithLessons(module.Lessons.Concat([lesson]).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<Guid>.Success(lesson.Id);
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<Guid>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> UpdateLessonAsync(
+        UserContext user,
+        UpdateLessonCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        var existing = module?.Lessons.FirstOrDefault(lesson => lesson.Id == command.LessonId);
+        if (course is null || module is null || existing is null)
+        {
+            return OperationResult.Failure("Lesson was not found.");
+        }
+
+        try
+        {
+            var updatedLesson = new Lesson(
+                existing.Id,
+                module.Id,
+                existing.SourceLessonId,
+                existing.SequenceOrder,
+                command.Title,
+                command.IntroductoryText,
+                command.LinkedModuleObjective,
+                BuildLessonResourceItems(command.Resources));
+            var lessons = module.Lessons
+                .Select(lesson => lesson.Id == command.LessonId ? updatedLesson : lesson)
+                .ToArray();
+            await SaveModuleAsync(course, module.WithLessons(lessons), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult.Success();
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult> ReorderLessonsAsync(
+        UserContext user,
+        ReorderLessonsCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null)
+        {
+            return OperationResult.Failure("Learning module was not found.");
+        }
+
+        if (command.LessonIds.Count != module.Lessons.Count ||
+            command.LessonIds.Distinct().Count() != command.LessonIds.Count ||
+            command.LessonIds.Any(id => module.Lessons.All(lesson => lesson.Id != id)))
+        {
+            return OperationResult.Failure("Lesson order must include each module lesson exactly once.");
+        }
+
+        var lessonsById = module.Lessons.ToDictionary(lesson => lesson.Id);
+        var reordered = command.LessonIds
+            .Select((id, index) => lessonsById[id] with { SequenceOrder = index + 1 })
+            .ToArray();
+        await SaveModuleAsync(course, module.WithLessons(reordered), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
+    public async Task<OperationResult> DeleteLessonAsync(
+        UserContext user,
+        DeleteLessonCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!string.Equals(command.ConfirmationText, "Delete", StringComparison.Ordinal))
+        {
+            return OperationResult.Failure("Type Delete to confirm lesson deletion.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null || module.Lessons.All(lesson => lesson.Id != command.LessonId))
+        {
+            return OperationResult.Failure("Lesson was not found.");
+        }
+
+        var lessons = module.Lessons
+            .Where(lesson => lesson.Id != command.LessonId)
+            .ToArray();
+        await SaveModuleAsync(course, module.WithLessons(lessons), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
+    }
+
     public async Task<OperationResult> SetRequirementMappingsAsync(
         UserContext user,
         SetCourseRequirementMappingsCommand command,
@@ -411,6 +784,7 @@ public sealed class CourseService
 
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
 
         return areas
             .GroupBy(area => area.Name)
@@ -438,7 +812,10 @@ public sealed class CourseService
             .ToArray();
     }
 
-    private static CourseDetail ToDetail(Course course, IReadOnlyList<RequirementArea> areas)
+    private static CourseDetail ToDetail(
+        Course course,
+        IReadOnlyList<RequirementArea> areas,
+        SchoolYear? schoolYear)
     {
         var mappingViews = course.RequirementMappings
             .Select(mapping =>
@@ -472,7 +849,126 @@ public sealed class CourseService
             course.CurriculumPlan.MajorResources,
             course.CurriculumPlan.PlannedSequence,
             course.CurriculumPlan.ParentNotes,
+            BuildTermViews(schoolYear),
+            course.Modules.Select(module => ToModuleView(module, schoolYear)).ToArray(),
             mappingViews);
+    }
+
+    private async Task<LearningModule?> GetModuleAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken)
+    {
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        return course?.Modules.FirstOrDefault(module => module.Id == moduleId);
+    }
+
+    private async Task SaveModuleAsync(
+        Course course,
+        LearningModule updatedModule,
+        CancellationToken cancellationToken)
+    {
+        var modules = course.Modules
+            .Select(module => module.Id == updatedModule.Id ? updatedModule : module)
+            .ToArray();
+        await repository.SaveCourseAsync(course.WithModules(modules), cancellationToken);
+    }
+
+    private static LearningModuleView ToModuleView(LearningModule module, SchoolYear? schoolYear = null)
+    {
+        var termName = schoolYear?.Terms.FirstOrDefault(term => term.Id == module.TermId)?.Name ?? "";
+        return new LearningModuleView(
+            module.Id,
+            module.CourseId,
+            module.SourceModuleId,
+            module.SequenceOrder,
+            module.Title,
+            module.Description,
+            module.TermId,
+            termName,
+            module.EstimatedLength,
+            module.Instructions,
+            module.MajorTopics,
+            module.LearningObjectives,
+            module.LearningObjectiveItems
+                .Select(item => new ModuleLearningObjectiveView(item.Text, item.LinkedCourseObjective))
+                .ToArray(),
+            module.Resources,
+            module.ResourceItems
+                .Select(item => new ModuleResourceView(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+                .ToArray(),
+            module.AssignmentEvidencePlaceholder,
+            module.Status,
+            module.Lessons.Select(ToLessonView).ToArray());
+    }
+
+    private static LessonView ToLessonView(Lesson lesson)
+    {
+        return new LessonView(
+            lesson.Id,
+            lesson.ModuleId,
+            lesson.SourceLessonId,
+            lesson.SequenceOrder,
+            lesson.Title,
+            lesson.IntroductoryText,
+            lesson.LinkedModuleObjective,
+            lesson.Resources
+                .Select(resource => new LessonResourceView(
+                    resource.Id,
+                    resource.Name,
+                    resource.Type,
+                    resource.Url,
+                    resource.FilePath,
+                    resource.IsPhysicalResource,
+                    resource.SourceNote))
+                .ToArray());
+    }
+
+    private static IReadOnlyList<CourseTermView> BuildTermViews(SchoolYear? schoolYear)
+    {
+        return schoolYear?.Terms
+            .OrderBy(term => term.StartDate)
+            .Select(term => new CourseTermView(term.Id, term.Name, term.StartDate, term.EndDate))
+            .ToArray() ?? [];
+    }
+
+    private static IReadOnlyList<ModuleLearningObjective> BuildObjectiveItems(
+        IReadOnlyList<ModuleLearningObjectiveCommand> objectives)
+    {
+        return objectives
+            .Where(item => !string.IsNullOrWhiteSpace(item.Text))
+            .Select(item => new ModuleLearningObjective(item.Text, item.LinkedCourseObjective))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ModuleResource> BuildResourceItems(
+        IReadOnlyList<ModuleResourceCommand> resources)
+    {
+        return resources
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item => new ModuleResource(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LessonResource> BuildLessonResourceItems(
+        IReadOnlyList<LessonResourceCommand> resources)
+    {
+        return resources
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item => new LessonResource(
+                Guid.NewGuid(),
+                item.Name,
+                item.Type,
+                item.Url,
+                item.FilePath,
+                item.IsPhysicalResource,
+                item.SourceNote))
+            .ToArray();
+    }
+
+    private static string Lines(IEnumerable<string> values)
+    {
+        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
     private static CoverageLevel? HighestCoverage(IEnumerable<CoverageLevel> levels)
@@ -552,6 +1048,7 @@ public sealed class CourseService
     {
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         foreach (var course in courses)
         {
             var option = FindSourceOption(course);
@@ -563,9 +1060,11 @@ public sealed class CourseService
             var description = MergeDescription(course.Description, option.Description);
             var curriculumPlan = MergeCurriculumPlan(course.CurriculumPlan, option.CurriculumPlan);
             var mappings = MergeImportedMappings(course, option, areas);
+            var modules = MergeImportedModules(course, option, schoolYear);
             if (description == course.Description &&
                 curriculumPlan == course.CurriculumPlan &&
-                MappingsMatch(course.RequirementMappings, mappings))
+                MappingsMatch(course.RequirementMappings, mappings) &&
+                ModulesMatch(course.Modules, modules))
             {
                 continue;
             }
@@ -582,10 +1081,170 @@ public sealed class CourseService
                 course.SourceTemplateId,
                 description,
                 curriculumPlan,
-                mappings);
+                mappings,
+                modules);
 
             await repository.SaveCourseAsync(updated, cancellationToken);
         }
+    }
+
+    private static IReadOnlyList<LearningModule> BuildModules(
+        Guid courseId,
+        CourseTemplateOptionDefinition option,
+        SchoolYear? schoolYear)
+    {
+        return option.Modules
+            .OrderBy(module => module.SequenceOrder)
+            .Select(module =>
+            {
+                var moduleId = Guid.NewGuid();
+                return new LearningModule(
+                    moduleId,
+                    courseId,
+                    module.ModuleId,
+                    module.SequenceOrder,
+                    module.Title,
+                    module.Description,
+                    module.EstimatedLength,
+                    module.Instructions,
+                    "",
+                    Lines(module.LearningObjectives.Select(item => item.Text)),
+                    Lines(module.Resources.Select(item => item.Name)),
+                    module.AssignmentEvidencePlaceholder,
+                    module.Status,
+                    ResolveTermId(module.TermNumber, schoolYear),
+                    module.LearningObjectives
+                        .Select(item => new ModuleLearningObjective(item.Text, item.LinkedCourseObjective))
+                        .ToArray(),
+                    module.Resources
+                        .Select(item => new ModuleResource(item.Name, item.Link, "", item.IsPhysicalResource))
+                        .ToArray(),
+                    BuildLessons(moduleId, module.Lessons));
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LearningModule> MergeImportedModules(
+        Course course,
+        CourseTemplateOptionDefinition option,
+        SchoolYear? schoolYear)
+    {
+        var modules = course.Modules.ToList();
+        foreach (var packModule in BuildModules(course.Id, option, schoolYear))
+        {
+            var existing = modules.FirstOrDefault(module =>
+                !string.IsNullOrWhiteSpace(packModule.SourceModuleId) &&
+                string.Equals(module.SourceModuleId, packModule.SourceModuleId, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                var mergedExisting = MergeImportedLessons(existing, packModule);
+                var shouldUpgrade =
+                    ModuleUsesLegacyText(existing) ||
+                    existing.TermId is null ||
+                    existing.MajorTopics.Length > 0 ||
+                    existing.Lessons.Count == 0;
+                if (shouldUpgrade)
+                {
+                    modules = modules
+                        .Select(module => module.Id == existing.Id
+                            ? packModule with { Id = existing.Id, SequenceOrder = existing.SequenceOrder, Lessons = mergedExisting.Lessons }
+                            : module)
+                        .ToList();
+                }
+                else if (mergedExisting.Lessons.Count != existing.Lessons.Count)
+                {
+                    modules = modules
+                        .Select(module => module.Id == existing.Id
+                            ? mergedExisting
+                            : module)
+                        .ToList();
+                }
+
+                continue;
+            }
+
+            modules.Add(packModule with { SequenceOrder = modules.Count + 1 });
+        }
+
+        return modules
+            .OrderBy(module => module.SequenceOrder)
+            .ThenBy(module => module.Title, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static LearningModule MergeImportedLessons(LearningModule existing, LearningModule packModule)
+    {
+        var lessons = existing.Lessons.ToList();
+        foreach (var packLesson in packModule.Lessons)
+        {
+            if (string.IsNullOrWhiteSpace(packLesson.SourceLessonId))
+            {
+                continue;
+            }
+
+            var existingLesson = lessons.FirstOrDefault(lesson =>
+                string.Equals(lesson.SourceLessonId, packLesson.SourceLessonId, StringComparison.OrdinalIgnoreCase));
+            if (existingLesson is not null)
+            {
+                continue;
+            }
+
+            lessons.Add(packLesson with
+            {
+                Id = Guid.NewGuid(),
+                ModuleId = existing.Id,
+                SequenceOrder = lessons.Count + 1
+            });
+        }
+
+        return existing.WithLessons(lessons);
+    }
+
+    private static IReadOnlyList<Lesson> BuildLessons(
+        Guid moduleId,
+        IReadOnlyList<CourseTemplateLessonDefinition> lessons)
+    {
+        return lessons
+            .OrderBy(lesson => lesson.SequenceOrder)
+            .Select(lesson => new Lesson(
+                Guid.NewGuid(),
+                moduleId,
+                lesson.LessonId,
+                lesson.SequenceOrder,
+                lesson.Title,
+                lesson.IntroductoryText,
+                lesson.LinkedModuleObjective,
+                lesson.Resources
+                    .Select(resource => new LessonResource(
+                        Guid.NewGuid(),
+                        resource.Name,
+                        resource.Type,
+                        resource.Url,
+                        "",
+                        resource.IsPhysicalResource,
+                        resource.SourceNote))
+                    .ToArray()))
+            .ToArray();
+    }
+
+    private static Guid? ResolveTermId(int? termNumber, SchoolYear? schoolYear)
+    {
+        if (termNumber is null || schoolYear is null)
+        {
+            return null;
+        }
+
+        return schoolYear.Terms
+            .OrderBy(term => term.StartDate)
+            .ElementAtOrDefault(termNumber.Value - 1)
+            ?.Id;
+    }
+
+    private static bool ModuleUsesLegacyText(LearningModule module)
+    {
+        return module.LearningObjectiveItems.Count == 0 ||
+            module.ResourceItems.Count == 0 ||
+            module.LearningObjectiveItems.All(item => string.IsNullOrWhiteSpace(item.LinkedCourseObjective));
     }
 
     private static IReadOnlyList<RequirementMapping> MergeImportedMappings(
@@ -638,6 +1297,35 @@ public sealed class CourseService
     private static string MappingKey(RequirementMapping mapping)
     {
         return $"{mapping.RequirementAreaId:N}:{mapping.CoverageLevel}:{mapping.Notes}";
+    }
+
+    private static bool ModulesMatch(
+        IReadOnlyList<LearningModule> current,
+        IReadOnlyList<LearningModule> updated)
+    {
+        if (current.Count != updated.Count)
+        {
+            return false;
+        }
+
+        var currentKeys = current.Select(ModuleKey).Order(StringComparer.Ordinal).ToArray();
+        var updatedKeys = updated.Select(ModuleKey).Order(StringComparer.Ordinal).ToArray();
+        return currentKeys.SequenceEqual(updatedKeys, StringComparer.Ordinal);
+    }
+
+    private static string ModuleKey(LearningModule module)
+    {
+        var objectiveKey = string.Join(";", module.LearningObjectiveItems.Select(item => $"{item.Text}->{item.LinkedCourseObjective}"));
+        var resourceKey = string.Join(";", module.ResourceItems.Select(item => $"{item.Name}->{item.Link}->{item.FilePath}->{item.IsPhysicalResource}"));
+        var lessonKey = string.Join(";", module.Lessons.Select(LessonKey));
+        var termKey = module.TermId.HasValue ? module.TermId.Value.ToString("N") : "";
+        return $"{module.Id:N}:{module.SourceModuleId}:{module.SequenceOrder}:{module.Title}:{module.Description}:{termKey}:{module.EstimatedLength}:{module.Instructions}:{module.MajorTopics}:{module.LearningObjectives}:{objectiveKey}:{module.Resources}:{resourceKey}:{lessonKey}:{module.AssignmentEvidencePlaceholder}:{module.Status}";
+    }
+
+    private static string LessonKey(Lesson lesson)
+    {
+        var resourceKey = string.Join(";", lesson.Resources.Select(resource => $"{resource.Name}->{resource.Type}->{resource.Url}->{resource.FilePath}->{resource.IsPhysicalResource}->{resource.SourceNote}"));
+        return $"{lesson.Id:N}:{lesson.SourceLessonId}:{lesson.SequenceOrder}:{lesson.Title}:{lesson.IntroductoryText}:{lesson.LinkedModuleObjective}:{resourceKey}";
     }
 
     private static int AreaOrder(Guid requirementAreaId, IReadOnlyList<RequirementArea> areas)

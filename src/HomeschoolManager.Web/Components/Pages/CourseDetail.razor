@@ -138,6 +138,7 @@ else
             <label class="visually-hidden" for="grading">Grading basis details</label>
             <textarea id="grading" class="form-control" rows="4" @bind="descriptionForm.GradingBasis" @bind:after="AutoSaveDescription"></textarea>
                 </section>
+
             </main>
 
             <aside class="workbench-support">
@@ -369,6 +370,7 @@ else
             PlannedSequence = detail.PlannedSequence,
             ParentNotes = detail.ParentNotes
         };
+
     }
 
     private UserContext ParentUser()
@@ -711,4 +713,5 @@ else
         public CoverageLevel CoverageLevel { get; set; } = CoverageLevel.Primary;
         public string Notes { get; set; } = "";
     }
+
 }

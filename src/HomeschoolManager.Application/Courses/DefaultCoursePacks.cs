@@ -140,6 +140,7 @@ public static class DefaultCoursePacks
             option.Description,
             CurriculumPlan.Empty,
             mappings,
+            option.Modules,
             id,
             [option]);
     }
@@ -160,6 +161,7 @@ public static class DefaultCoursePacks
             defaultOption.Description,
             defaultOption.CurriculumPlan,
             defaultOption.RequirementMappings,
+            defaultOption.Modules,
             defaultOptionId,
             options);
     }
@@ -271,7 +273,8 @@ public static class DefaultCoursePacks
                 DefaultAssessmentMethods,
                 DefaultGradingBasis),
             CurriculumPlanFor(title, subjects, duration),
-            mappings);
+            mappings,
+            ModulesFor(id, title, subjects, duration));
     }
 
     private static CourseTemplateRequirementMapping Map(string view, string name, CoverageLevel level)
@@ -290,6 +293,458 @@ public static class DefaultCoursePacks
                 ? $"Semester 1: foundations, core vocabulary, guided practice, and early projects. Semester 2: advanced topics, independent application, review, and a final portfolio or capstone evidence set for {subjectText}."
                 : $"Weeks 1-4: foundations and vocabulary. Weeks 5-10: guided practice and applied work. Weeks 11-16: independent application, review, and final evidence set for {subjectText}.",
             "Imported pack plan. Parent should customize resources, pacing, assignments, assessment evidence, and grading notes to match the actual course.");
+    }
+
+    private static IReadOnlyList<CourseTemplateModuleDefinition> ModulesFor(
+        string optionId,
+        string title,
+        IReadOnlyList<string> subjects,
+        CourseDuration duration)
+    {
+        var topics = MajorTopicsFor(title)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+        var courseObjectives = LearningObjectivesFor(title)
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+        var resources = TextsAndResourcesFor(title)
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+        var moduleCount = duration == CourseDuration.TwoSemesters ? 4 : 3;
+        var subjectText = string.Join(", ", subjects);
+
+        return Enumerable.Range(1, moduleCount)
+            .Select(index =>
+            {
+                var moduleTopics = Slice(topics, index - 1, moduleCount);
+                var moduleResources = Slice(resources, index - 1, moduleCount);
+                var topicText = moduleTopics.Length == 0 ? title : string.Join("; ", moduleTopics);
+                var moduleObjectives = ModuleObjectivesFor(title, topicText, courseObjectives, index - 1, moduleCount);
+                var parsedModuleResources = ModuleResourcesFor(title, moduleResources.Length == 0 ? resources : moduleResources);
+                return new CourseTemplateModuleDefinition(
+                    $"{optionId}-module-{index}",
+                    index,
+                    ModuleTitle(index, moduleCount, title, moduleTopics),
+                    $"Module {index} of {moduleCount} for {title}, focused on {topicText}.",
+                    TermNumberFor(index, moduleCount, duration),
+                    duration == CourseDuration.TwoSemesters ? "4-6 weeks" : "3-5 weeks",
+                    $"Introduce the module focus, use guided instruction and discussion, assign practice or applied work, review evidence with the student, and connect the module back to the {subjectText} course record.",
+                    moduleObjectives,
+                    parsedModuleResources,
+                    LessonsFor(optionId, index, title, topicText, moduleObjectives, parsedModuleResources),
+                    "Planned assignment/evidence placeholder: parent may add readings, practice work, projects, discussions, assessments, portfolio artifacts, or demonstrations for this module.",
+                    ModuleStatus.Planned);
+            })
+            .ToArray();
+    }
+
+    private static int? TermNumberFor(int index, int moduleCount, CourseDuration duration)
+    {
+        if (duration == CourseDuration.OneSemester)
+        {
+            return 1;
+        }
+
+        return index <= Math.Ceiling(moduleCount / 2m) ? 1 : 2;
+    }
+
+    private static IReadOnlyList<CourseTemplateModuleObjectiveDefinition> ModuleObjectivesFor(
+        string courseTitle,
+        string topicText,
+        IReadOnlyList<string> courseObjectives,
+        int moduleIndex,
+        int moduleCount)
+    {
+        var aligned = courseObjectives
+            .SelectMany(objective => new[] { objective, objective })
+            .Where((_, objectiveIndex) => objectiveIndex % moduleCount == moduleIndex)
+            .Select((objective, objectiveIndex) => new CourseTemplateModuleObjectiveDefinition(
+                ModuleObjectiveText(courseTitle, topicText, objectiveIndex),
+                objective))
+            .ToList();
+
+        aligned.Add(new CourseTemplateModuleObjectiveDefinition(
+            $"Complete module-specific practice, discussion, or evidence work focused on {topicText}.",
+            ""));
+
+        return aligned;
+    }
+
+    private static string ModuleObjectiveText(string courseTitle, string topicText, int objectiveIndex)
+    {
+        var verbs = new[] { "Explain", "Apply", "Analyze", "Create evidence for" };
+        var verb = verbs[objectiveIndex % verbs.Length];
+        return $"{verb} {topicText} in the context of {courseTitle}.";
+    }
+
+    private static IReadOnlyList<CourseTemplateModuleResourceDefinition> ModuleResourcesFor(
+        string title,
+        IReadOnlyList<string> resources)
+    {
+        var parsed = resources
+            .Select(ParseModuleResource)
+            .Where(resource => !string.IsNullOrWhiteSpace(resource.Name))
+            .ToArray();
+
+        return parsed.Length == 0
+            ? [new CourseTemplateModuleResourceDefinition($"Parent-selected {title} resource", "", true)]
+            : parsed;
+    }
+
+    private static CourseTemplateModuleResourceDefinition ParseModuleResource(string value)
+    {
+        var parts = value.Split('|', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length == 2)
+        {
+            return new CourseTemplateModuleResourceDefinition(parts[0], parts[1], false);
+        }
+
+        return new CourseTemplateModuleResourceDefinition(value, "", true);
+    }
+
+    private static IReadOnlyList<CourseTemplateLessonDefinition> LessonsFor(
+        string optionId,
+        int moduleIndex,
+        string courseTitle,
+        string topicText,
+        IReadOnlyList<CourseTemplateModuleObjectiveDefinition> objectives,
+        IReadOnlyList<CourseTemplateModuleResourceDefinition> moduleResources)
+    {
+        return objectives
+            .Select((objective, objectiveIndex) => new CourseTemplateLessonDefinition(
+                $"{optionId}-module-{moduleIndex}-lesson-{objectiveIndex + 1}",
+                objectiveIndex + 1,
+                LessonTitle(courseTitle, topicText, objective.Text, objectiveIndex),
+                $"This lesson focuses on {topicText}. Work through the resources, take notes on the main ideas, and connect the lesson back to the objective: {objective.Text}",
+                objective.Text,
+                LessonResourcesFor(courseTitle, topicText, objective.Text, moduleResources, objectiveIndex)))
+            .ToArray();
+    }
+
+    private static string LessonTitle(string courseTitle, string topicText, string objectiveText, int index)
+    {
+        var focus = objectiveText.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(focus) && focus.Length <= 80)
+        {
+            return focus;
+        }
+
+        return index == 0 ? $"{topicText} foundations" : $"{topicText} lesson {index + 1}";
+    }
+
+    private static IReadOnlyList<CourseTemplateLessonResourceDefinition> LessonResourcesFor(
+        string courseTitle,
+        string topicText,
+        string objectiveText,
+        IReadOnlyList<CourseTemplateModuleResourceDefinition> moduleResources,
+        int index)
+    {
+        var resources = moduleResources
+            .Where(resource => !string.IsNullOrWhiteSpace(resource.Name))
+            .Select(resource => new CourseTemplateLessonResourceDefinition(
+                resource.Name,
+                ResourceTypeFor(resource.Name, resource.Link, resource.IsPhysicalResource),
+                resource.Link,
+                resource.IsPhysicalResource,
+                "Recommended course-pack resource. Parent should verify section fit and availability."))
+            .ToList();
+
+        resources.AddRange(SpecificLessonResourcesFor(courseTitle, topicText, objectiveText, index));
+
+        return resources
+            .GroupBy(resource => $"{resource.Name}|{resource.Url}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(4)
+            .ToArray();
+    }
+
+    private static LessonResourceType ResourceTypeFor(string name, string link, bool isPhysical)
+    {
+        if (isPhysical)
+        {
+            return LessonResourceType.PhysicalResource;
+        }
+
+        if (name.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+            link.Contains("youtube", StringComparison.OrdinalIgnoreCase))
+        {
+            return LessonResourceType.Video;
+        }
+
+        if (name.Contains("OpenStax", StringComparison.OrdinalIgnoreCase))
+        {
+            return LessonResourceType.TextbookChapter;
+        }
+
+        return string.IsNullOrWhiteSpace(link) ? LessonResourceType.PhysicalResource : LessonResourceType.Website;
+    }
+
+    private static IReadOnlyList<CourseTemplateLessonResourceDefinition> SpecificLessonResourcesFor(
+        string courseTitle,
+        string topicText,
+        string objectiveText,
+        int index)
+    {
+        var lowerTitle = courseTitle.ToLowerInvariant();
+        var lowerTopic = $"{topicText} {objectiveText}".ToLowerInvariant();
+
+        if (lowerTitle.Contains("personal finance"))
+        {
+            if (lowerTopic.Contains("budget") || lowerTopic.Contains("income") || lowerTopic.Contains("expense"))
+            {
+                return [
+                    Resource("CFPB: Creating a Budget activity", LessonResourceType.Article, "https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/teach/activities/creating-budget/", "CFPB youth financial education activity for building and revising a budget."),
+                    Resource("FDIC Money Smart: Your Spending and Saving Plan", LessonResourceType.Website, "https://www.fdic.gov/resources/consumers/money-smart/teach-money-smart/money-smart-for-young-people/index.html", "FDIC Money Smart youth materials for planning spending and saving."),
+                    Resource("Next Gen Personal Finance: Budgeting unit", LessonResourceType.Website, "https://www.ngpf.org/curriculum/budgeting/", "NGPF budgeting lessons and classroom-ready activities.")
+                ];
+            }
+
+            if (lowerTopic.Contains("credit") || lowerTopic.Contains("debt"))
+            {
+                return [
+                    Resource("CFPB: Credit reports and scores", LessonResourceType.Article, "https://www.consumerfinance.gov/consumer-tools/credit-reports-and-scores/", "CFPB explanations and tools for credit reports and scores."),
+                    Resource("FDIC Money Smart: Borrowing Basics", LessonResourceType.Website, "https://www.fdic.gov/resources/consumers/money-smart/teach-money-smart/money-smart-for-young-people/index.html", "FDIC Money Smart youth materials for borrowing and credit decisions."),
+                    Resource("Next Gen Personal Finance: Managing Credit", LessonResourceType.Website, "https://www.ngpf.org/curriculum/managing-credit/", "NGPF lessons on credit, interest, borrowing, and credit reports.")
+                ];
+            }
+
+            return [
+                Resource("CFPB Youth Financial Education", LessonResourceType.Website, "https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/", "CFPB interdisciplinary financial education activities."),
+                Resource("FDIC Money Smart for Young People", LessonResourceType.Website, "https://www.fdic.gov/resources/consumers/money-smart/teach-money-smart/money-smart-for-young-people/index.html", "FDIC youth financial education curriculum resources."),
+                Resource("Next Gen Personal Finance curriculum", LessonResourceType.Website, "https://www.ngpf.org/curriculum/", "NGPF course units for financial decision-making.")
+            ];
+        }
+
+        if (lowerTitle.Contains("government") || lowerTitle.Contains("civics"))
+        {
+            if (lowerTopic.Contains("federalism") || lowerTopic.Contains("state"))
+            {
+                return [
+                    Resource("OpenStax American Government 3e: The Division of Powers", LessonResourceType.TextbookChapter, "https://openstax.org/books/american-government-3e/pages/3-1-the-division-of-powers", "OpenStax section on federalism and constitutional division of powers."),
+                    Resource("Michigan Legislature: Michigan Constitution", LessonResourceType.Website, "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-Constitution", "Official Michigan Legislature access point for the Michigan Constitution."),
+                    Resource("iCivics: State Power", LessonResourceType.Website, "https://www.icivics.org/games/state-power", "iCivics activity for state and federal power relationships.")
+                ];
+            }
+
+            if (lowerTopic.Contains("rights") || lowerTopic.Contains("libert"))
+            {
+                return [
+                    Resource("OpenStax American Government 3e: What Are Civil Liberties?", LessonResourceType.TextbookChapter, "https://openstax.org/books/american-government-3e/pages/4-1-what-are-civil-liberties", "OpenStax section on civil liberties and constitutional protections."),
+                    Resource("National Constitution Center: Bill of Rights", LessonResourceType.Website, "https://constitutioncenter.org/the-constitution/amendments/amendment-i", "National Constitution Center interactive Constitution entry point for rights analysis."),
+                    Resource("National Archives: Bill of Rights", LessonResourceType.Article, "https://www.archives.gov/founding-docs/bill-of-rights", "National Archives primary document page for the Bill of Rights.")
+                ];
+            }
+
+            return [
+                Resource("OpenStax American Government 3e: Constitution and Its Origins", LessonResourceType.TextbookChapter, "https://openstax.org/books/american-government-3e/pages/2-introduction", "OpenStax American Government chapter for constitutional foundations."),
+                Resource("National Archives: Constitution Workshop", LessonResourceType.Article, "https://www.archives.gov/education/lessons/constitution-workshop/", "National Archives primary-source activity for constitutional analysis."),
+                Resource("Library of Congress: Constitution Day Resources", LessonResourceType.Website, "https://www.loc.gov/classroom-materials/constitution-day-resources/", "Library of Congress classroom materials and primary sources.")
+            ];
+        }
+
+        if (lowerTitle.Contains("economics"))
+        {
+            return [
+                Resource("OpenStax Principles of Economics 3e: Welcome to Economics", LessonResourceType.TextbookChapter, "https://openstax.org/books/principles-economics-3e/pages/1-introduction", "OpenStax economics chapter for scarcity, choice, and economic reasoning."),
+                Resource("Khan Academy: Economics and finance", LessonResourceType.Video, "https://www.khanacademy.org/economics-finance-domain", "Khan Academy videos and practice for economics and finance topics."),
+                Resource("CFPB Youth Financial Education", LessonResourceType.Website, "https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/", "Consumer Financial Protection Bureau youth financial education resources.")
+            ];
+        }
+
+        if (lowerTitle.Contains("u.s. history") || lowerTitle.Contains("history"))
+        {
+            if (lowerTopic.Contains("constitution") || lowerTopic.Contains("founding"))
+            {
+                return [
+                    Resource("OpenStax U.S. History: The Constitutional Convention and Federal Constitution", LessonResourceType.TextbookChapter, "https://openstax.org/books/us-history/pages/7-4-the-constitutional-convention-and-federal-constitution", "OpenStax U.S. History section on the constitutional convention and federal Constitution."),
+                    Resource("National Archives: Constitution of the United States", LessonResourceType.Article, "https://www.archives.gov/founding-docs/constitution", "National Archives primary document page for the U.S. Constitution."),
+                    Resource("Library of Congress: Primary Documents in American History - U.S. Constitution", LessonResourceType.Website, "https://guides.loc.gov/constitution", "Library of Congress guide to Constitution primary sources.")
+                ];
+            }
+
+            if (lowerTopic.Contains("civil rights") || lowerTopic.Contains("reform"))
+            {
+                return [
+                    Resource("OpenStax U.S. History: The Civil Rights Movement", LessonResourceType.TextbookChapter, "https://openstax.org/books/us-history/pages/28-4-the-civil-rights-movement", "OpenStax U.S. History section on the civil rights movement."),
+                    Resource("Library of Congress: Civil Rights Primary Source Set", LessonResourceType.Website, "https://www.loc.gov/classroom-materials/civil-rights/", "Library of Congress primary-source set for civil rights."),
+                    Resource("National Archives: Civil Rights Act of 1964", LessonResourceType.Article, "https://www.archives.gov/milestone-documents/civil-rights-act", "National Archives milestone document page for the Civil Rights Act.")
+                ];
+            }
+
+            return [
+                Resource("OpenStax U.S. History: The Americas, Europe, and Africa Before 1492", LessonResourceType.TextbookChapter, "https://openstax.org/books/us-history/pages/1-introduction", "OpenStax U.S. History chapter entry point; parent may select the chapter section matching this lesson."),
+                Resource("National Archives Educator Resources", LessonResourceType.Website, "https://www.archives.gov/education", "National Archives educator resources, DocsTeach activities, and milestone documents."),
+                Resource("Library of Congress Primary Source Sets", LessonResourceType.Website, "https://www.loc.gov/classroom-materials/", "Library of Congress classroom materials and primary-source sets.")
+            ];
+        }
+
+        if (lowerTitle.Contains("precalculus") || lowerTitle.Contains("algebra") || lowerTitle.Contains("math") || lowerTitle.Contains("trigonometry"))
+        {
+            var openStax = lowerTopic.Contains("trigon")
+                ? Resource("OpenStax Precalculus: Unit Circle, Sine, and Cosine", LessonResourceType.TextbookChapter, "https://openstax.org/books/precalculus/pages/5-2-unit-circle-sine-and-cosine-functions", "OpenStax Precalculus section on unit-circle trigonometry.")
+                : lowerTopic.Contains("logarith") || lowerTopic.Contains("exponential")
+                    ? Resource("OpenStax Precalculus: Exponential and Logarithmic Functions", LessonResourceType.TextbookChapter, "https://openstax.org/books/precalculus/pages/4-introduction-to-exponential-and-logarithmic-functions", "OpenStax Precalculus chapter for exponential and logarithmic models.")
+                    : Resource("OpenStax Precalculus: Functions and Function Notation", LessonResourceType.TextbookChapter, "https://openstax.org/books/precalculus/pages/1-2-functions-and-function-notation", "OpenStax Precalculus section on functions and notation.");
+            return [
+                openStax,
+                Resource("Khan Academy Precalculus", LessonResourceType.Video, "https://www.khanacademy.org/math/precalculus", "Khan Academy precalculus videos and practice."),
+                Resource("Desmos graphing calculator", LessonResourceType.Website, "https://www.desmos.com/calculator", "Interactive graphing support for lesson practice.")
+            ];
+        }
+
+        if (lowerTitle.Contains("calculus"))
+        {
+            return [
+                Resource("OpenStax Calculus Volume 1: Limits", LessonResourceType.TextbookChapter, "https://openstax.org/books/calculus-volume-1/pages/2-introduction", "OpenStax Calculus chapter entry point for limits and continuity."),
+                Resource("Khan Academy Calculus", LessonResourceType.Video, "https://www.khanacademy.org/math/calculus-1", "Khan Academy calculus lessons and practice."),
+                Resource("MIT OpenCourseWare Single Variable Calculus", LessonResourceType.Website, "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/", "MIT OCW calculus lectures and notes.")
+            ];
+        }
+
+        if (lowerTitle.Contains("physics"))
+        {
+            return [
+                Resource("OpenStax Physics: Motion", LessonResourceType.TextbookChapter, "https://openstax.org/books/physics/pages/2-introduction-to-one-dimensional-kinematics", "OpenStax Physics kinematics chapter."),
+                Resource("PhET Physics Simulations", LessonResourceType.Website, "https://phet.colorado.edu/en/simulations/filter?subjects=physics&type=html", "PhET interactive physics simulations."),
+                Resource("Khan Academy High School Physics", LessonResourceType.Video, "https://www.khanacademy.org/science/highschool-physics", "Khan Academy physics videos and practice.")
+            ];
+        }
+
+        if (lowerTitle.Contains("chemistry"))
+        {
+            return [
+                Resource("OpenStax Chemistry 2e: Reaction Stoichiometry", LessonResourceType.TextbookChapter, "https://openstax.org/books/chemistry-2e/pages/4-3-reaction-stoichiometry", "OpenStax Chemistry stoichiometry section."),
+                Resource("PhET Chemistry Simulations", LessonResourceType.Website, "https://phet.colorado.edu/en/simulations/filter?subjects=chemistry&type=html", "PhET interactive chemistry simulations."),
+                Resource("Khan Academy Chemistry", LessonResourceType.Video, "https://www.khanacademy.org/science/chemistry", "Khan Academy chemistry videos and practice.")
+            ];
+        }
+
+        if (lowerTitle.Contains("biology") || lowerTitle.Contains("anatomy"))
+        {
+            return [
+                Resource("OpenStax Biology 2e: Studying Cells", LessonResourceType.TextbookChapter, "https://openstax.org/books/biology-2e/pages/4-1-studying-cells", "OpenStax Biology section for cells and biological investigation."),
+                Resource("HHMI BioInteractive", LessonResourceType.Website, "https://www.biointeractive.org/", "HHMI BioInteractive animations, data activities, and videos."),
+                Resource("Khan Academy Biology", LessonResourceType.Video, "https://www.khanacademy.org/science/biology", "Khan Academy biology videos and practice.")
+            ];
+        }
+
+        if (lowerTitle.Contains("environmental") || lowerTitle.Contains("earth") || lowerTitle.Contains("astronomy"))
+        {
+            if (lowerTopic.Contains("ecosystem") || lowerTopic.Contains("biodiversity"))
+            {
+                return [
+                    Resource("HHMI BioInteractive: Ecosystems and Biodiversity", LessonResourceType.Website, "https://www.biointeractive.org/classroom-resources?f%5B0%5D=topics%3A25642", "HHMI BioInteractive ecosystem and biodiversity classroom resources."),
+                    Resource("EPA: Ecosystems educational resources", LessonResourceType.Website, "https://www.epa.gov/students", "EPA student resources for environmental systems and stewardship."),
+                    Resource("NASA Earth Observatory", LessonResourceType.Website, "https://earthobservatory.nasa.gov/", "NASA imagery and articles for Earth-system observations.")
+                ];
+            }
+
+            if (lowerTopic.Contains("climate") || lowerTopic.Contains("pollution") || lowerTopic.Contains("resource"))
+            {
+                return [
+                    Resource("NOAA Climate.gov Teaching Climate", LessonResourceType.Website, "https://www.climate.gov/teaching", "NOAA climate teaching resources and data explanations."),
+                    Resource("EPA Students: Environmental Topics", LessonResourceType.Website, "https://www.epa.gov/students", "EPA student resources for pollution, water, air, and environmental decisions."),
+                    Resource("NASA Climate Kids", LessonResourceType.Website, "https://climatekids.nasa.gov/", "NASA student-facing climate and Earth-system explanations.")
+                ];
+            }
+
+            return [
+                Resource("NASA Learning Resources", LessonResourceType.Website, "https://www.nasa.gov/learning-resources/", "NASA learning resources for Earth and space topics."),
+                Resource("PhET Earth and Space Simulations", LessonResourceType.Website, "https://phet.colorado.edu/en/simulations/filter?subjects=earth-science&type=html", "PhET earth science simulations."),
+                Resource("OpenStax Astronomy 2e", LessonResourceType.TextbookChapter, "https://openstax.org/books/astronomy-2e/pages/index", "OpenStax Astronomy textbook index for topic-specific section selection.")
+            ];
+        }
+
+        if (lowerTitle.Contains("english") || lowerTitle.Contains("writing"))
+        {
+            if (lowerTopic.Contains("research") || lowerTopic.Contains("source"))
+            {
+                return [
+                    Resource("Purdue OWL: Research and Citation Resources", LessonResourceType.Website, "https://owl.purdue.edu/owl/research_and_citation/", "Purdue OWL research, citation, and documentation guidance."),
+                    Resource("Library of Congress: Primary Source Analysis Tool", LessonResourceType.Website, "https://www.loc.gov/programs/teachers/getting-started-with-primary-sources/guides/", "Library of Congress analysis guides for reading sources closely."),
+                    Resource("CommonLit Library", LessonResourceType.Article, "https://www.commonlit.org/en/library", "CommonLit searchable high-school text library; parent should verify account/access fit.")
+                ];
+            }
+
+            if (lowerTopic.Contains("grammar") || lowerTopic.Contains("editing"))
+            {
+                return [
+                    Resource("Purdue OWL: Grammar", LessonResourceType.Website, "https://owl.purdue.edu/owl/general_writing/grammar/", "Purdue OWL grammar and usage reference."),
+                    Resource("Purdue OWL: Mechanics", LessonResourceType.Website, "https://owl.purdue.edu/owl/general_writing/mechanics/", "Purdue OWL punctuation, spelling, and sentence mechanics reference."),
+                    Resource("Parent-selected revision sample", LessonResourceType.PhysicalResource, "", "A student draft or parent-selected passage for editing practice.")
+                ];
+            }
+
+            return [
+                Resource("Purdue OWL Writing Lab", LessonResourceType.Website, "https://owl.purdue.edu/owl/", "Purdue OWL writing, grammar, and research guidance."),
+                Resource("CommonLit", LessonResourceType.Article, "https://www.commonlit.org/", "CommonLit reading selections and discussion questions; parent should verify account/access fit."),
+                Resource("Project Gutenberg", LessonResourceType.Reading, "https://www.gutenberg.org/", "Public-domain literature for parent-selected texts.")
+            ];
+        }
+
+        if (lowerTitle.Contains("language") || lowerTitle.Contains("spanish") || lowerTitle.Contains("french") || lowerTitle.Contains("german") || lowerTitle.Contains("latin") || lowerTitle.Contains("sign language"))
+        {
+            return [
+                Resource("Open Culture Language Lessons", LessonResourceType.Website, "https://www.openculture.com/freelanguagelessons", "Free language lesson collections; parent should select resources matching the studied language."),
+                Resource("BBC Languages archive", LessonResourceType.Website, "https://www.bbc.co.uk/languages/", "Language learning archive for vocabulary and cultural exposure."),
+                Resource("Parent-selected target-language reading or video", LessonResourceType.PhysicalResource, "", "Physical or locally selected resource matched to the student's level.")
+            ];
+        }
+
+        if (lowerTitle.Contains("computer"))
+        {
+            if (lowerTopic.Contains("algorithm") || lowerTopic.Contains("program"))
+            {
+                return [
+                    Resource("freeCodeCamp: JavaScript Algorithms and Data Structures", LessonResourceType.Website, "https://www.freecodecamp.org/learn/javascript-algorithms-and-data-structures-v8/", "freeCodeCamp structured programming lessons and practice."),
+                    Resource("Khan Academy: Intro to JS", LessonResourceType.Video, "https://www.khanacademy.org/computing/computer-programming/programming", "Khan Academy programming lessons and exercises."),
+                    Resource("Code.org: Computer Science Discoveries", LessonResourceType.Website, "https://code.org/curriculum/computer-science-discoveries", "Code.org curriculum resources for CS concepts and projects.")
+                ];
+            }
+
+            return [
+                Resource("freeCodeCamp", LessonResourceType.Website, "https://www.freecodecamp.org/learn/", "Structured coding lessons and projects."),
+                Resource("Khan Academy Computing", LessonResourceType.Video, "https://www.khanacademy.org/computing", "Khan Academy computing lessons."),
+                Resource("Code.org", LessonResourceType.Website, "https://code.org/", "Computer science lessons and activities.")
+            ];
+        }
+
+        return [
+            Resource("Khan Academy", LessonResourceType.Video, "https://www.khanacademy.org/", "General instructional videos and practice by topic."),
+            Resource("Parent-selected spine text section", LessonResourceType.PhysicalResource, "", "Physical or locally selected course text matched to this lesson."),
+            Resource("Student notebook or portfolio artifact", LessonResourceType.PhysicalResource, "", "Parent-owned evidence artifact for lesson notes, practice, or reflection.")
+        ];
+    }
+
+    private static CourseTemplateLessonResourceDefinition Resource(
+        string name,
+        LessonResourceType type,
+        string url,
+        string sourceNote)
+    {
+        return new CourseTemplateLessonResourceDefinition(
+            name,
+            type,
+            url,
+            type == LessonResourceType.PhysicalResource,
+            sourceNote);
+    }
+
+    private static string ModuleTitle(int index, int moduleCount, string courseTitle, IReadOnlyList<string> topics)
+    {
+        if (topics.Count > 0)
+        {
+            return topics.Count == 1 ? topics[0] : $"{topics[0]} and related topics";
+        }
+
+        return index == moduleCount ? $"{courseTitle} synthesis" : $"{courseTitle} module {index}";
+    }
+
+    private static string[] Slice(IReadOnlyList<string> values, int index, int count)
+    {
+        return values
+            .Where((_, valueIndex) => valueIndex % count == index)
+            .ToArray();
     }
 
     private static string LearningObjectivesFor(string title)

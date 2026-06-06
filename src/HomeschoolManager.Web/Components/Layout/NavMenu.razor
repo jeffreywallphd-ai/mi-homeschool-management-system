@@ -1,6 +1,12 @@
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Application.Setup
 @using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
 @inject SessionState Session
+@inject CourseService CourseService
+@inject SetupService SetupService
+@inject NavigationManager NavigationManager
 @implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -18,6 +24,14 @@
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="login">
                     <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        }
+        else if (Session.IsStudent)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="student">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Student Home
                 </NavLink>
             </div>
         }
@@ -46,23 +60,120 @@
                     <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Courses
                 </NavLink>
             </div>
+
+            <details class="nav-item px-3 student-preview-nav">
+                <summary class="nav-link">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Student Preview
+                </summary>
+                @if (students.Count == 0)
+                {
+                    <span class="course-subnav-link student-preview-empty">No children configured</span>
+                }
+                else
+                {
+                    @foreach (var student in students)
+                    {
+                        <NavLink class="nav-link course-subnav-link" href="@($"student/{student.Id}")">
+                            @student.DisplayName
+                        </NavLink>
+                    }
+                }
+            </details>
+
+            @if (activeCourse is not null)
+            {
+                <div class="course-subnav px-3">
+                    <div class="course-subnav-heading">@activeCourse.Title</div>
+                    <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}")">Overview</NavLink>
+                    <div class="course-subnav-heading course-modules-heading">Course Modules</div>
+                    @foreach (var module in activeCourse.Modules)
+                    {
+                        <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/{module.Id}")">
+                            @module.SequenceOrder. @module.Title
+                        </NavLink>
+                    }
+                    @if (Session.IsParentAdmin)
+                    {
+                        <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/new")">+ New Module</NavLink>
+                    }
+                </div>
+            }
         }
     </nav>
 </div>
 
 @code {
+    private CourseDetail? activeCourse;
+    private IReadOnlyList<StudentSetupItem> students = [];
+
     protected override void OnInitialized()
     {
         Session.Changed += OnSessionChanged;
+        CourseService.CourseNavigationChanged += OnCourseNavigationChanged;
+        SetupService.StudentsChanged += OnStudentsChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
+        _ = RefreshCourseNavigationAsync();
+        _ = RefreshStudentsAsync();
     }
 
     private void OnSessionChanged()
     {
-        InvokeAsync(StateHasChanged);
+        _ = RefreshCourseNavigationAsync();
+        _ = RefreshStudentsAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        _ = RefreshCourseNavigationAsync();
+    }
+
+    private void OnCourseNavigationChanged()
+    {
+        _ = RefreshCourseNavigationAsync();
+    }
+
+    private void OnStudentsChanged()
+    {
+        _ = RefreshStudentsAsync();
+    }
+
+    private async Task RefreshStudentsAsync()
+    {
+        students = Session.IsParentAdmin
+            ? await SetupService.ListStudentsAsync()
+            : [];
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshCourseNavigationAsync()
+    {
+        activeCourse = null;
+        if (Session.IsParentAdmin && TryGetCourseIdFromCurrentLocation(out var courseId))
+        {
+            activeCourse = await CourseService.GetCourseDetailAsync(courseId);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool TryGetCourseIdFromCurrentLocation(out Guid courseId)
+    {
+        courseId = Guid.Empty;
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var segments = uri.AbsolutePath
+            .Trim('/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return segments.Length >= 2 &&
+            string.Equals(segments[0], "courses", StringComparison.OrdinalIgnoreCase) &&
+            Guid.TryParse(segments[1], out courseId);
     }
 
     public void Dispose()
     {
         Session.Changed -= OnSessionChanged;
+        CourseService.CourseNavigationChanged -= OnCourseNavigationChanged;
+        SetupService.StudentsChanged -= OnStudentsChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }

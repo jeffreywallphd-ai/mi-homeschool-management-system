@@ -104,6 +104,9 @@ Implementation roadmaps are currently defined by:
 - [Roadmaps README](roadmaps/README.md)
 - [First Vertical Slice Roadmap](roadmaps/first-vertical-slice-roadmap.md)
 - [Course Curriculum Planning Roadmap](roadmaps/course-curriculum-planning-roadmap.md)
+- [Course Learning Modules Roadmap](roadmaps/course-learning-modules-roadmap.md)
+- [Course Module Lessons Roadmap](roadmaps/course-module-lessons-roadmap.md)
+- [Student Course Client Roadmap](roadmaps/student-course-client-roadmap.md)
 
 Operations requirements are currently defined by:
 

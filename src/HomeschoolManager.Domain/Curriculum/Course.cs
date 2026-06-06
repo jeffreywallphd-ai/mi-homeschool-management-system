@@ -17,6 +17,7 @@ public sealed record Course
     public CourseDescription Description { get; init; }
     public CurriculumPlan CurriculumPlan { get; init; }
     public IReadOnlyList<RequirementMapping> RequirementMappings { get; init; }
+    public IReadOnlyList<LearningModule> Modules { get; init; }
 
     public Course(
         Guid id,
@@ -30,7 +31,8 @@ public sealed record Course
         string? sourceTemplateId,
         CourseDescription? description,
         CurriculumPlan? curriculumPlan,
-        IReadOnlyList<RequirementMapping>? requirementMappings)
+        IReadOnlyList<RequirementMapping>? requirementMappings,
+        IReadOnlyList<LearningModule>? modules = null)
     {
         if (studentId == Guid.Empty)
         {
@@ -75,6 +77,7 @@ public sealed record Course
         Description = description ?? CourseDescription.Empty;
         CurriculumPlan = curriculumPlan ?? CurriculumPlan.Empty;
         RequirementMappings = requirementMappings ?? [];
+        Modules = NormalizeModules(ModulesForCourse(modules ?? [], Id));
     }
 
     public Course WithDescription(CourseDescription description)
@@ -104,5 +107,41 @@ public sealed record Course
         }
 
         return this with { RequirementMappings = mappings };
+    }
+
+    public Course WithModules(IReadOnlyList<LearningModule> modules)
+    {
+        return this with { Modules = NormalizeModules(ModulesForCourse(modules, Id)) };
+    }
+
+    private static IReadOnlyList<LearningModule> ModulesForCourse(
+        IReadOnlyList<LearningModule> modules,
+        Guid courseId)
+    {
+        var invalidModule = modules.FirstOrDefault(module => module.CourseId != courseId);
+        if (invalidModule is not null)
+        {
+            throw new DomainException("Learning modules must belong to the course being updated.");
+        }
+
+        var duplicateSourceId = modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.SourceModuleId))
+            .GroupBy(module => module.SourceModuleId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateSourceId is not null)
+        {
+            throw new DomainException("A course can only have one learning module per source module id.");
+        }
+
+        return modules;
+    }
+
+    private static IReadOnlyList<LearningModule> NormalizeModules(IReadOnlyList<LearningModule> modules)
+    {
+        return modules
+            .OrderBy(module => module.SequenceOrder)
+            .ThenBy(module => module.Title, StringComparer.OrdinalIgnoreCase)
+            .Select((module, index) => module with { SequenceOrder = index + 1 })
+            .ToArray();
     }
 }

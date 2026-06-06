@@ -18,6 +18,7 @@ public sealed record CourseTemplateDefinition(
     CourseDescription Description,
     CurriculumPlan CurriculumPlan,
     IReadOnlyList<CourseTemplateRequirementMapping> RequirementMappings,
+    IReadOnlyList<CourseTemplateModuleDefinition> Modules,
     string DefaultOptionId,
     IReadOnlyList<CourseTemplateOptionDefinition> Options)
 {
@@ -34,7 +35,41 @@ public sealed record CourseTemplateOptionDefinition(
     decimal PlannedCreditValue,
     CourseDescription Description,
     CurriculumPlan CurriculumPlan,
-    IReadOnlyList<CourseTemplateRequirementMapping> RequirementMappings);
+    IReadOnlyList<CourseTemplateRequirementMapping> RequirementMappings,
+    IReadOnlyList<CourseTemplateModuleDefinition> Modules);
+
+public sealed record CourseTemplateModuleDefinition(
+    string ModuleId,
+    int SequenceOrder,
+    string Title,
+    string Description,
+    int? TermNumber,
+    string EstimatedLength,
+    string Instructions,
+    IReadOnlyList<CourseTemplateModuleObjectiveDefinition> LearningObjectives,
+    IReadOnlyList<CourseTemplateModuleResourceDefinition> Resources,
+    IReadOnlyList<CourseTemplateLessonDefinition> Lessons,
+    string AssignmentEvidencePlaceholder,
+    ModuleStatus Status);
+
+public sealed record CourseTemplateModuleObjectiveDefinition(string Text, string LinkedCourseObjective);
+
+public sealed record CourseTemplateModuleResourceDefinition(string Name, string Link, bool IsPhysicalResource);
+
+public sealed record CourseTemplateLessonDefinition(
+    string LessonId,
+    int SequenceOrder,
+    string Title,
+    string IntroductoryText,
+    string LinkedModuleObjective,
+    IReadOnlyList<CourseTemplateLessonResourceDefinition> Resources);
+
+public sealed record CourseTemplateLessonResourceDefinition(
+    string Name,
+    LessonResourceType Type,
+    string Url,
+    bool IsPhysicalResource,
+    string SourceNote);
 
 public sealed record CourseTemplateRequirementMapping(
     string RequirementAreaView,

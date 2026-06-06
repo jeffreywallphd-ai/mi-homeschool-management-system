@@ -17,6 +17,10 @@ public interface IHomeschoolRepository
 
     Task<Student?> GetStudentAsync(CancellationToken cancellationToken = default);
 
+    Task<Student?> GetStudentAsync(Guid studentId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Student>> GetStudentsAsync(CancellationToken cancellationToken = default);
+
     Task SaveStudentAsync(Student student, CancellationToken cancellationToken = default);
 
     Task<SchoolYear?> GetSchoolYearAsync(CancellationToken cancellationToken = default);

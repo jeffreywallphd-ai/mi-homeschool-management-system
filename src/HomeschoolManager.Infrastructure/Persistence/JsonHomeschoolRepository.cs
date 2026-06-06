@@ -64,12 +64,39 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
     public async Task<Student?> GetStudentAsync(CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(cancellationToken);
-        return document.Student;
+        return PrimaryStudent(document);
+    }
+
+    public async Task<Student?> GetStudentAsync(Guid studentId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return StudentsFor(document).FirstOrDefault(student => student.Id == studentId);
+    }
+
+    public async Task<IReadOnlyList<Student>> GetStudentsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return StudentsFor(document);
     }
 
     public async Task SaveStudentAsync(Student student, CancellationToken cancellationToken = default)
     {
-        await MutateAsync(document => document.Student = student, cancellationToken);
+        await MutateAsync(
+            document =>
+            {
+                document.Students.RemoveAll(existing => existing.Id == student.Id);
+                document.Students.Add(student);
+                document.Students = document.Students
+                    .OrderBy(existing => existing.FirstName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(existing => existing.LastName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                document.Student ??= student;
+                if (document.Student.Id == student.Id)
+                {
+                    document.Student = student;
+                }
+            },
+            cancellationToken);
     }
 
     public async Task<SchoolYear?> GetSchoolYearAsync(CancellationToken cancellationToken = default)
@@ -198,6 +225,22 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
         {
             gate.Release();
         }
+    }
+
+    private static Student? PrimaryStudent(AppDataDocument document)
+    {
+        return document.Student ?? StudentsFor(document).FirstOrDefault();
+    }
+
+    private static IReadOnlyList<Student> StudentsFor(AppDataDocument document)
+    {
+        return document.Students
+            .Concat(document.Student is null ? [] : [document.Student])
+            .GroupBy(student => student.Id)
+            .Select(group => group.First())
+            .OrderBy(student => student.FirstName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(student => student.LastName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private async Task SaveUnlockedAsync(AppDataDocument document, CancellationToken cancellationToken)
