@@ -1,0 +1,34 @@
+@rendermode InteractiveServer
+@using HomeschoolManager.Web.Services
+@inject SessionState Session
+@implements IDisposable
+
+<div class="header-actions">
+    @if (Session.IsAuthenticated)
+    {
+        <span class="signed-in-label">@Session.CurrentUser?.DisplayName</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="SignOut">Sign out</button>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.Changed += OnSessionChanged;
+    }
+
+    private void SignOut()
+    {
+        Session.SignOut();
+    }
+
+    private void OnSessionChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+    }
+}

@@ -80,10 +80,16 @@
                                 <td>@course.Title</td>
                                 <td>@DisplayDescription(course.Description)</td>
                                 <td>@DurationText(course.Duration)</td>
-                                <td>@course.PlannedCreditValue</td>
+                                <td class="credits-cell">@CreditText(course.PlannedCreditValue)</td>
                             </tr>
                         }
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="3" scope="row">Total credits</th>
+                            <td class="credits-cell">@CreditText(CourseCreditTotal())</td>
+                        </tr>
+                    </tfoot>
                 </table>
             }
         </section>
@@ -103,7 +109,7 @@
             @if (selectedPack is not null)
             {
                 <p>@selectedPack.Description</p>
-                <p>@selectedTemplateIds.Count selected course(s), @SelectedPackCreditTotal() planned credits</p>
+                <p>@selectedTemplateIds.Count selected course(s), @CreditText(SelectedPackCreditTotal()) planned credits</p>
                 @if (Session.IsParentAdmin)
                 {
                     <div class="course-pack-actions">
@@ -160,7 +166,7 @@
                                         }
                                     </td>
                                     <td class="course-pack-length">@DurationText(SelectedOption(item).Duration)</td>
-                                    <td class="course-pack-credits">@SelectedOption(item).PlannedCreditValue</td>
+                                    <td class="course-pack-credits">@CreditText(SelectedOption(item).PlannedCreditValue)</td>
                                 </tr>
                             }
                         </tbody>
@@ -401,6 +407,16 @@
     private static string DisplayDescription(string description)
     {
         return string.IsNullOrWhiteSpace(description) ? "No description yet" : description;
+    }
+
+    private static string CreditText(decimal credits)
+    {
+        return credits.ToString("0.0##");
+    }
+
+    private decimal CourseCreditTotal()
+    {
+        return courses.Sum(course => course.PlannedCreditValue);
     }
 
     private string DescriptionTextCss(string templateId)

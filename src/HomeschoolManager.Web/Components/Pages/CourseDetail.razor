@@ -19,8 +19,21 @@
 }
 else
 {
-    <h1>@detail.Title</h1>
-    <p>@DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
+    <div class="page-header-bar">
+        <div>
+            <h1>@detail.Title</h1>
+            <p>@DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
+        </div>
+        @if (messages.Count > 0)
+        {
+            <section class="page-header-message" aria-live="polite">
+                @foreach (var message in messages)
+                {
+                    <div class="@message.CssClass">@message.Text</div>
+                }
+            </section>
+        }
+    </div>
 
     @if (!Session.IsParentAdmin)
     {
@@ -33,24 +46,23 @@ else
                 <section class="form-section">
             <h2>Course identity</h2>
             <label class="form-label" for="title">Title <span class="required-marker">*</span></label>
-            <input id="title" class="form-control" @bind="courseForm.Title" />
+            <input id="title" class="form-control" @bind="courseForm.Title" @bind:after="AutoSaveCourse" />
             @ValidationFor("course.Title")
             <label class="form-label" for="duration">Duration <span class="required-marker">*</span></label>
-            <select id="duration" class="form-select" @bind="courseForm.Duration">
+            <select id="duration" class="form-select" @bind="courseForm.Duration" @bind:after="AutoSaveCourse">
                 <option value="@CourseDuration.OneSemester">One semester</option>
                 <option value="@CourseDuration.TwoSemesters">Two semesters</option>
             </select>
             @ValidationFor("course.Duration")
             <label class="form-label" for="credit">Planned credit value <span class="required-marker">*</span></label>
-            <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" />
+            <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" @bind:after="AutoSaveCourse" />
             @ValidationFor("course.PlannedCreditValue")
-            <button class="btn btn-primary mt-2" @onclick="SaveCourse">Save course</button>
                 </section>
 
                 <section class="form-section">
             <h2>Course description</h2>
             <label class="form-label" for="description">Description</label>
-            <textarea id="description" class="form-control" rows="4" @bind="descriptionForm.Description"></textarea>
+            <textarea id="description" class="form-control" rows="4" @bind="descriptionForm.Description" @bind:after="AutoSaveDescription"></textarea>
             <label class="form-label" for="methods-preset">Instructional methods</label>
             <select id="methods-preset" class="form-select" value="@selectedInstructionalMethodId" @onchange="ChangeInstructionalMethod">
                 @foreach (var option in InstructionalMethodOptions)
@@ -59,11 +71,14 @@ else
                 }
             </select>
             <label class="visually-hidden" for="methods">Instructional methods details</label>
-            <textarea id="methods" class="form-control" rows="4" @bind="descriptionForm.InstructionalMethods"></textarea>
+            <textarea id="methods" class="form-control" rows="4" @bind="descriptionForm.InstructionalMethods" @bind:after="AutoSaveDescription"></textarea>
             <label class="form-label" for="topics">Major topics</label>
-            <textarea id="topics" class="form-control" rows="4" @bind="descriptionForm.MajorTopics"></textarea>
+            <textarea id="topics" class="form-control" rows="4" @bind="descriptionForm.MajorTopics" @bind:after="AutoSaveDescription"></textarea>
+                </section>
+
+                <section class="form-section">
             <div class="section-heading-row mt-3">
-                <h3>Texts and resources</h3>
+                <h2>Texts and resources</h2>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleResourceForm">@ResourceToggleText()</button>
             </div>
             @if (descriptionForm.Resources.Count == 0)
@@ -100,7 +115,6 @@ else
                     <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
                 </div>
             }
-            <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
                 </section>
 
                 <section class="form-section">
@@ -113,7 +127,7 @@ else
                 }
             </select>
             <label class="visually-hidden" for="assessment">Assessment methods details</label>
-            <textarea id="assessment" class="form-control" rows="4" @bind="descriptionForm.AssessmentMethods"></textarea>
+            <textarea id="assessment" class="form-control" rows="4" @bind="descriptionForm.AssessmentMethods" @bind:after="AutoSaveDescription"></textarea>
             <label class="form-label" for="grading-preset">Grading basis</label>
             <select id="grading-preset" class="form-select" value="@selectedGradingBasisId" @onchange="ChangeGradingBasis">
                 @foreach (var option in GradingBasisOptions)
@@ -122,8 +136,7 @@ else
                 }
             </select>
             <label class="visually-hidden" for="grading">Grading basis details</label>
-            <textarea id="grading" class="form-control" rows="4" @bind="descriptionForm.GradingBasis"></textarea>
-            <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
+            <textarea id="grading" class="form-control" rows="4" @bind="descriptionForm.GradingBasis" @bind:after="AutoSaveDescription"></textarea>
                 </section>
             </main>
 
@@ -131,7 +144,7 @@ else
                 <section class="form-section">
             <h2>Curriculum plan</h2>
             <label class="form-label" for="goals">Goals</label>
-            <textarea id="goals" class="form-control" rows="4" @bind="planForm.Goals"></textarea>
+            <textarea id="goals" class="form-control" rows="4" @bind="planForm.Goals" @bind:after="AutoSavePlan"></textarea>
             <div class="section-heading-row mt-3">
                 <h3>Learning objectives</h3>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleObjectiveForm">@ObjectiveToggleText()</button>
@@ -162,13 +175,10 @@ else
                     <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
                 </div>
             }
-            <label class="form-label" for="major-resources">Major resources</label>
-            <textarea id="major-resources" class="form-control" rows="4" @bind="planForm.MajorResources"></textarea>
             <label class="form-label" for="sequence">Planned sequence</label>
-            <textarea id="sequence" class="form-control" rows="4" @bind="planForm.PlannedSequence"></textarea>
+            <textarea id="sequence" class="form-control" rows="4" @bind="planForm.PlannedSequence" @bind:after="AutoSavePlan"></textarea>
             <label class="form-label" for="notes">Parent notes</label>
-            <textarea id="notes" class="form-control" rows="4" @bind="planForm.ParentNotes"></textarea>
-            <button class="btn btn-primary mt-2" @onclick="SavePlan">Save curriculum plan</button>
+            <textarea id="notes" class="form-control" rows="4" @bind="planForm.ParentNotes" @bind:after="AutoSavePlan"></textarea>
                 </section>
 
                 <section class="form-section">
@@ -196,16 +206,6 @@ else
                 @CurrentMappingsSection()
             </aside>
         </div>
-    }
-
-    @if (messages.Count > 0)
-    {
-        <section class="message-list" aria-live="polite">
-            @foreach (var message in messages)
-            {
-                <div class="@message.CssClass">@message.Text</div>
-            }
-        </section>
     }
 
     @if (!Session.IsParentAdmin)
@@ -240,21 +240,21 @@ else
         await Refresh();
     }
 
-    private async Task SaveCourse()
+    private async Task AutoSaveCourse()
     {
         if (!ValidateCourse())
         {
             return;
         }
 
-        await Run(() => CourseService.UpdateCourseAsync(
+        await AutoSave(() => CourseService.UpdateCourseAsync(
             ParentUser(),
             new UpdateCourseCommand(CourseId, courseForm.Title, [], courseForm.Duration, courseForm.PlannedCreditValue)));
     }
 
-    private async Task SaveDescription()
+    private async Task AutoSaveDescription()
     {
-        await Run(() => CourseService.SaveCourseDescriptionAsync(
+        await AutoSave(() => CourseService.SaveCourseDescriptionAsync(
             ParentUser(),
             new SaveCourseDescriptionCommand(
                 CourseId,
@@ -266,15 +266,15 @@ else
                 descriptionForm.GradingBasis)));
     }
 
-    private async Task SavePlan()
+    private async Task AutoSavePlan()
     {
-        await Run(() => CourseService.SaveCurriculumPlanAsync(
+        await AutoSave(() => CourseService.SaveCurriculumPlanAsync(
             ParentUser(),
             new SaveCurriculumPlanCommand(
                 CourseId,
                 planForm.Goals,
                 SerializeObjectives(planForm.LearningObjectives),
-                planForm.MajorResources,
+                "",
                 planForm.PlannedSequence,
                 planForm.ParentNotes)));
     }
@@ -315,6 +315,26 @@ else
         messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
     }
 
+    private async Task AutoSave(Func<Task<OperationResult>> action)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var result = await action();
+        if (result.Succeeded)
+        {
+            messages.Add(new PageMessage("Saved.", "alert alert-success"));
+            await UpdateLoadedDetail();
+            return;
+        }
+
+        messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+    }
+
+    private async Task UpdateLoadedDetail()
+    {
+        detail = await CourseService.GetCourseDetailAsync(CourseId);
+    }
+
     private async Task Refresh()
     {
         detail = await CourseService.GetCourseDetailAsync(CourseId);
@@ -346,7 +366,6 @@ else
         {
             Goals = detail.Goals,
             LearningObjectives = ParseObjectives(detail.LearningObjectives).ToList(),
-            MajorResources = detail.MajorResources,
             PlannedSequence = detail.PlannedSequence,
             ParentNotes = detail.ParentNotes
         };
@@ -362,22 +381,25 @@ else
         return duration == CourseDuration.OneSemester ? "one semester" : "two semesters";
     }
 
-    private void ChangeInstructionalMethod(ChangeEventArgs eventArgs)
+    private async Task ChangeInstructionalMethod(ChangeEventArgs eventArgs)
     {
         selectedInstructionalMethodId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(InstructionalMethodOptions, selectedInstructionalMethodId, value => descriptionForm.InstructionalMethods = value);
+        await AutoSaveDescription();
     }
 
-    private void ChangeAssessmentMethod(ChangeEventArgs eventArgs)
+    private async Task ChangeAssessmentMethod(ChangeEventArgs eventArgs)
     {
         selectedAssessmentMethodId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(AssessmentMethodOptions, selectedAssessmentMethodId, value => descriptionForm.AssessmentMethods = value);
+        await AutoSaveDescription();
     }
 
-    private void ChangeGradingBasis(ChangeEventArgs eventArgs)
+    private async Task ChangeGradingBasis(ChangeEventArgs eventArgs)
     {
         selectedGradingBasisId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(GradingBasisOptions, selectedGradingBasisId, value => descriptionForm.GradingBasis = value);
+        await AutoSaveDescription();
     }
 
     private void ApplyDefaultPresetsForBlankFields()
@@ -467,7 +489,7 @@ else
         descriptionForm.ShowResourceForm = !descriptionForm.ShowResourceForm;
     }
 
-    private void AddResource()
+    private async Task AddResource()
     {
         var name = descriptionForm.NewResourceName.Trim();
         var link = descriptionForm.NewResourceLink.Trim();
@@ -479,13 +501,15 @@ else
         descriptionForm.Resources.Add(new ResourceFormItem(name, link));
         descriptionForm.NewResourceName = "";
         descriptionForm.NewResourceLink = "";
+        await AutoSaveDescription();
     }
 
-    private void RemoveResource(int index)
+    private async Task RemoveResource(int index)
     {
         if (index >= 0 && index < descriptionForm.Resources.Count)
         {
             descriptionForm.Resources.RemoveAt(index);
+            await AutoSaveDescription();
         }
     }
 
@@ -499,7 +523,7 @@ else
         planForm.ShowObjectiveForm = !planForm.ShowObjectiveForm;
     }
 
-    private void AddObjective()
+    private async Task AddObjective()
     {
         var text = planForm.NewObjectiveText.Trim();
         if (string.IsNullOrWhiteSpace(text))
@@ -509,13 +533,15 @@ else
 
         planForm.LearningObjectives.Add(new ObjectiveFormItem(text));
         planForm.NewObjectiveText = "";
+        await AutoSavePlan();
     }
 
-    private void RemoveObjective(int index)
+    private async Task RemoveObjective(int index)
     {
         if (index >= 0 && index < planForm.LearningObjectives.Count)
         {
             planForm.LearningObjectives.RemoveAt(index);
+            await AutoSavePlan();
         }
     }
 
@@ -672,7 +698,6 @@ else
         public List<ObjectiveFormItem> LearningObjectives { get; set; } = [];
         public bool ShowObjectiveForm { get; set; }
         public string NewObjectiveText { get; set; } = "";
-        public string MajorResources { get; set; } = "";
         public string PlannedSequence { get; set; } = "";
         public string ParentNotes { get; set; } = "";
     }

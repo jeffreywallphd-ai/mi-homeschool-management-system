@@ -46,10 +46,39 @@ a, .btn-link {
     max-width: 760px;
 }
 
+.page-header-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid #d7d7d7;
+}
+
+.page-header-bar h1 {
+    margin-bottom: 0.25rem;
+}
+
+.page-header-bar p {
+    margin-bottom: 0;
+}
+
+.page-header-message {
+    min-width: 12rem;
+    max-width: 22rem;
+}
+
+.page-header-message .alert {
+    margin-bottom: 0;
+    padding: 0.5rem 0.75rem;
+}
+
 .content-workbench {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
-    gap: 1.75rem;
+    column-gap: 4rem;
+    row-gap: 1.75rem;
     align-items: start;
 }
 
@@ -60,8 +89,11 @@ a, .btn-link {
 
 .workbench-main .status-panel,
 .workbench-main .form-section,
-.workbench-support .status-panel {
+.workbench-support .status-panel,
+.workbench-support .form-section,
+.workbench-support .support-card {
     max-width: none;
+    width: 100%;
 }
 
 .section-heading-row,
@@ -89,8 +121,25 @@ a, .btn-link {
     cursor: pointer;
 }
 
-.clickable-row:hover {
-    background-color: #eaf3ff;
+.credits-cell,
+.course-pack-credits {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.table tfoot th,
+.table tfoot td {
+    border-top: 2px solid #d7d7d7;
+    font-weight: 700;
+}
+
+.table tbody tr.clickable-row > * {
+    transition: background-color 0.12s ease-in-out;
+}
+
+.table tbody tr.clickable-row:hover > * {
+    background-color: #d9eaff !important;
+    cursor: pointer;
 }
 
 .course-detail-workbench {
@@ -208,6 +257,15 @@ a, .btn-link {
 @media (max-width: 900px) {
     .content-workbench {
         grid-template-columns: 1fr;
+    }
+
+    .page-header-bar {
+        flex-direction: column;
+    }
+
+    .page-header-message {
+        max-width: none;
+        width: 100%;
     }
 }
 

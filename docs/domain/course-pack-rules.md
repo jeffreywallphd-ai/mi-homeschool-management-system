@@ -31,7 +31,7 @@ A course pack must define:
 - Recommended texts and resources as one item per line, using `Name | URL` when a viewable link is available.
 - Assessment methods.
 - Grading basis.
-- Curriculum plan fields: goals, learning objectives, major resources, planned sequence, and parent notes.
+- Curriculum plan fields: goals, learning objectives, planned sequence, and parent notes.
 - Optional requirement mappings by view, area name, coverage level, and notes.
 - Optional course choices for a template slot, with stable option ids and one default option.
 
@@ -71,6 +71,10 @@ Installing a pack is reserved for a later feature where the parent adds a pack c
 
 The default Michigan pack should represent a transcript-recognizable planning starter aligned with common Michigan high-school credit categories and Michigan homeschool subject areas.
 
+The default Michigan pack should total 8 planned credits and keep history separate from government/civics/economics.
+
+Default government/civics and U.S. history options should map U.S. Constitution and Michigan Constitution coverage from the Michigan seed.
+
 The pack must not claim that imported courses satisfy graduation requirements, legal requirements, college admission requirements, or transcript acceptance standards.
 
 ## Course Description Rule
@@ -78,3 +82,5 @@ The pack must not claim that imported courses satisfy graduation requirements, l
 Standard course titles are allowed, but each course must support a distinct course description so the parent can record the actual texts, methods, topics, assessments, and differentiating details.
 
 Texts/resources and learning objectives should be edited as itemized lists in the UI even when their compact storage format remains newline-based.
+
+Major resources should not be duplicated under curriculum plan when texts/resources already capture course materials.

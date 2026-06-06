@@ -51,25 +51,28 @@ public static class DefaultCoursePacks
                     [
                         Option("government-economics", "Government and Economics", ["Social Studies", "Civics", "Economics"], CourseDuration.TwoSemesters, 1,
                             "A senior social studies course combining American government, citizenship, civic participation, economic reasoning, and personal or applied economics.",
-                            [Map("Statutory", "Civics", CoverageLevel.Primary)]),
+                            [Map("Statutory", "Civics", CoverageLevel.Primary), Map("MDE Summary", "U.S. Constitution", CoverageLevel.Primary), Map("MDE Summary", "Michigan Constitution", CoverageLevel.Primary)]),
                         Option("government-civics", "Government and Civics", ["Social Studies", "Civics"], CourseDuration.OneSemester, 0.5m,
                             "A one-semester government and civics course covering constitutional principles, citizenship, rights, responsibilities, and civic participation.",
-                            [Map("Statutory", "Civics", CoverageLevel.Primary)]),
+                            [Map("Statutory", "Civics", CoverageLevel.Primary), Map("MDE Summary", "U.S. Constitution", CoverageLevel.Primary), Map("MDE Summary", "Michigan Constitution", CoverageLevel.Primary)]),
                         Option("economics", "Economics", ["Social Studies", "Economics"], CourseDuration.OneSemester, 0.5m,
                             "A one-semester economics course covering personal, microeconomic, macroeconomic, or applied economic concepts.",
                             []),
-                        Option("us-history", "U.S. History", ["Social Studies", "History"], CourseDuration.TwoSemesters, 1,
-                            "A United States history course covering major eras, historical evidence, civic context, and continuity and change over time.",
-                            [Map("Statutory", "History", CoverageLevel.Primary)]),
-                        Option("world-history", "World History", ["Social Studies", "History"], CourseDuration.TwoSemesters, 1,
-                            "A world history course covering global eras, geography, culture, conflict, exchange, and historical inquiry.",
-                            [Map("Statutory", "History", CoverageLevel.Primary)]),
                         Option("psychology", "Psychology", ["Social Studies"], CourseDuration.OneSemester, 0.5m,
                             "A social science elective covering behavior, cognition, development, research methods, and applications of psychological concepts.",
                             []),
                         Option("sociology", "Sociology", ["Social Studies"], CourseDuration.OneSemester, 0.5m,
                             "A social science elective covering culture, institutions, groups, social change, and sociological perspectives.",
                             [])
+                    ]),
+                Choice("history", "History", "us-history-geography",
+                    [
+                        UnitedStatesHistoryOption("us-history-geography", "U.S. History and Geography", "A history course covering major eras in United States history, geographic context, civic development, primary-source interpretation, and continuity and change over time."),
+                        HistoryOption("world-history-geography", "World History and Geography", "A history course covering global eras, geography, culture, conflict, exchange, migration, and historical inquiry."),
+                        HistoryOption("modern-world-history", "Modern World History", "A history course emphasizing global change from the age of revolutions through the contemporary era, including nationalism, imperialism, war, decolonization, globalization, and human rights."),
+                        UnitedStatesHistoryOption("ap-us-history", "Advanced U.S. History", "An advanced history course emphasizing college-preparatory reading, source analysis, argument writing, and major themes in United States history."),
+                        HistoryOption("ap-world-history", "Advanced World History", "An advanced history course emphasizing global historical processes, comparison, causation, continuity and change, and evidence-based historical argument."),
+                        HistoryOption("european-history", "European History", "A history course covering major European political, cultural, intellectual, economic, and social developments in regional and global context.")
                     ]),
                 Semester("personal-finance", "Personal Finance", ["Personal Finance", "Mathematics"], 0.5m,
                     "A one-semester personal finance course covering budgeting, banking, credit, insurance, taxes, and long-term planning.",
@@ -185,6 +188,30 @@ public static class DefaultCoursePacks
             [Map("Statutory", "Science", CoverageLevel.Primary)]);
     }
 
+    private static CourseTemplateOptionDefinition HistoryOption(string id, string title, string description)
+    {
+        return Option(
+            id,
+            title,
+            ["History", "Social Studies"],
+            CourseDuration.TwoSemesters,
+            1,
+            description,
+            [Map("Statutory", "History", CoverageLevel.Primary)]);
+    }
+
+    private static CourseTemplateOptionDefinition UnitedStatesHistoryOption(string id, string title, string description)
+    {
+        return Option(
+            id,
+            title,
+            ["History", "Social Studies"],
+            CourseDuration.TwoSemesters,
+            1,
+            description,
+            [Map("Statutory", "History", CoverageLevel.Primary), Map("MDE Summary", "U.S. Constitution", CoverageLevel.Secondary), Map("MDE Summary", "Michigan Constitution", CoverageLevel.Secondary)]);
+    }
+
     private static CourseTemplateOptionDefinition ArtsOption(string id, string title, string description)
     {
         return Option(
@@ -257,18 +284,241 @@ public static class DefaultCoursePacks
         var subjectText = string.Join(", ", subjects);
         return new CurriculumPlan(
             $"Build a transcript-ready understanding of {title} through clear instruction, documented practice, applied work, and parent-reviewed evidence.",
-            string.Join(Environment.NewLine,
-            [
-                $"Explain major concepts and vocabulary in {title}.",
-                "Apply course skills in written, oral, practical, creative, or problem-based work.",
-                "Use appropriate texts, resources, tools, and evidence to support conclusions.",
-                "Produce portfolio-ready evidence of learning, revision, and reflection."
-            ]),
-            TextsAndResourcesFor(title),
+            LearningObjectivesFor(title),
+            "",
             duration == CourseDuration.TwoSemesters
                 ? $"Semester 1: foundations, core vocabulary, guided practice, and early projects. Semester 2: advanced topics, independent application, review, and a final portfolio or capstone evidence set for {subjectText}."
                 : $"Weeks 1-4: foundations and vocabulary. Weeks 5-10: guided practice and applied work. Weeks 11-16: independent application, review, and final evidence set for {subjectText}.",
             "Imported pack plan. Parent should customize resources, pacing, assignments, assessment evidence, and grading notes to match the actual course.");
+    }
+
+    private static string LearningObjectivesFor(string title)
+    {
+        return title switch
+        {
+            "English Language Arts 12" => Lines(
+                "Analyze literary works for theme, structure, style, historical context, and use of textual evidence.",
+                "Write clear analytical, argumentative, narrative, and research-based pieces with revision and source documentation.",
+                "Apply grammar, usage, vocabulary, spelling, and editing conventions in polished written work.",
+                "Discuss and present interpretations of texts using evidence and respectful academic conversation."),
+            "Government and Economics" => Lines(
+                "Explain constitutional principles, rights, responsibilities, branches of government, and federalism.",
+                "Evaluate civic issues, public policy questions, and citizenship responsibilities using evidence.",
+                "Apply economic reasoning to scarcity, incentives, markets, government policy, and personal financial decisions.",
+                "Connect civic participation and economic decision-making to current events and household or community choices."),
+            "Government and Civics" => Lines(
+                "Explain the philosophical and constitutional foundations of American government.",
+                "Describe the structure and powers of local, state, and federal government.",
+                "Evaluate rights, liberties, responsibilities, elections, public policy, and civic participation.",
+                "Use civic evidence to support a reasoned position on a public issue."),
+            "Economics" => Lines(
+                "Apply scarcity, incentives, opportunity cost, supply, demand, and market concepts to real decisions.",
+                "Explain how households, firms, governments, and financial institutions interact in the economy.",
+                "Interpret economic indicators and connect them to national and international economic conditions.",
+                "Use economic reasoning to evaluate personal, public, and business choices."),
+            "U.S. History and Geography" or "U.S. History" => Lines(
+                "Analyze major developments in United States history using chronology, geography, and historical evidence.",
+                "Interpret primary and secondary sources for perspective, reliability, context, and argument.",
+                "Explain how constitutional change, reform movements, conflict, migration, industry, and civil rights shaped the United States.",
+                "Write evidence-based historical explanations about continuity, change, cause, and consequence."),
+            "World History and Geography" or "World History" => Lines(
+                "Analyze major global eras using geography, chronology, and historical inquiry.",
+                "Compare societies, belief systems, trade networks, conflicts, revolutions, and migrations across regions.",
+                "Interpret primary and secondary sources for perspective, context, and evidence.",
+                "Write evidence-based historical explanations about global continuity, change, and interconnection."),
+            "Modern World History" => Lines(
+                "Explain major modern global developments including revolutions, industrialization, imperialism, nationalism, world wars, decolonization, and globalization.",
+                "Analyze maps, data, and historical sources to explain modern global change.",
+                "Compare political, economic, and social transformations across world regions.",
+                "Construct evidence-based arguments about human rights, conflict, migration, technology, and global interdependence."),
+            "Advanced U.S. History" => Lines(
+                "Analyze United States history through college-preparatory themes such as identity, politics, work, migration, culture, and America in the world.",
+                "Evaluate complex primary and secondary sources for argument, sourcing, corroboration, and historical context.",
+                "Write thesis-driven historical arguments using specific evidence and historical reasoning.",
+                "Connect major eras of United States history to enduring civic, social, economic, and geographic questions."),
+            "Advanced World History" => Lines(
+                "Analyze global historical processes through comparison, causation, continuity, and change over time.",
+                "Evaluate primary and secondary sources across cultures and regions for evidence and perspective.",
+                "Write thesis-driven historical arguments about global patterns, interactions, and transformations.",
+                "Explain how trade, belief systems, states, technology, migration, conflict, and environment shaped world history."),
+            "European History" => Lines(
+                "Explain major European political, cultural, intellectual, religious, economic, and social developments.",
+                "Analyze European history in regional, global, and chronological context.",
+                "Interpret historical sources for perspective, context, argument, and evidence.",
+                "Write evidence-based explanations about continuity, change, causation, and comparison in European history."),
+            "Personal Finance" => Lines(
+                "Build and revise a budget using income, expenses, saving goals, taxes, and tradeoffs.",
+                "Explain banking, credit, debt, insurance, investing, and consumer-protection concepts.",
+                "Compare financial products and decisions using risk, cost, benefit, and long-term impact.",
+                "Apply mathematical reasoning to practical financial scenarios."),
+            "Math 12" => Lines(
+                "Use algebra, functions, statistics, and proportional reasoning to solve practical senior-level problems.",
+                "Model real-world situations with equations, graphs, tables, and written explanations.",
+                "Interpret quantitative information in financial, civic, scientific, and household contexts.",
+                "Communicate solution strategies and check answers for reasonableness."),
+            "Pre-Algebra" => Lines(
+                "Use operations with whole numbers, fractions, decimals, integers, ratios, and proportions accurately.",
+                "Translate word problems into expressions, equations, diagrams, or tables.",
+                "Solve one-step and multi-step equations and inequalities with clear reasoning.",
+                "Apply number sense and proportional reasoning to measurement, geometry, and everyday problems."),
+            "Algebra I" => Lines(
+                "Solve and graph linear equations, inequalities, and systems in mathematical and applied contexts.",
+                "Represent functions with tables, graphs, equations, and verbal descriptions.",
+                "Use exponents, polynomials, factoring foundations, and data analysis to solve problems.",
+                "Explain algebraic reasoning and interpret solutions in context."),
+            "Geometry" => Lines(
+                "Use definitions, postulates, and theorems to reason about congruence, similarity, circles, and transformations.",
+                "Construct logical arguments and proofs using diagrams, coordinates, and written explanations.",
+                "Solve measurement problems involving area, volume, right triangles, and geometric modeling.",
+                "Apply coordinate geometry and transformations to analyze figures and real-world designs."),
+            "Algebra II" => Lines(
+                "Analyze linear, quadratic, polynomial, rational, radical, exponential, and logarithmic functions.",
+                "Solve systems, equations, inequalities, and modeling problems with appropriate algebraic methods.",
+                "Use sequences, series, complex numbers, and function transformations in advanced problem solving.",
+                "Explain how algebraic models represent patterns, data, and real-world relationships."),
+            "Trigonometry" => Lines(
+                "Use right-triangle and unit-circle trigonometry to solve mathematical and applied problems.",
+                "Graph and analyze trigonometric functions, inverse functions, and transformations.",
+                "Apply identities, vectors, and trigonometric equations with accurate notation and reasoning.",
+                "Model periodic and geometric situations using trigonometric relationships."),
+            "Precalculus" => Lines(
+                "Analyze advanced functions including polynomial, rational, exponential, logarithmic, and trigonometric models.",
+                "Use trigonometry, analytic geometry, sequences, and limits concepts to prepare for calculus.",
+                "Model and interpret quantitative relationships with graphs, equations, technology, and written reasoning.",
+                "Solve multi-step problems and explain how function behavior supports conclusions."),
+            "Calculus I" => Lines(
+                "Evaluate limits and explain continuity, rates of change, and accumulation.",
+                "Compute derivatives and use them to analyze motion, optimization, graph behavior, and related rates.",
+                "Compute definite and indefinite integrals and connect them to area and accumulation.",
+                "Use the fundamental theorem of calculus to connect differentiation and integration."),
+            "Calculus II" => Lines(
+                "Apply integration techniques to solve area, volume, work, and other accumulation problems.",
+                "Analyze sequences and series for convergence, approximation, and representation of functions.",
+                "Use parametric, polar, or differential-equation concepts where appropriate to extend calculus reasoning.",
+                "Explain multi-step calculus solutions with accurate notation and interpretation."),
+            "Calculus III" => Lines(
+                "Use vectors, three-dimensional coordinates, and multivariable functions to model space and change.",
+                "Compute and interpret partial derivatives, gradients, and optimization in several variables.",
+                "Evaluate multiple integrals and connect them to area, volume, mass, or accumulation.",
+                "Explain multivariable calculus concepts with diagrams, notation, and contextual interpretation."),
+            "Physics" => Lines(
+                "Model motion, forces, energy, momentum, waves, electricity, and magnetism using diagrams, equations, and evidence.",
+                "Use labs, simulations, or demonstrations to collect and interpret physical data.",
+                "Apply conservation laws and scientific reasoning to explain physical systems.",
+                "Communicate physics conclusions using units, graphs, calculations, and written explanations."),
+            "Environmental Science" => Lines(
+                "Explain ecosystem interactions, biodiversity, resource use, pollution, conservation, and human environmental impact.",
+                "Use field observations, data, maps, or case studies to evaluate environmental questions.",
+                "Analyze tradeoffs in environmental decisions using scientific evidence.",
+                "Connect local observations to broader ecological, climate, and resource patterns."),
+            "Anatomy and Physiology" => Lines(
+                "Explain the structure and function of major human body systems.",
+                "Connect cells, tissues, organs, and systems to health, homeostasis, and disease prevention.",
+                "Use diagrams, models, observations, or labs to support anatomical and physiological explanations.",
+                "Apply body-system knowledge to practical health and wellness scenarios."),
+            "Chemistry" => Lines(
+                "Explain matter, atomic structure, periodic trends, bonding, reactions, stoichiometry, and solutions.",
+                "Use chemical equations, models, calculations, and lab or simulation evidence to support claims.",
+                "Apply conservation of matter and particle-level reasoning to chemical changes.",
+                "Communicate chemistry results with accurate units, formulas, vocabulary, and safety awareness."),
+            "Advanced Biology" => Lines(
+                "Analyze cells, genetics, evolution, ecology, anatomy, physiology, or biotechnology using biological evidence.",
+                "Use models, microscopy, fieldwork, simulations, or data to explain living systems.",
+                "Evaluate biological claims using source quality, data patterns, and scientific reasoning.",
+                "Connect biological concepts to health, environment, technology, or ethical questions."),
+            "Earth and Space Science" => Lines(
+                "Explain earth systems, geology, weather, climate, astronomy, and natural hazards using scientific models.",
+                "Interpret maps, data, observations, and diagrams related to Earth and space processes.",
+                "Analyze interactions among atmosphere, hydrosphere, geosphere, biosphere, and human activity.",
+                "Use evidence to explain natural processes and their effects on local and global systems."),
+            "Forensic Science" => Lines(
+                "Apply observation, measurement, biology, chemistry, and physics concepts to evidence analysis.",
+                "Document investigations with accurate notes, data, reasoning, and chain-of-custody awareness.",
+                "Evaluate case evidence for reliability, limits, and scientific support.",
+                "Communicate forensic conclusions clearly while distinguishing evidence from inference."),
+            "Astronomy" => Lines(
+                "Explain solar system, stellar, galactic, and cosmological concepts using models and evidence.",
+                "Use observation logs, simulations, spectra, diagrams, or data to study astronomical objects.",
+                "Analyze how gravity, light, scale, and motion shape astronomical systems.",
+                "Communicate astronomy explanations with attention to evidence, uncertainty, and scientific models."),
+            "Physical Education and Health" => Lines(
+                "Create and document a personal fitness and wellness plan.",
+                "Explain nutrition, mental health, safety, disease prevention, and substance-awareness concepts.",
+                "Track physical activity and reflect on habits that support lifelong wellness.",
+                "Apply health information to responsible personal decision-making."),
+            "Experiential Capstone" => Lines(
+                "Define a focused question, problem, or project goal and revise it through feedback.",
+                "Integrate research, applied work, documentation, and reflection into a coherent project record.",
+                "Produce a final product, presentation, portfolio, or demonstration for parent review.",
+                "Explain how the capstone connects academic learning to practical experience."),
+            "Career Exploration" => Lines(
+                "Research career pathways using labor-market, education, skill, and workplace information.",
+                "Compare career options using interests, aptitudes, income, training, lifestyle, and values.",
+                "Create planning artifacts such as a resume, interview notes, pathway comparison, or transition plan.",
+                "Reflect on practical experiences, conversations, or observations related to career readiness."),
+            "Computer Science" => Lines(
+                "Write, test, debug, and explain programs using core programming concepts.",
+                "Use algorithms, decomposition, variables, control flow, data, and functions to solve problems.",
+                "Document computing projects with clear design choices, revisions, and evidence of testing.",
+                "Explain ethical, practical, or technical implications of digital systems."),
+            "Creative Writing" => Lines(
+                "Draft, revise, and polish original creative work in selected genres.",
+                "Use literary techniques such as imagery, voice, structure, dialogue, character, setting, and pacing.",
+                "Participate in critique or reflection to improve clarity, craft, and audience impact.",
+                "Build a writing portfolio that documents revision and finished pieces."),
+            "Entrepreneurship" => Lines(
+                "Develop a business or venture concept using customer needs, value proposition, costs, and revenue.",
+                "Create planning artifacts such as a budget, market notes, pitch, prototype, or operations plan.",
+                "Evaluate entrepreneurial decisions using risk, ethics, feasibility, and evidence from feedback.",
+                "Reflect on practical venture work, revisions, and lessons learned."),
+            "Independent Research" => Lines(
+                "Develop a focused research question and revise it through source review and feedback.",
+                "Locate, evaluate, cite, and synthesize credible sources.",
+                "Produce a research paper, presentation, or project using clear organization and evidence.",
+                "Document research process, revisions, findings, and limitations."),
+            "College and Career Readiness" => Lines(
+                "Create a postsecondary transition plan that addresses goals, applications, finances, and timelines.",
+                "Compare college, training, work, or service pathways using credible planning resources.",
+                "Practice communication, study systems, organization, and self-advocacy skills.",
+                "Prepare records, checklists, reflections, or applications that support the transition plan."),
+            "Work-Based Learning" => Lines(
+                "Document workplace responsibilities, safety expectations, employability skills, and supervisor or mentor feedback.",
+                "Connect work tasks to academic, technical, communication, or problem-solving skills.",
+                "Reflect on professional habits, growth, challenges, and career implications.",
+                "Compile logs, artifacts, evaluations, or demonstrations as evidence of applied learning."),
+            _ when title.Contains("Spanish", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("French", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("German", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Chinese", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Japanese", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Arabic", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Italian", StringComparison.OrdinalIgnoreCase) ||
+                title == "American Sign Language" ||
+                title == "Latin" => Lines(
+                    $"Use {title} vocabulary and grammar in interpretive, interpersonal, and presentational communication.",
+                    $"Read, view, listen to, or sign {title} materials for meaning, context, and cultural understanding.",
+                    $"Produce spoken, signed, or written {title} communication appropriate to the student's level.",
+                    $"Compare cultures connected with {title} study with respectful attention to context."),
+            _ when title.Contains("Art", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Drawing", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Painting", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Photography", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Design", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Ceramics", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Theater", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Choir", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Music", StringComparison.OrdinalIgnoreCase) ||
+                title.Contains("Band", StringComparison.OrdinalIgnoreCase) => Lines(
+                    $"Apply {title} techniques, vocabulary, tools, and creative or performance processes.",
+                    $"Develop, revise, and present {title} work as portfolio or performance evidence.",
+                    $"Analyze artistic choices, examples, critique, and reflection using {title} vocabulary.",
+                    $"Document growth, practice, revision, and finished work in {title}."),
+            _ => Lines(
+                $"Explain important concepts, vocabulary, and methods in {title}.",
+                "Complete documented assignments or projects that show growth and understanding.",
+                "Use appropriate sources, tools, and evidence for the course.",
+                "Prepare portfolio-ready evidence for parent review.")
+        };
     }
 
     private static string MajorTopicsFor(string title)
@@ -297,8 +547,14 @@ public static class DefaultCoursePacks
             "Government and Economics" => "Constitutional principles; branches of government; citizenship; civil rights; elections; economic decision-making; markets; personal economics.",
             "Government and Civics" => "Constitutional principles; citizenship; rights and responsibilities; civic participation; public policy; government institutions.",
             "Economics" => "Scarcity; incentives; markets; supply and demand; personal finance connections; macroeconomic indicators; economic decision-making.",
+            "U.S. History and Geography" => "Historical inquiry; geography; constitutional development; industrialization; reform; conflict; civil rights; modern America; primary-source evidence.",
             "U.S. History" => "Founding; constitutional development; reform; conflict; industrialization; civil rights; modern America; historical evidence.",
+            "World History and Geography" => "Historical inquiry; geography; global exchange; belief systems; revolutions; imperialism; conflict; globalization; primary-source evidence.",
             "World History" => "Ancient and classical societies; global exchange; belief systems; revolutions; conflict; globalization; historical inquiry.",
+            "Modern World History" => "Revolutions; industrialization; nationalism; imperialism; world wars; decolonization; globalization; human rights; migration; international systems.",
+            "Advanced U.S. History" => "Historical argument; source analysis; national identity; politics and power; work and exchange; migration; civil rights; America in the world.",
+            "Advanced World History" => "Global processes; comparison; causation; continuity and change; trade networks; states; belief systems; migration; conflict; environment.",
+            "European History" => "Renaissance; Reformation; absolutism; Enlightenment; revolution; industrialization; nationalism; war; integration; European global influence.",
             "Psychology" => "Research methods; brain and behavior; development; learning; cognition; personality; social psychology; mental health literacy.",
             "Sociology" => "Culture; groups; socialization; institutions; inequality; social change; research methods; community analysis.",
             "Personal Finance" => "Budgeting; saving; banking; credit; debt; insurance; taxes; investing; career income; long-term planning.",
@@ -353,8 +609,14 @@ public static class DefaultCoursePacks
             "Government and Economics" => Lines("iCivics | https://www.icivics.org/", "National Constitution Center | https://constitutioncenter.org/", "OpenStax American Government 3e | https://openstax.org/details/books/american-government-3e/", "CFPB youth financial education | https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/"),
             "Government and Civics" => Lines("iCivics | https://www.icivics.org/", "National Constitution Center | https://constitutioncenter.org/", "OpenStax American Government 3e | https://openstax.org/details/books/american-government-3e/", "Local and state government sources"),
             "Economics" => Lines("OpenStax Principles of Economics 3e | https://openstax.org/details/books/principles-economics-3e", "Khan Academy economics | https://www.khanacademy.org/economics-finance-domain", "CFPB consumer tools | https://www.consumerfinance.gov/consumer-tools/"),
+            "U.S. History and Geography" => Lines("OpenStax U.S. History | https://openstax.org/details/books/us-history", "Library of Congress primary sources | https://www.loc.gov/", "National Archives DocsTeach | https://www.docsteach.org/", "Historical maps and geography resources"),
             "U.S. History" => Lines("OpenStax U.S. History | https://openstax.org/details/books/us-history", "Library of Congress primary sources | https://www.loc.gov/", "National Archives DocsTeach | https://www.docsteach.org/"),
+            "World History and Geography" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "World History for Us All | https://whfua.history.ucla.edu/", "OER Project | https://www.oerproject.com/", "Historical maps and primary source excerpts"),
             "World History" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "World History for Us All | https://whfua.history.ucla.edu/", "OER Project | https://www.oerproject.com/", "Primary source excerpts"),
+            "Modern World History" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "OER Project | https://www.oerproject.com/", "United Nations human rights resources | https://www.un.org/en/about-us/universal-declaration-of-human-rights", "Primary source excerpts and historical maps"),
+            "Advanced U.S. History" => Lines("OpenStax U.S. History | https://openstax.org/details/books/us-history", "Library of Congress primary sources | https://www.loc.gov/", "National Archives DocsTeach | https://www.docsteach.org/", "College Board AP U.S. History course overview | https://apcentral.collegeboard.org/courses/ap-united-states-history"),
+            "Advanced World History" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "OER Project | https://www.oerproject.com/", "World History for Us All | https://whfua.history.ucla.edu/", "College Board AP World History course overview | https://apcentral.collegeboard.org/courses/ap-world-history"),
+            "European History" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "EuroDocs primary sources | https://eudocs.lib.byu.edu/index.php/Main_Page", "College Board AP European History course overview | https://apcentral.collegeboard.org/courses/ap-european-history", "Museum and archive primary sources"),
             "Psychology" => Lines("OpenStax Psychology 2e | https://openstax.org/details/books/psychology-2e", "APA high school psychology resources | https://www.apa.org/education-career/k12", "Teacher-selected case studies and reflection prompts"),
             "Sociology" => Lines("OpenStax Introduction to Sociology 3e | https://openstax.org/details/books/introduction-sociology-3e", "U.S. Census data | https://www.census.gov/", "Teacher-selected articles and observation activities"),
             "Personal Finance" => Lines("CFPB youth financial education | https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/", "FDIC Money Smart | https://www.fdic.gov/resources/consumers/money-smart", "Next Gen Personal Finance | https://www.ngpf.org/", "Practical household budgeting exercises"),

@@ -35,9 +35,10 @@ A curriculum plan may include:
 - Goals or learning objectives.
 - Major topics.
 - Sequence of lessons.
-- Texts and resources.
 - Assignments and assessments.
 - Parent notes.
+
+Texts and resources belong in the course description/resources section and should not be duplicated as major resources in the curriculum plan.
 
 ## Requirement Mapping
 

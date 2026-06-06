@@ -106,10 +106,14 @@ var tests = new List<(string Name, Func<Task> Test)>
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.LearningObjectives), $"Missing learning objectives for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine).Length >= 3, $"Learning objectives should be separated for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(option.CurriculumPlan.LearningObjectives.Contains("Upon completion", StringComparison.OrdinalIgnoreCase), $"Learning objectives should finish the standard sentence without repeating it for {template.TemplateId}/{option.OptionId}.");
-                AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.MajorResources), $"Missing major resources for {template.TemplateId}/{option.OptionId}.");
+                AssertFalse(option.CurriculumPlan.LearningObjectives.Contains("course-level", StringComparison.OrdinalIgnoreCase), $"Learning objectives should be course-specific for {template.TemplateId}/{option.OptionId}.");
+                AssertFalse(option.CurriculumPlan.LearningObjectives.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase), $"Learning objectives should avoid generic recordkeeping language for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(string.IsNullOrWhiteSpace(option.CurriculumPlan.MajorResources), $"Major resources should be retired for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.PlannedSequence), $"Missing planned sequence for {template.TemplateId}/{option.OptionId}.");
             }
         }
+
+        AssertEqual(8m, pack.Courses.Sum(course => course.DefaultOption.PlannedCreditValue), "Default pack should total eight planned credits.");
 
         return Task.CompletedTask;
     }),
@@ -292,6 +296,9 @@ var tests = new List<(string Name, Func<Task> Test)>
         var government = courses.First(course => course.Title == "Government and Economics");
         AssertEqual((int)CourseDuration.TwoSemesters, (int)government.Duration, "Government and Economics should be the two-semester default social studies course.");
 
+        var history = courses.First(course => course.Title == "U.S. History and Geography");
+        AssertEqual((int)CourseDuration.TwoSemesters, (int)history.Duration, "Default history should be a two-semester course.");
+
         var math = courses.First(course => course.Title == "Precalculus");
         AssertTrue(math.Description.Contains("college-preparatory", StringComparison.OrdinalIgnoreCase), "Default math should be Precalculus with its description.");
 
@@ -308,6 +315,8 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual("Civics", coverage.First().Name, "Statutory coverage groups should be listed first.");
         AssertTrue(coverage.Any(item => item.Name == "Reading" && item.Source == "Statutory" && item.IsMapped), "Reading should be mapped through the statutory English subject rows.");
         AssertTrue(coverage.Any(item => item.Name == "Writing" && item.Source == "Statutory" && item.IsMapped), "Writing should be mapped through the statutory English subject rows.");
+        AssertTrue(coverage.Any(item => item.Name == "U.S. Constitution" && item.Source == "MDE Summary" && item.IsMapped), "U.S. Constitution should be mapped by the default government and U.S. history courses.");
+        AssertTrue(coverage.Any(item => item.Name == "Michigan Constitution" && item.Source == "MDE Summary" && item.IsMapped), "Michigan Constitution should be mapped by the default government and U.S. history courses.");
         var mathematics = coverage.First(item => item.Name == "Mathematics");
         AssertTrue(mathematics.Source.Contains("Statutory", StringComparison.Ordinal), "Mathematics should include statutory source.");
         AssertEqual(mathematics.CourseTitles.Count, mathematics.CourseTitles.Distinct().Count(), "Coverage summary should not duplicate course titles.");
@@ -425,6 +434,68 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         AssertFalse(detail.Mappings.Any(mapping => mapping.RequirementAreaName == "English Language Arts"), "Stale ELA mappings should be removed from imported course details.");
     })),
+    ("Imported government and U.S. history courses backfill constitution mappings", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var requirementService = new RequirementService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        AssertTrue((await requirementService.SeedMichiganAsync(parent)).Succeeded, "Michigan seed failed.");
+
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var areas = await repository.GetRequirementAreasAsync();
+        var civics = areas.First(area => area.View == "Statutory" && area.Name == "Civics");
+        var history = areas.First(area => area.View == "Statutory" && area.Name == "History");
+
+        var governmentCourseId = Guid.NewGuid();
+        await repository.SaveCourseAsync(new Course(
+            governmentCourseId,
+            student.Id,
+            schoolYear.Id,
+            "Government and Economics",
+            ["Social Studies", "Civics", "Economics"],
+            CourseDuration.TwoSemesters,
+            1,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "social-studies",
+            null,
+            null,
+            [new RequirementMapping(Guid.NewGuid(), governmentCourseId, civics.Id, CoverageLevel.Primary, "Old civics mapping.")]));
+
+        var historyCourseId = Guid.NewGuid();
+        await repository.SaveCourseAsync(new Course(
+            historyCourseId,
+            student.Id,
+            schoolYear.Id,
+            "U.S. History and Geography",
+            ["History", "Social Studies"],
+            CourseDuration.TwoSemesters,
+            1,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "history",
+            null,
+            null,
+            [new RequirementMapping(Guid.NewGuid(), historyCourseId, history.Id, CoverageLevel.Primary, "Old history mapping.")]));
+
+        var courseService = new CourseService(repository);
+        var governmentDetail = await courseService.GetCourseDetailAsync(governmentCourseId);
+        var historyDetail = await courseService.GetCourseDetailAsync(historyCourseId);
+        if (governmentDetail is null || historyDetail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        AssertTrue(governmentDetail.Mappings.Any(mapping => mapping.RequirementView == "MDE Summary" && mapping.RequirementAreaName == "U.S. Constitution"), "Government course should backfill U.S. Constitution coverage.");
+        AssertTrue(governmentDetail.Mappings.Any(mapping => mapping.RequirementView == "MDE Summary" && mapping.RequirementAreaName == "Michigan Constitution"), "Government course should backfill Michigan Constitution coverage.");
+        AssertTrue(historyDetail.Mappings.Any(mapping => mapping.RequirementView == "MDE Summary" && mapping.RequirementAreaName == "U.S. Constitution"), "U.S. history course should backfill U.S. Constitution coverage.");
+        AssertTrue(historyDetail.Mappings.Any(mapping => mapping.RequirementView == "MDE Summary" && mapping.RequirementAreaName == "Michigan Constitution"), "U.S. history course should backfill Michigan Constitution coverage.");
+    })),
     ("Imported course detail backfill fills blank pack fields without overwriting parent text", (Func<Task>)(async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -466,7 +537,7 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(detail.GradingBasis.Contains("Mastery", StringComparison.OrdinalIgnoreCase), "Backfill should fill grading basis.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.Goals), "Backfill should fill curriculum goals.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.LearningObjectives), "Backfill should fill learning objectives.");
-        AssertFalse(string.IsNullOrWhiteSpace(detail.MajorResources), "Backfill should fill curriculum resources.");
+        AssertTrue(string.IsNullOrWhiteSpace(detail.MajorResources), "Backfill should not restore retired curriculum resources.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.PlannedSequence), "Backfill should fill planned sequence.");
     })),
     ("Imported course detail backfill upgrades legacy pack defaults", (Func<Task>)(async () =>
@@ -519,6 +590,7 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(detail.AssessmentMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy assessment methods should upgrade to the hybrid default.");
         AssertTrue(detail.GradingBasis.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy grading basis should upgrade to the hybrid default.");
         AssertTrue(detail.LearningObjectives.Split(Environment.NewLine).Length >= 3, "Legacy learning objectives should upgrade to separated objective rows.");
+        AssertFalse(detail.LearningObjectives.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase), "Legacy learning objectives should upgrade away from generic recordkeeping language.");
         AssertEqual("Parent custom goals.", detail.Goals, "Backfill should not overwrite parent goals.");
         AssertEqual("Parent custom sequence.", detail.PlannedSequence, "Backfill should not overwrite parent sequence.");
     }))

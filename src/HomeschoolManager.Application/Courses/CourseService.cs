@@ -683,7 +683,7 @@ public sealed class CourseService
         return new CurriculumPlan(
             FillBlank(current.Goals, defaults.Goals),
             FillPackDefault(current.LearningObjectives, defaults.LearningObjectives, IsLegacyLearningObjectives),
-            FillPackDefault(current.MajorResources, defaults.MajorResources, IsLegacyResourceList),
+            current.MajorResources,
             FillBlank(current.PlannedSequence, defaults.PlannedSequence),
             FillBlank(current.ParentNotes, defaults.ParentNotes));
     }
@@ -737,8 +737,48 @@ public sealed class CourseService
 
     private static bool IsLegacyLearningObjectives(string current)
     {
+        return IsOriginalPackLearningObjectives(current) ||
+            IsGenericMathLearningObjectives(current) ||
+            IsGenericScienceLearningObjectives(current) ||
+            IsGenericLanguageLearningObjectives(current) ||
+            IsGenericArtsLearningObjectives(current) ||
+            IsGenericFallbackLearningObjectives(current);
+    }
+
+    private static bool IsOriginalPackLearningObjectives(string current)
+    {
         return current.Contains("Explain major concepts in", StringComparison.OrdinalIgnoreCase) &&
             current.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericMathLearningObjectives(string current)
+    {
+        return current.Contains("Solve course-level mathematical problems", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("Model quantitative relationships", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericScienceLearningObjectives(string current)
+    {
+        return current.Contains("Explain course-level scientific concepts", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("Use observation, data, simulations", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericLanguageLearningObjectives(string current)
+    {
+        return current.Contains("Use course-level vocabulary and grammar", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("Compare cultural practices", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericArtsLearningObjectives(string current)
+    {
+        return current.Contains("Apply course-specific techniques", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("Build portfolio or performance records", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGenericFallbackLearningObjectives(string current)
+    {
+        return current.Contains("Explain important concepts, vocabulary, and methods", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("Prepare portfolio-ready evidence", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RefreshRequirementSeedForPackAsync(

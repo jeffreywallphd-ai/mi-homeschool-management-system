@@ -21,8 +21,11 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Pack subject labels are preserved as internal categorization data.
 - Courses designate one-semester or two-semester duration.
 - Pack defaults include course description details and curriculum plan fields.
+- Default Michigan pack totals 8 planned credits and keeps history separate from government/civics/economics.
+- Default government/civics and U.S. history options map U.S. Constitution and Michigan Constitution coverage.
 - Pack resources use one item per line, with `Name | URL` when a viewable link exists.
 - Pack learning objectives use one objective per line and finish "students will be able to..." without repeating that lead-in.
+- Curriculum plan does not duplicate texts/resources as major resources.
 - Instructional methods, assessment methods, and grading basis can include hybrid defaults/options.
 - Backfill may fill blank imported-course pack fields but must preserve parent-entered text.
 - Backfill may upgrade recognizable legacy built-in default text to the current built-in default format.

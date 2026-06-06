@@ -14,7 +14,6 @@
     <div class="alert alert-success">
         Signed in as @Session.CurrentUser?.DisplayName (@Session.CurrentUser?.Role).
     </div>
-    <button class="btn btn-secondary" @onclick="SignOut">Sign out</button>
 }
 else
 {
@@ -59,10 +58,4 @@ else
         error = "";
     }
 
-    private void SignOut()
-    {
-        Session.SignOut();
-        studentPin = "";
-        error = "";
-    }
 }

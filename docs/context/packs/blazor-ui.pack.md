@@ -21,7 +21,11 @@ Purpose: UI workflow and form-boundary guidance.
 - Course coverage support summaries belong with related support tools when the main workflow is course list/editing.
 - Course rows are clickable navigation targets with hover affordance; avoid separate Open columns.
 - Course forms do not expose subject-area text fields; coverage is managed through requirement mappings.
+- Course credit displays should include at least one decimal place and preserve more precise values when present.
 - Course detail uses two columns: identity/description/resources/assessment on the left, plan/mapping/current mappings on the right.
+- Course detail uses autosave for field changes; requirement mapping remains an explicit add/update action.
+- Course detail autosave feedback belongs in the page header bar above the main content.
+- Page columns should fill available width and have generous horizontal spacing.
 - Course detail text areas allow at least four visible lines before scrolling.
 - Preset dropdown `Other` choices clear the associated text area so parent text starts clean.
 - Preset dropdown plus textarea pairs use one visible label and hidden secondary labels as needed for accessibility.
