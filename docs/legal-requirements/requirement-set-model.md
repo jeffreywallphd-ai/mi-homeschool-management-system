@@ -41,9 +41,10 @@ The model must support multiple related views:
 
 - Legal/statutory coverage view.
 - MDE guidance or course-of-study summary view.
-- Parent graduation-plan view.
+- MMC transcript-planning reference view.
+- Parent-added extensions to any of those views.
 
-These views may overlap, but they are not identical and must not be collapsed into one hard-coded list.
+Seeded views may overlap, but duplicate aliases should not be shown as separate rows when statutory rows already represent the coverage. Parent-added rows are preserved during seed refresh and should appear in requirement mapping and coverage summary workflows.
 
 ## Jurisdiction Rule
 

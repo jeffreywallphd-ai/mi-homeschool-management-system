@@ -37,9 +37,12 @@ Farm Business Accounting:
 ## Mapping Rules
 
 - A course may map to multiple areas.
-- A course may also carry multiple subject labels.
+- A course may carry internal subject labels, but parent-facing coverage must come from requirement mappings.
 - A requirement area may be covered by multiple courses.
 - Coverage is parent-selected and should be editable.
+- Parent-added requirement areas may extend the statutory, MDE Summary, or MMC Reference views and should appear wherever seeded requirement areas appear.
 - Generated coverage summaries should say "records show coverage" rather than "compliant."
 - Missing mappings must be visible, not silently inferred.
-- Parent-facing coverage summaries may group matching area names across source views and combine source labels while preserving source traceability.
+- Parent-facing coverage summaries may group matching non-statutory area names across source views.
+- If a grouped coverage row includes a statutory area, display the source as `Statutory` only.
+- For Michigan, statutory areas are canonical. MDE and MMC rows should appear only when they add distinct planning categories not represented by statutory subject rows.

@@ -160,7 +160,7 @@ This slice should turn the app from setup-only into a usable academic planning s
 - Parent/admin can map a course to multiple requirement areas.
 - Mappings can be primary, secondary, or supporting.
 - Unmapped Michigan areas remain visible in the summary.
-- Statutory and MDE summary views remain distinct.
+- Statutory areas remain the visible core; only differentiated MDE/MMC planning areas remain as distinct rows.
 - No UI text implies compliance, state approval, accreditation, or MDE submission.
 
 ### Verification

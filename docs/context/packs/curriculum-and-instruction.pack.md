@@ -17,12 +17,18 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Built-in pack import differs from future installed packs; installing adds external packs.
 - Pack templates can expose dropdown choices with stable default options.
 - Pack mappings must match the target jurisdiction seed vocabulary exactly.
-- Courses can carry multiple subject labels.
-- Pack subject labels are preserved for imported course records and coverage summaries.
+- Courses can carry internal subject labels, but visible coverage uses requirement mappings.
+- Pack subject labels are preserved as internal categorization data.
 - Courses designate one-semester or two-semester duration.
 - Pack defaults include course description details and curriculum plan fields.
+- Pack resources use one item per line, with `Name | URL` when a viewable link exists.
+- Pack learning objectives use one objective per line and finish "students will be able to..." without repeating that lead-in.
+- Instructional methods, assessment methods, and grading basis can include hybrid defaults/options.
 - Backfill may fill blank imported-course pack fields but must preserve parent-entered text.
+- Backfill may upgrade recognizable legacy built-in default text to the current built-in default format.
+- Backfill removes stale imported-course mappings to retired seed rows and adds missing current pack mappings.
 - Requirement mappings are explicit.
+- Parent-added requirements behave like seeded requirement areas in mapping workflows.
 - Activity records are internal evidence, not routine state filings.
 - UI forms submit complete contracts.
 
@@ -30,4 +36,5 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 
 - Inferring missing requirement mappings.
 - Duplicating imported template courses on repeat pack imports.
+- Turning resources or objectives into hard-to-edit text blocks.
 - Treating attendance as a legal compliance counter.

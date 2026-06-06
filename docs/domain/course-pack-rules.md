@@ -22,24 +22,28 @@ A course pack must define:
 - Requirement jurisdiction/profile the pack is built against.
 - Stable template id per course.
 - Course title.
-- One or more subject labels used for course records and requirement coverage mapping.
+- Internal subject labels for course categorization.
 - Duration of one semester or two semesters.
 - Planned credit value.
 - Course description.
 - Instructional methods.
 - Major topics.
-- Recommended texts and resources.
+- Recommended texts and resources as one item per line, using `Name | URL` when a viewable link is available.
 - Assessment methods.
 - Grading basis.
 - Curriculum plan fields: goals, learning objectives, major resources, planned sequence, and parent notes.
 - Optional requirement mappings by view, area name, coverage level, and notes.
 - Optional course choices for a template slot, with stable option ids and one default option.
 
-Every selectable option must carry its own title, subject labels, duration, planned credit value, description details, curriculum plan fields, and requirement mappings. The default option is the option used for full-pack import unless the parent chooses another option in the UI.
+Every selectable option must carry its own title, internal subject labels, duration, planned credit value, description details, curriculum plan fields, and requirement mappings. The default option is the option used for full-pack import unless the parent chooses another option in the UI.
 
-Subject labels are part of the pack contract even when the pack UI does not display them. The import path must preserve those labels so imported courses can appear correctly in coverage summaries and course records.
+Subject labels are internal support data and should not be the parent-facing requirement coverage mechanism. Coverage summaries and mapping workflows should use explicit requirement mappings.
 
 Requirement mappings must use the exact requirement-area names and views from the pack's target jurisdiction seed. The default built-in pack targets the Michigan seed. Future state packs may be added, but the current UI should remain Michigan-focused.
+
+Learning objectives must be stored as one objective per line. Each objective should complete the sentence "Upon completion of this course students will be able to..." without repeating that lead-in.
+
+Instructional methods, assessment methods, and grading basis may include a hybrid option that broadly combines common methods, evidence types, or grading bases.
 
 ## Import Rules
 
@@ -51,9 +55,11 @@ Requirement mappings must use the exact requirement-area names and views from th
 - Re-importing the same pack skips courses already imported from the same template id.
 - Missing requirement areas fail with visible errors instead of silently dropping mappings.
 - Importing a built-in pack may refresh its target requirement seed before mapping so local data with older seed contents can be repaired safely.
+- Built-in pack reads/imports should remove stale imported-course mappings to requirement rows no longer present in the current seed and add missing current pack mappings.
 - Pack data must not bypass domain course validation.
 - Imported courses become editable course records regardless of whether they came from a fixed template or a selected option.
 - Built-in pack updates may backfill blank imported-course detail fields, but must not overwrite parent-entered text.
+- Built-in pack updates may replace recognizable legacy built-in default text with the newer built-in default format.
 
 ## Installed Pack Terminology
 
@@ -70,3 +76,5 @@ The pack must not claim that imported courses satisfy graduation requirements, l
 ## Course Description Rule
 
 Standard course titles are allowed, but each course must support a distinct course description so the parent can record the actual texts, methods, topics, assessments, and differentiating details.
+
+Texts/resources and learning objectives should be edited as itemized lists in the UI even when their compact storage format remains newline-based.

@@ -33,25 +33,15 @@ public static class MichiganRequirementSeed
 
         var mdeGuidance = new[]
         {
-            "Mathematics",
-            "Reading",
-            "English Language Arts",
-            "Science",
-            "Social Studies",
             "U.S. Constitution",
-            "Michigan Constitution",
-            "Civics"
+            "Michigan Constitution"
         };
 
         var mmcReference = new[]
         {
-            "English Language Arts",
-            "Mathematics",
             "Online Learning Experience",
             "Personal Finance",
             "Physical Education and Health",
-            "Science",
-            "Social Studies",
             "Visual, Performing, and Applied Arts",
             "World Language"
         };

@@ -106,8 +106,23 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
                 document.RequirementSets.RemoveAll(set => set.Id == requirementSet.Id);
                 document.RequirementSets.Add(requirementSet);
 
-                document.RequirementAreas.RemoveAll(area => area.RequirementSetId == requirementSet.Id);
+                document.RequirementAreas.RemoveAll(area =>
+                    area.RequirementSetId == requirementSet.Id &&
+                    !string.Equals(area.RequiredOrRecommended, "Parent", StringComparison.OrdinalIgnoreCase));
                 document.RequirementAreas.AddRange(requirementAreas);
+            },
+            cancellationToken);
+    }
+
+    public async Task SaveRequirementAreaAsync(
+        RequirementArea requirementArea,
+        CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.RequirementAreas.RemoveAll(existing => existing.Id == requirementArea.Id);
+                document.RequirementAreas.Add(requirementArea);
             },
             cancellationToken);
     }
@@ -187,12 +202,59 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
 
     private async Task SaveUnlockedAsync(AppDataDocument document, CancellationToken cancellationToken)
     {
-        var tempPath = $"{paths.DatabasePath}.tmp";
-        await using (var stream = File.Create(tempPath))
+        var tempPath = $"{paths.DatabasePath}.{Guid.NewGuid():N}.tmp";
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, document, SerializerOptions, cancellationToken);
-        }
+            await using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await JsonSerializer.SerializeAsync(stream, document, SerializerOptions, cancellationToken);
+            }
 
-        File.Move(tempPath, paths.DatabasePath, true);
+            await MoveWithRetryAsync(tempPath, paths.DatabasePath, cancellationToken);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                TryDeleteTempFile(tempPath);
+            }
+        }
+    }
+
+    private static async Task MoveWithRetryAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                File.Move(sourcePath, destinationPath, true);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && IsTransientFileAccess(ex))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt), cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsTransientFileAccess(Exception ex)
+    {
+        return ex is IOException or UnauthorizedAccessException;
+    }
+
+    private static void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            File.Delete(tempPath);
+        }
+        catch (Exception ex) when (IsTransientFileAccess(ex))
+        {
+            // A later save can safely ignore a stale unique temp file.
+        }
     }
 }

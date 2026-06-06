@@ -32,6 +32,8 @@ public interface IHomeschoolRepository
         IReadOnlyList<RequirementArea> requirementAreas,
         CancellationToken cancellationToken = default);
 
+    Task SaveRequirementAreaAsync(RequirementArea requirementArea, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Course>> GetCoursesAsync(CancellationToken cancellationToken = default);
 
     Task<Course?> GetCourseAsync(Guid courseId, CancellationToken cancellationToken = default);

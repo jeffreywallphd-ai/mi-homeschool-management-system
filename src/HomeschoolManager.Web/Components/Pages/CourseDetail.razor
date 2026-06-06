@@ -20,7 +20,7 @@
 else
 {
     <h1>@detail.Title</h1>
-    <p>@string.Join(", ", detail.SubjectAreas), @DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
+    <p>@DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
 
     @if (!Session.IsParentAdmin)
     {
@@ -28,14 +28,13 @@ else
     }
     else
     {
-        <section class="form-section">
+        <div class="content-workbench course-detail-workbench">
+            <main class="workbench-main">
+                <section class="form-section">
             <h2>Course identity</h2>
             <label class="form-label" for="title">Title <span class="required-marker">*</span></label>
             <input id="title" class="form-control" @bind="courseForm.Title" />
             @ValidationFor("course.Title")
-            <label class="form-label" for="subject">Subject areas <span class="required-marker">*</span></label>
-            <input id="subject" class="form-control" @bind="courseForm.SubjectAreasText" />
-            @ValidationFor("course.SubjectAreas")
             <label class="form-label" for="duration">Duration <span class="required-marker">*</span></label>
             <select id="duration" class="form-select" @bind="courseForm.Duration">
                 <option value="@CourseDuration.OneSemester">One semester</option>
@@ -46,62 +45,133 @@ else
             <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" />
             @ValidationFor("course.PlannedCreditValue")
             <button class="btn btn-primary mt-2" @onclick="SaveCourse">Save course</button>
-        </section>
+                </section>
 
-        <section class="form-section">
+                <section class="form-section">
             <h2>Course description</h2>
             <label class="form-label" for="description">Description</label>
-            <textarea id="description" class="form-control" rows="3" @bind="descriptionForm.Description"></textarea>
-            <label class="form-label" for="methods-preset">Instructional methods preset</label>
+            <textarea id="description" class="form-control" rows="4" @bind="descriptionForm.Description"></textarea>
+            <label class="form-label" for="methods-preset">Instructional methods</label>
             <select id="methods-preset" class="form-select" value="@selectedInstructionalMethodId" @onchange="ChangeInstructionalMethod">
                 @foreach (var option in InstructionalMethodOptions)
                 {
                     <option value="@option.Id">@option.Name</option>
                 }
             </select>
-            <label class="form-label" for="methods">Instructional methods</label>
-            <textarea id="methods" class="form-control" rows="2" @bind="descriptionForm.InstructionalMethods"></textarea>
+            <label class="visually-hidden" for="methods">Instructional methods details</label>
+            <textarea id="methods" class="form-control" rows="4" @bind="descriptionForm.InstructionalMethods"></textarea>
             <label class="form-label" for="topics">Major topics</label>
-            <textarea id="topics" class="form-control" rows="2" @bind="descriptionForm.MajorTopics"></textarea>
-            <label class="form-label" for="resources">Texts and resources</label>
-            <textarea id="resources" class="form-control" rows="2" @bind="descriptionForm.TextsAndResources"></textarea>
-            <label class="form-label" for="assessment-preset">Assessment methods preset</label>
+            <textarea id="topics" class="form-control" rows="4" @bind="descriptionForm.MajorTopics"></textarea>
+            <div class="section-heading-row mt-3">
+                <h3>Texts and resources</h3>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleResourceForm">@ResourceToggleText()</button>
+            </div>
+            @if (descriptionForm.Resources.Count == 0)
+            {
+                <p>No texts or resources have been added.</p>
+            }
+            else
+            {
+                <ul class="itemized-editor-list">
+                    @for (var index = 0; index < descriptionForm.Resources.Count; index++)
+                    {
+                        var resourceIndex = index;
+                        var resource = descriptionForm.Resources[index];
+                        <li>
+                            <div>
+                                <strong>@resource.Name</strong>
+                                @if (!string.IsNullOrWhiteSpace(resource.Link))
+                                {
+                                    <a href="@resource.Link" target="_blank" rel="noopener">View</a>
+                                }
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Remove</button>
+                        </li>
+                    }
+                </ul>
+            }
+            @if (descriptionForm.ShowResourceForm)
+            {
+                <div class="inline-entry-form">
+                    <label class="form-label" for="resource-name">Name</label>
+                    <input id="resource-name" class="form-control" @bind="descriptionForm.NewResourceName" />
+                    <label class="form-label" for="resource-link">Link</label>
+                    <input id="resource-link" class="form-control" type="url" @bind="descriptionForm.NewResourceLink" />
+                    <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
+                </div>
+            }
+            <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
+                </section>
+
+                <section class="form-section">
+            <h2>Assessment and grading</h2>
+            <label class="form-label" for="assessment-preset">Assessment methods</label>
             <select id="assessment-preset" class="form-select" value="@selectedAssessmentMethodId" @onchange="ChangeAssessmentMethod">
                 @foreach (var option in AssessmentMethodOptions)
                 {
                     <option value="@option.Id">@option.Name</option>
                 }
             </select>
-            <label class="form-label" for="assessment">Assessment methods</label>
-            <textarea id="assessment" class="form-control" rows="2" @bind="descriptionForm.AssessmentMethods"></textarea>
-            <label class="form-label" for="grading-preset">Grading basis preset</label>
+            <label class="visually-hidden" for="assessment">Assessment methods details</label>
+            <textarea id="assessment" class="form-control" rows="4" @bind="descriptionForm.AssessmentMethods"></textarea>
+            <label class="form-label" for="grading-preset">Grading basis</label>
             <select id="grading-preset" class="form-select" value="@selectedGradingBasisId" @onchange="ChangeGradingBasis">
                 @foreach (var option in GradingBasisOptions)
                 {
                     <option value="@option.Id">@option.Name</option>
                 }
             </select>
-            <label class="form-label" for="grading">Grading basis</label>
-            <input id="grading" class="form-control" @bind="descriptionForm.GradingBasis" />
+            <label class="visually-hidden" for="grading">Grading basis details</label>
+            <textarea id="grading" class="form-control" rows="4" @bind="descriptionForm.GradingBasis"></textarea>
             <button class="btn btn-primary mt-2" @onclick="SaveDescription">Save description</button>
-        </section>
+                </section>
+            </main>
 
-        <section class="form-section">
+            <aside class="workbench-support">
+                <section class="form-section">
             <h2>Curriculum plan</h2>
             <label class="form-label" for="goals">Goals</label>
-            <textarea id="goals" class="form-control" rows="2" @bind="planForm.Goals"></textarea>
-            <label class="form-label" for="objectives">Learning objectives</label>
-            <textarea id="objectives" class="form-control" rows="2" @bind="planForm.LearningObjectives"></textarea>
+            <textarea id="goals" class="form-control" rows="4" @bind="planForm.Goals"></textarea>
+            <div class="section-heading-row mt-3">
+                <h3>Learning objectives</h3>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleObjectiveForm">@ObjectiveToggleText()</button>
+            </div>
+            @if (planForm.LearningObjectives.Count == 0)
+            {
+                <p>No learning objectives have been added.</p>
+            }
+            else
+            {
+                <ul class="itemized-editor-list">
+                    @for (var index = 0; index < planForm.LearningObjectives.Count; index++)
+                    {
+                        var objectiveIndex = index;
+                        var objective = planForm.LearningObjectives[index];
+                        <li>
+                            <span>@objective.Text</span>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Remove</button>
+                        </li>
+                    }
+                </ul>
+            }
+            @if (planForm.ShowObjectiveForm)
+            {
+                <div class="inline-entry-form">
+                    <label class="form-label" for="objective-text">Objective</label>
+                    <input id="objective-text" class="form-control" @bind="planForm.NewObjectiveText" />
+                    <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
+                </div>
+            }
             <label class="form-label" for="major-resources">Major resources</label>
-            <textarea id="major-resources" class="form-control" rows="2" @bind="planForm.MajorResources"></textarea>
+            <textarea id="major-resources" class="form-control" rows="4" @bind="planForm.MajorResources"></textarea>
             <label class="form-label" for="sequence">Planned sequence</label>
-            <textarea id="sequence" class="form-control" rows="2" @bind="planForm.PlannedSequence"></textarea>
+            <textarea id="sequence" class="form-control" rows="4" @bind="planForm.PlannedSequence"></textarea>
             <label class="form-label" for="notes">Parent notes</label>
-            <textarea id="notes" class="form-control" rows="2" @bind="planForm.ParentNotes"></textarea>
+            <textarea id="notes" class="form-control" rows="4" @bind="planForm.ParentNotes"></textarea>
             <button class="btn btn-primary mt-2" @onclick="SavePlan">Save curriculum plan</button>
-        </section>
+                </section>
 
-        <section class="form-section">
+                <section class="form-section">
             <h2>Requirement mapping</h2>
             <p>Mappings show selected coverage. They are parent-owned evidence summaries, not legal determinations.</p>
             <label class="form-label" for="requirement-area">Requirement area</label>
@@ -119,9 +189,13 @@ else
                 <option value="@CoverageLevel.Supporting">Supporting</option>
             </select>
             <label class="form-label" for="mapping-notes">Notes</label>
-            <textarea id="mapping-notes" class="form-control" rows="2" @bind="mappingForm.Notes"></textarea>
+            <textarea id="mapping-notes" class="form-control" rows="4" @bind="mappingForm.Notes"></textarea>
             <button class="btn btn-primary mt-2" @onclick="AddOrUpdateMapping">Add or update mapping</button>
-        </section>
+                </section>
+
+                @CurrentMappingsSection()
+            </aside>
+        </div>
     }
 
     @if (messages.Count > 0)
@@ -134,37 +208,10 @@ else
         </section>
     }
 
-    <section class="status-panel">
-        <h2>Current mappings</h2>
-        @if (detail.Mappings.Count == 0)
-        {
-            <p>No requirement mappings yet.</p>
-        }
-        else
-        {
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>View</th>
-                        <th>Area</th>
-                        <th>Coverage</th>
-                        <th>Notes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var mapping in detail.Mappings)
-                    {
-                        <tr>
-                            <td>@mapping.RequirementView</td>
-                            <td>@mapping.RequirementAreaName</td>
-                            <td>@mapping.CoverageLevel</td>
-                            <td>@mapping.Notes</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </section>
+    @if (!Session.IsParentAdmin)
+    {
+        @CurrentMappingsSection()
+    }
 }
 
 @code {
@@ -182,9 +229,10 @@ else
     private string selectedInstructionalMethodId = DefaultInstructionalMethodId;
     private string selectedAssessmentMethodId = DefaultAssessmentMethodId;
     private string selectedGradingBasisId = DefaultGradingBasisId;
-    private const string DefaultInstructionalMethodId = "explicit-guided";
-    private const string DefaultAssessmentMethodId = "mixed-formative-summative";
-    private const string DefaultGradingBasisId = "mastery-letter";
+    private const string DefaultInstructionalMethodId = "hybrid-instruction";
+    private const string DefaultAssessmentMethodId = "hybrid-assessment";
+    private const string DefaultGradingBasisId = "hybrid-grading";
+    private const string OtherPresetId = "other";
 
     protected override async Task OnInitializedAsync()
     {
@@ -201,7 +249,7 @@ else
 
         await Run(() => CourseService.UpdateCourseAsync(
             ParentUser(),
-            new UpdateCourseCommand(CourseId, courseForm.Title, courseForm.SubjectAreas, courseForm.Duration, courseForm.PlannedCreditValue)));
+            new UpdateCourseCommand(CourseId, courseForm.Title, [], courseForm.Duration, courseForm.PlannedCreditValue)));
     }
 
     private async Task SaveDescription()
@@ -213,7 +261,7 @@ else
                 descriptionForm.Description,
                 descriptionForm.InstructionalMethods,
                 descriptionForm.MajorTopics,
-                descriptionForm.TextsAndResources,
+                SerializeResources(descriptionForm.Resources),
                 descriptionForm.AssessmentMethods,
                 descriptionForm.GradingBasis)));
     }
@@ -225,7 +273,7 @@ else
             new SaveCurriculumPlanCommand(
                 CourseId,
                 planForm.Goals,
-                planForm.LearningObjectives,
+                SerializeObjectives(planForm.LearningObjectives),
                 planForm.MajorResources,
                 planForm.PlannedSequence,
                 planForm.ParentNotes)));
@@ -278,7 +326,6 @@ else
         courseForm = new CourseFormModel
         {
             Title = detail.Title,
-            SubjectAreasText = string.Join(", ", detail.SubjectAreas),
             Duration = detail.Duration,
             PlannedCreditValue = detail.PlannedCreditValue
         };
@@ -287,7 +334,7 @@ else
             Description = detail.Description,
             InstructionalMethods = detail.InstructionalMethods,
             MajorTopics = detail.MajorTopics,
-            TextsAndResources = detail.TextsAndResources,
+            Resources = ParseResources(detail.TextsAndResources).ToList(),
             AssessmentMethods = detail.AssessmentMethods,
             GradingBasis = detail.GradingBasis
         };
@@ -298,7 +345,7 @@ else
         planForm = new PlanFormModel
         {
             Goals = detail.Goals,
-            LearningObjectives = detail.LearningObjectives,
+            LearningObjectives = ParseObjectives(detail.LearningObjectives).ToList(),
             MajorResources = detail.MajorResources,
             PlannedSequence = detail.PlannedSequence,
             ParentNotes = detail.ParentNotes
@@ -317,19 +364,19 @@ else
 
     private void ChangeInstructionalMethod(ChangeEventArgs eventArgs)
     {
-        selectedInstructionalMethodId = eventArgs.Value?.ToString() ?? "other";
+        selectedInstructionalMethodId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(InstructionalMethodOptions, selectedInstructionalMethodId, value => descriptionForm.InstructionalMethods = value);
     }
 
     private void ChangeAssessmentMethod(ChangeEventArgs eventArgs)
     {
-        selectedAssessmentMethodId = eventArgs.Value?.ToString() ?? "other";
+        selectedAssessmentMethodId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(AssessmentMethodOptions, selectedAssessmentMethodId, value => descriptionForm.AssessmentMethods = value);
     }
 
     private void ChangeGradingBasis(ChangeEventArgs eventArgs)
     {
-        selectedGradingBasisId = eventArgs.Value?.ToString() ?? "other";
+        selectedGradingBasisId = eventArgs.Value?.ToString() ?? OtherPresetId;
         ApplyPreset(GradingBasisOptions, selectedGradingBasisId, value => descriptionForm.GradingBasis = value);
     }
 
@@ -342,8 +389,9 @@ else
 
     private static void ApplyPreset(IReadOnlyList<PresetOption> options, string selectedId, Action<string> apply)
     {
-        if (selectedId == "other")
+        if (selectedId == OtherPresetId)
         {
+            apply("");
             return;
         }
 
@@ -361,7 +409,7 @@ else
             return defaultId;
         }
 
-        return options.FirstOrDefault(option => option.Text == value)?.Id ?? "other";
+        return options.FirstOrDefault(option => option.Text == value)?.Id ?? OtherPresetId;
     }
 
     private static string PresetText(IReadOnlyList<PresetOption> options, string id)
@@ -372,6 +420,144 @@ else
     private static string FillBlank(string value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private RenderFragment CurrentMappingsSection()
+    {
+        return @<section class="status-panel">
+            <h2>Current mappings</h2>
+            @if (detail?.Mappings.Count == 0)
+            {
+                <p>No requirement mappings yet.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>View</th>
+                            <th>Area</th>
+                            <th>Coverage</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var mapping in detail?.Mappings ?? [])
+                        {
+                            <tr>
+                                <td>@mapping.RequirementView</td>
+                                <td>@mapping.RequirementAreaName</td>
+                                <td>@mapping.CoverageLevel</td>
+                                <td>@mapping.Notes</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>;
+    }
+
+    private string ResourceToggleText()
+    {
+        return descriptionForm.ShowResourceForm ? "Hide" : "Add";
+    }
+
+    private void ToggleResourceForm()
+    {
+        descriptionForm.ShowResourceForm = !descriptionForm.ShowResourceForm;
+    }
+
+    private void AddResource()
+    {
+        var name = descriptionForm.NewResourceName.Trim();
+        var link = descriptionForm.NewResourceLink.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        descriptionForm.Resources.Add(new ResourceFormItem(name, link));
+        descriptionForm.NewResourceName = "";
+        descriptionForm.NewResourceLink = "";
+    }
+
+    private void RemoveResource(int index)
+    {
+        if (index >= 0 && index < descriptionForm.Resources.Count)
+        {
+            descriptionForm.Resources.RemoveAt(index);
+        }
+    }
+
+    private string ObjectiveToggleText()
+    {
+        return planForm.ShowObjectiveForm ? "Hide" : "Add";
+    }
+
+    private void ToggleObjectiveForm()
+    {
+        planForm.ShowObjectiveForm = !planForm.ShowObjectiveForm;
+    }
+
+    private void AddObjective()
+    {
+        var text = planForm.NewObjectiveText.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        planForm.LearningObjectives.Add(new ObjectiveFormItem(text));
+        planForm.NewObjectiveText = "";
+    }
+
+    private void RemoveObjective(int index)
+    {
+        if (index >= 0 && index < planForm.LearningObjectives.Count)
+        {
+            planForm.LearningObjectives.RemoveAt(index);
+        }
+    }
+
+    private static IEnumerable<ResourceFormItem> ParseResources(string value)
+    {
+        return SplitLines(value)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 2, StringSplitOptions.TrimEntries);
+                return parts.Length == 2
+                    ? new ResourceFormItem(parts[0], parts[1])
+                    : new ResourceFormItem(line, "");
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name));
+    }
+
+    private static string SerializeResources(IEnumerable<ResourceFormItem> resources)
+    {
+        return string.Join(Environment.NewLine, resources
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item => string.IsNullOrWhiteSpace(item.Link)
+                ? item.Name.Trim()
+                : $"{item.Name.Trim()} | {item.Link.Trim()}"));
+    }
+
+    private static IEnumerable<ObjectiveFormItem> ParseObjectives(string value)
+    {
+        return SplitLines(value).Select(line => new ObjectiveFormItem(line));
+    }
+
+    private static string SerializeObjectives(IEnumerable<ObjectiveFormItem> objectives)
+    {
+        return string.Join(Environment.NewLine, objectives
+            .Select(item => item.Text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text)));
+    }
+
+    private static IEnumerable<string> SplitLines(string value)
+    {
+        return value
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line));
     }
 
     private MarkupString ValidationFor(string key)
@@ -389,11 +575,6 @@ else
         if (string.IsNullOrWhiteSpace(courseForm.Title))
         {
             fieldErrors["course.Title"] = "Title is required.";
-        }
-
-        if (courseForm.SubjectAreas.Count == 0)
-        {
-            fieldErrors["course.SubjectAreas"] = "At least one subject area is required.";
         }
 
         if (!Enum.IsDefined(courseForm.Duration))
@@ -420,7 +601,9 @@ else
 
     private static readonly IReadOnlyList<PresetOption> InstructionalMethodOptions =
     [
-        new(DefaultInstructionalMethodId, "Explicit teaching with guided practice",
+        new(DefaultInstructionalMethodId, "Hybrid / combined methods",
+            "Hybrid instructional plan combining explicit instruction, guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection."),
+        new("explicit-guided", "Explicit teaching with guided practice",
             "Explicit instruction with guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection."),
         new("inquiry-project", "Inquiry and project-based learning",
             "Inquiry and project-based learning built around driving questions, research, investigation, product creation, critique, revision, and reflection. Parent instruction supports planning, source evaluation, and quality standards."),
@@ -430,12 +613,14 @@ else
             "Hands-on labs, simulations, demonstrations, field observations, data collection, analysis, lab notes, and parent-guided safety and reasoning checks."),
         new("online-blended", "Online/blended instruction",
             "Structured online lessons or videos combined with parent check-ins, guided notes, offline practice, discussion, and portfolio evidence from assignments or projects."),
-        new("other", "Other", "")
+        new(OtherPresetId, "Other", "")
     ];
 
     private static readonly IReadOnlyList<PresetOption> AssessmentMethodOptions =
     [
-        new(DefaultAssessmentMethodId, "Mixed formative and summative evidence",
+        new(DefaultAssessmentMethodId, "Hybrid / combined assessment",
+            "Hybrid assessment plan combining ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate, project or performance evidence, and a final portfolio review or summative evaluation."),
+        new("mixed-formative-summative", "Mixed formative and summative evidence",
             "Ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate, project or performance evidence, and a final portfolio review or summative evaluation."),
         new("portfolio-performance", "Portfolio and performance assessment",
             "Portfolio artifacts, project rubrics, demonstrations, presentations, performances, lab or field notes, and parent narrative evaluation of growth and mastery."),
@@ -443,12 +628,14 @@ else
             "Regular quizzes or tests, written assignments, problem sets, corrections, short reflections, and a final exam or cumulative written evaluation where appropriate."),
         new("competency-mastery", "Competency/mastery demonstrations",
             "Clear competencies, repeated practice, revision opportunities, student explanations, demonstrations of mastery, and parent review before credit is recorded."),
-        new("other", "Other", "")
+        new(OtherPresetId, "Other", "")
     ];
 
     private static readonly IReadOnlyList<PresetOption> GradingBasisOptions =
     [
-        new(DefaultGradingBasisId, "Mastery-aligned letter grade",
+        new(DefaultGradingBasisId, "Hybrid / combined grading basis",
+            "Hybrid grading basis using a mastery-aligned letter grade from parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection."),
+        new("mastery-letter", "Mastery-aligned letter grade",
             "Mastery-aligned letter grade using parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection."),
         new("standards-rubric", "Standards/rubric-based grade",
             "Letter grade derived from rubric scores for course objectives, with emphasis on demonstrated mastery, quality of final evidence, revision, and clear parent documentation."),
@@ -456,18 +643,14 @@ else
             "Grade based on a curated portfolio, parent narrative evaluation, completed assignments, student reflection, and evidence of progress against course goals."),
         new("pass-fail-mastery", "Pass/fail mastery",
             "Pass/fail credit based on completion of agreed course objectives, sufficient evidence of mastery, participation, and final parent review."),
-        new("other", "Other", "")
+        new(OtherPresetId, "Other", "")
     ];
 
     private sealed class CourseFormModel
     {
         public string Title { get; set; } = "";
-        public string SubjectAreasText { get; set; } = "";
         public CourseDuration Duration { get; set; } = CourseDuration.TwoSemesters;
         public decimal PlannedCreditValue { get; set; } = 1;
-
-        public IReadOnlyList<string> SubjectAreas => SubjectAreasText
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     private sealed class DescriptionFormModel
@@ -475,7 +658,10 @@ else
         public string Description { get; set; } = "";
         public string InstructionalMethods { get; set; } = "";
         public string MajorTopics { get; set; } = "";
-        public string TextsAndResources { get; set; } = "";
+        public List<ResourceFormItem> Resources { get; set; } = [];
+        public bool ShowResourceForm { get; set; }
+        public string NewResourceName { get; set; } = "";
+        public string NewResourceLink { get; set; } = "";
         public string AssessmentMethods { get; set; } = "";
         public string GradingBasis { get; set; } = "";
     }
@@ -483,11 +669,16 @@ else
     private sealed class PlanFormModel
     {
         public string Goals { get; set; } = "";
-        public string LearningObjectives { get; set; } = "";
+        public List<ObjectiveFormItem> LearningObjectives { get; set; } = [];
+        public bool ShowObjectiveForm { get; set; }
+        public string NewObjectiveText { get; set; } = "";
         public string MajorResources { get; set; } = "";
         public string PlannedSequence { get; set; } = "";
         public string ParentNotes { get; set; } = "";
     }
+
+    private sealed record ResourceFormItem(string Name, string Link);
+    private sealed record ObjectiveFormItem(string Text);
 
     private sealed class MappingFormModel
     {

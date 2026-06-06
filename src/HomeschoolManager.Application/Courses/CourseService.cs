@@ -20,6 +20,7 @@ public sealed class CourseService
 
     public async Task<IReadOnlyList<CourseListItem>> ListCoursesAsync(CancellationToken cancellationToken = default)
     {
+        await RefreshMichiganRequirementSeedAsync(cancellationToken);
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
 
         var courses = await repository.GetCoursesAsync(cancellationToken);
@@ -38,6 +39,7 @@ public sealed class CourseService
 
     public async Task<CourseDetail?> GetCourseDetailAsync(Guid courseId, CancellationToken cancellationToken = default)
     {
+        await RefreshMichiganRequirementSeedAsync(cancellationToken);
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
 
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
@@ -80,7 +82,7 @@ public sealed class CourseService
                 student.Id,
                 schoolYear.Id,
                 command.Title,
-                command.SubjectAreas,
+                NormalizeSubjectAreas(command.SubjectAreas),
                 command.Duration,
                 command.PlannedCreditValue,
                 null,
@@ -122,7 +124,7 @@ public sealed class CourseService
                 existing.StudentId,
                 existing.SchoolYearId,
                 command.Title,
-                command.SubjectAreas,
+                command.SubjectAreas.Count == 0 ? existing.SubjectAreas : NormalizeSubjectAreas(command.SubjectAreas),
                 command.Duration,
                 command.PlannedCreditValue,
                 existing.SourcePackId,
@@ -404,6 +406,7 @@ public sealed class CourseService
 
     public async Task<IReadOnlyList<CoverageSummaryItem>> GetCoverageSummaryAsync(CancellationToken cancellationToken = default)
     {
+        await RefreshMichiganRequirementSeedAsync(cancellationToken);
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
 
         var courses = await repository.GetCoursesAsync(cancellationToken);
@@ -425,7 +428,7 @@ public sealed class CourseService
 
                 return new CoverageSummaryItem(
                     group.First().Id,
-                    FormatSources(group.Select(area => area.View)),
+                    FormatSource(group.Select(area => area.View)),
                     group.Key,
                     string.Join(", ", group.Select(area => area.GradeBand).Distinct().Order()),
                     courseMappings.Length > 0,
@@ -477,7 +480,7 @@ public sealed class CourseService
         return levels.OrderBy(level => (int)level).Cast<CoverageLevel?>().FirstOrDefault();
     }
 
-    private static string FormatSources(IEnumerable<string> sources)
+    private static string FormatSource(IEnumerable<string> sources)
     {
         var ordered = sources
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -485,13 +488,9 @@ public sealed class CourseService
             .ThenBy(source => source)
             .ToArray();
 
-        return ordered.Length switch
-        {
-            0 => "",
-            1 => ordered[0],
-            2 => $"{ordered[0]} and {ordered[1]}",
-            _ => string.Join("; ", ordered)
-        };
+        return ordered.Contains("Statutory", StringComparer.OrdinalIgnoreCase)
+            ? "Statutory"
+            : ordered.FirstOrDefault() ?? "";
     }
 
     private static int SourceOrder(string source)
@@ -552,6 +551,7 @@ public sealed class CourseService
     private async Task BackfillImportedCoursePackDetailsAsync(CancellationToken cancellationToken)
     {
         var courses = await repository.GetCoursesAsync(cancellationToken);
+        var areas = await repository.GetRequirementAreasAsync(cancellationToken);
         foreach (var course in courses)
         {
             var option = FindSourceOption(course);
@@ -562,7 +562,10 @@ public sealed class CourseService
 
             var description = MergeDescription(course.Description, option.Description);
             var curriculumPlan = MergeCurriculumPlan(course.CurriculumPlan, option.CurriculumPlan);
-            if (description == course.Description && curriculumPlan == course.CurriculumPlan)
+            var mappings = MergeImportedMappings(course, option, areas);
+            if (description == course.Description &&
+                curriculumPlan == course.CurriculumPlan &&
+                MappingsMatch(course.RequirementMappings, mappings))
             {
                 continue;
             }
@@ -579,10 +582,68 @@ public sealed class CourseService
                 course.SourceTemplateId,
                 description,
                 curriculumPlan,
-                course.RequirementMappings);
+                mappings);
 
             await repository.SaveCourseAsync(updated, cancellationToken);
         }
+    }
+
+    private static IReadOnlyList<RequirementMapping> MergeImportedMappings(
+        Course course,
+        CourseTemplateOptionDefinition option,
+        IReadOnlyList<RequirementArea> areas)
+    {
+        var knownAreaIds = areas.Select(area => area.Id).ToHashSet();
+        var mappings = course.RequirementMappings
+            .Where(mapping => knownAreaIds.Contains(mapping.RequirementAreaId))
+            .ToList();
+
+        foreach (var packMapping in BuildMappings(course.Id, option, areas))
+        {
+            if (mappings.Any(mapping => mapping.RequirementAreaId == packMapping.RequirementAreaId))
+            {
+                continue;
+            }
+
+            mappings.Add(packMapping);
+        }
+
+        return mappings
+            .OrderBy(mapping => AreaOrder(mapping.RequirementAreaId, areas))
+            .ThenBy(mapping => mapping.CoverageLevel)
+            .ToArray();
+    }
+
+    private static bool MappingsMatch(
+        IReadOnlyList<RequirementMapping> current,
+        IReadOnlyList<RequirementMapping> updated)
+    {
+        if (current.Count != updated.Count)
+        {
+            return false;
+        }
+
+        var currentKeys = current
+            .Select(MappingKey)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var updatedKeys = updated
+            .Select(MappingKey)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        return currentKeys.SequenceEqual(updatedKeys, StringComparer.Ordinal);
+    }
+
+    private static string MappingKey(RequirementMapping mapping)
+    {
+        return $"{mapping.RequirementAreaId:N}:{mapping.CoverageLevel}:{mapping.Notes}";
+    }
+
+    private static int AreaOrder(Guid requirementAreaId, IReadOnlyList<RequirementArea> areas)
+    {
+        var area = areas.FirstOrDefault(item => item.Id == requirementAreaId);
+        return area is null ? 99 : SourceOrder(area.View);
     }
 
     private static CourseTemplateOptionDefinition? FindSourceOption(Course course)
@@ -610,26 +671,74 @@ public sealed class CourseService
     {
         return new CourseDescription(
             FillBlank(current.Description, defaults.Description),
-            FillBlank(current.InstructionalMethods, defaults.InstructionalMethods),
+            FillPackDefault(current.InstructionalMethods, defaults.InstructionalMethods, IsLegacyInstructionalDefault),
             FillBlank(current.MajorTopics, defaults.MajorTopics),
-            FillBlank(current.TextsAndResources, defaults.TextsAndResources),
-            FillBlank(current.AssessmentMethods, defaults.AssessmentMethods),
-            FillBlank(current.GradingBasis, defaults.GradingBasis));
+            FillPackDefault(current.TextsAndResources, defaults.TextsAndResources, IsLegacyResourceList),
+            FillPackDefault(current.AssessmentMethods, defaults.AssessmentMethods, IsLegacyAssessmentDefault),
+            FillPackDefault(current.GradingBasis, defaults.GradingBasis, IsLegacyGradingDefault));
     }
 
     private static CurriculumPlan MergeCurriculumPlan(CurriculumPlan current, CurriculumPlan defaults)
     {
         return new CurriculumPlan(
             FillBlank(current.Goals, defaults.Goals),
-            FillBlank(current.LearningObjectives, defaults.LearningObjectives),
-            FillBlank(current.MajorResources, defaults.MajorResources),
+            FillPackDefault(current.LearningObjectives, defaults.LearningObjectives, IsLegacyLearningObjectives),
+            FillPackDefault(current.MajorResources, defaults.MajorResources, IsLegacyResourceList),
             FillBlank(current.PlannedSequence, defaults.PlannedSequence),
             FillBlank(current.ParentNotes, defaults.ParentNotes));
+    }
+
+    private static string FillPackDefault(string current, string fallback, Func<string, bool> isLegacyDefault)
+    {
+        if (string.IsNullOrWhiteSpace(current))
+        {
+            return fallback;
+        }
+
+        return isLegacyDefault(current) ? fallback : current;
     }
 
     private static string FillBlank(string current, string fallback)
     {
         return string.IsNullOrWhiteSpace(current) ? fallback : current;
+    }
+
+    private static IReadOnlyList<string> NormalizeSubjectAreas(IReadOnlyList<string> subjectAreas)
+    {
+        var normalized = subjectAreas
+            .Where(subject => !string.IsNullOrWhiteSpace(subject))
+            .Select(subject => subject.Trim())
+            .ToArray();
+
+        return normalized.Length == 0 ? ["Course"] : normalized;
+    }
+
+    private static bool IsLegacyInstructionalDefault(string current)
+    {
+        return current.StartsWith("Explicit instruction with guided practice", StringComparison.Ordinal);
+    }
+
+    private static bool IsLegacyAssessmentDefault(string current)
+    {
+        return current.StartsWith("Ongoing formative checks", StringComparison.Ordinal);
+    }
+
+    private static bool IsLegacyGradingDefault(string current)
+    {
+        return current.StartsWith("Mastery-aligned letter grade", StringComparison.Ordinal);
+    }
+
+    private static bool IsLegacyResourceList(string current)
+    {
+        return !current.Contains('|') &&
+            !current.Contains('\n') &&
+            current.Contains(';');
+    }
+
+    private static bool IsLegacyLearningObjectives(string current)
+    {
+        return current.Contains("Explain major concepts in", StringComparison.OrdinalIgnoreCase) &&
+            current.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RefreshRequirementSeedForPackAsync(
@@ -638,10 +747,12 @@ public sealed class CourseService
     {
         if (string.Equals(pack.RequirementJurisdiction, "Michigan", StringComparison.OrdinalIgnoreCase))
         {
-            await repository.SaveRequirementSeedAsync(
-                MichiganRequirementSeed.CreateSet(),
-                MichiganRequirementSeed.CreateAreas(),
-                cancellationToken);
+            await RefreshMichiganRequirementSeedAsync(cancellationToken);
         }
+    }
+
+    private async Task RefreshMichiganRequirementSeedAsync(CancellationToken cancellationToken)
+    {
+        await MichiganRequirementSeedRefresh.EnsureCurrentAsync(repository, cancellationToken);
     }
 }

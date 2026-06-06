@@ -17,6 +17,8 @@
 | 2026-06-06 | MDE Homeschooling in Michigan PDF | Confirms no required curriculum/student-data submission to MDE and parent responsibility for records including transcripts and diplomas. |
 | 2026-06-06 | MDE Michigan Merit Curriculum FAQ Introduction | Confirms the 18-credit MMC categories, nonpublic/home school graduation-criteria boundary, and one-semester Civics/Government note. |
 | 2026-06-06 | MDE Michigan Merit Curriculum Overview PDF | Confirms MMC reference categories and that courses, CTE programs, internships, and other learning opportunities can provide pieces of multiple credits. |
+| 2026-06-06 | MDE Exemption (f), MCL 380.1561, and MMC overview refresh | Supports treating statutory homeschool subject areas as canonical and seeding MDE/MMC rows only for distinct planning categories not already represented by statutory rows. |
+| 2026-06-06 | MDE Exemption (f), MCL 380.1561, and MMC overview refresh | Supports displaying statutory rows as the core source and omitting duplicated MDE/MMC aliases in parent-facing requirement lists. |
 
 ## Source URLs
 

@@ -1,13 +1,47 @@
 @page "/requirements"
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
 @using HomeschoolManager.Application.Requirements
+@using HomeschoolManager.Web.Services
 @inject RequirementService RequirementService
+@inject SessionState Session
 
 <PageTitle>Michigan Requirements</PageTitle>
 
 <h1>Michigan requirement checklist</h1>
 
 <p>These areas help show selected Michigan homeschool subject-area coverage in your records. This checklist does not certify legal compliance.</p>
+
+@if (Session.IsParentAdmin)
+{
+    <section class="form-section">
+        <h2>Add parent requirement</h2>
+        <label class="form-label" for="requirement-view">Source <span class="required-marker">*</span></label>
+        <select id="requirement-view" class="form-select" @bind="newRequirement.View">
+            <option value="Statutory">Statutory</option>
+            <option value="MDE Summary">MDE Summary</option>
+            <option value="MMC Reference">MMC Reference</option>
+        </select>
+        @ValidationFor("requirement.View")
+        <label class="form-label" for="requirement-name">Area <span class="required-marker">*</span></label>
+        <input id="requirement-name" class="form-control" @bind="newRequirement.Name" />
+        @ValidationFor("requirement.Name")
+        <label class="form-label" for="requirement-grade-band">Grade band <span class="required-marker">*</span></label>
+        <input id="requirement-grade-band" class="form-control" @bind="newRequirement.GradeBand" />
+        @ValidationFor("requirement.GradeBand")
+        <button class="btn btn-primary mt-2" @onclick="AddParentRequirement">Add requirement</button>
+    </section>
+}
+
+@if (messages.Count > 0)
+{
+    <section class="message-list" aria-live="polite">
+        @foreach (var message in messages)
+        {
+            <div class="@message.CssClass">@message.Text</div>
+        }
+    </section>
+}
 
 @if (items.Count == 0)
 {
@@ -40,9 +74,89 @@ else
 
 @code {
     private IReadOnlyList<RequirementChecklistItem> items = [];
+    private RequirementFormModel newRequirement = new();
+    private readonly List<PageMessage> messages = [];
+    private readonly Dictionary<string, string> fieldErrors = [];
 
     protected override async Task OnInitializedAsync()
     {
+        await Refresh();
+    }
+
+    private async Task AddParentRequirement()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        if (!ValidateRequirement())
+        {
+            return;
+        }
+
+        var user = Session.CurrentUser;
+        if (user is null)
+        {
+            messages.Add(new PageMessage("Sign in as parent/admin to add requirements.", "alert alert-danger"));
+            return;
+        }
+
+        var result = await RequirementService.AddParentRequirementAsync(
+            user,
+            new AddParentRequirementCommand(newRequirement.View, newRequirement.Name, newRequirement.GradeBand));
+        if (!result.Succeeded)
+        {
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        messages.Add(new PageMessage("Requirement added.", "alert alert-success"));
+        newRequirement = new RequirementFormModel();
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
         items = await RequirementService.GetChecklistAsync();
     }
+
+    private bool ValidateRequirement()
+    {
+        if (string.IsNullOrWhiteSpace(newRequirement.View))
+        {
+            fieldErrors["requirement.View"] = "Source is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(newRequirement.Name))
+        {
+            fieldErrors["requirement.Name"] = "Area is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(newRequirement.GradeBand))
+        {
+            fieldErrors["requirement.GradeBand"] = "Grade band is required.";
+        }
+
+        if (fieldErrors.Count == 0)
+        {
+            return true;
+        }
+
+        messages.Add(new PageMessage("Please complete the required fields.", "alert alert-danger"));
+        return false;
+    }
+
+    private MarkupString ValidationFor(string key)
+    {
+        return fieldErrors.TryGetValue(key, out var message)
+            ? new MarkupString($"<div class=\"validation-message\">{System.Net.WebUtility.HtmlEncode(message)}</div>")
+            : new MarkupString("");
+    }
+
+    private sealed class RequirementFormModel
+    {
+        public string View { get; set; } = "Statutory";
+        public string Name { get; set; } = "";
+        public string GradeBand { get; set; } = "Parent";
+    }
+
+    private sealed record PageMessage(string Text, string CssClass);
 }

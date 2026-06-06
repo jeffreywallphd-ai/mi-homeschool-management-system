@@ -133,13 +133,13 @@ The accepted architecture targets SQLite. The first implementation may use the r
 
 - Add Michigan requirement set.
 - Seed statutory subject areas.
-- Seed MDE guidance/checklist areas as a related view.
+- Seed value-added MDE guidance/checklist areas as a related view without duplicating statutory subjects.
 - Add requirement checklist query.
 
 ### Exit Criteria
 
 - Michigan is represented as a jurisdiction profile.
-- Statutory and MDE guidance areas remain distinct.
+- Statutory areas remain the visible core; only differentiated MDE guidance areas remain as distinct rows.
 - Checklist language says records show selected coverage, not legal compliance.
 
 ### Verification

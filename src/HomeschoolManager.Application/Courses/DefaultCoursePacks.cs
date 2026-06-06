@@ -6,11 +6,11 @@ public static class DefaultCoursePacks
 {
     public const string MichiganCollegeReadyPackId = "mi-college-recognizable-core-v1";
     private const string DefaultInstructionalMethods =
-        "Explicit instruction with guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection.";
+        "Hybrid instructional plan combining explicit instruction, guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection.";
     private const string DefaultAssessmentMethods =
-        "Ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate, project or performance evidence, and a final portfolio review or summative evaluation.";
+        "Hybrid assessment plan combining ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate, project or performance evidence, and a final portfolio review or summative evaluation.";
     private const string DefaultGradingBasis =
-        "Mastery-aligned letter grade using parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection.";
+        "Hybrid grading basis using a mastery-aligned letter grade from parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection.";
 
     public static IReadOnlyList<CoursePackDefinition> All { get; } =
     [
@@ -22,7 +22,7 @@ public static class DefaultCoursePacks
             [
                 FullYear("ela-12", "English Language Arts 12", ["English Language Arts", "Reading", "Literature", "Writing", "English Grammar", "Spelling"], 1,
                     "Senior English emphasizing literature, composition, grammar, vocabulary, and revision.",
-                    [Map("MMC Reference", "English Language Arts", CoverageLevel.Primary), Map("MDE Summary", "English Language Arts", CoverageLevel.Primary), Map("Statutory", "Reading", CoverageLevel.Primary), Map("Statutory", "Literature", CoverageLevel.Primary), Map("Statutory", "Writing", CoverageLevel.Primary), Map("Statutory", "English Grammar", CoverageLevel.Secondary), Map("Statutory", "Spelling", CoverageLevel.Supporting)]),
+                    [Map("Statutory", "Reading", CoverageLevel.Primary), Map("Statutory", "Literature", CoverageLevel.Primary), Map("Statutory", "Writing", CoverageLevel.Primary), Map("Statutory", "English Grammar", CoverageLevel.Secondary), Map("Statutory", "Spelling", CoverageLevel.Supporting)]),
                 Choice("math-12", "Senior Mathematics", "precalculus",
                     [
                         MathOption("math-12", "Math 12", "A senior mathematics course reviewing algebra, functions, modeling, data, and practical quantitative reasoning."),
@@ -51,25 +51,25 @@ public static class DefaultCoursePacks
                     [
                         Option("government-economics", "Government and Economics", ["Social Studies", "Civics", "Economics"], CourseDuration.TwoSemesters, 1,
                             "A senior social studies course combining American government, citizenship, civic participation, economic reasoning, and personal or applied economics.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Primary), Map("MDE Summary", "Social Studies", CoverageLevel.Primary), Map("Statutory", "Civics", CoverageLevel.Primary)]),
+                            [Map("Statutory", "Civics", CoverageLevel.Primary)]),
                         Option("government-civics", "Government and Civics", ["Social Studies", "Civics"], CourseDuration.OneSemester, 0.5m,
                             "A one-semester government and civics course covering constitutional principles, citizenship, rights, responsibilities, and civic participation.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Secondary), Map("MDE Summary", "Social Studies", CoverageLevel.Secondary), Map("Statutory", "Civics", CoverageLevel.Primary)]),
+                            [Map("Statutory", "Civics", CoverageLevel.Primary)]),
                         Option("economics", "Economics", ["Social Studies", "Economics"], CourseDuration.OneSemester, 0.5m,
                             "A one-semester economics course covering personal, microeconomic, macroeconomic, or applied economic concepts.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Secondary)]),
+                            []),
                         Option("us-history", "U.S. History", ["Social Studies", "History"], CourseDuration.TwoSemesters, 1,
                             "A United States history course covering major eras, historical evidence, civic context, and continuity and change over time.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Primary), Map("MDE Summary", "Social Studies", CoverageLevel.Primary), Map("Statutory", "History", CoverageLevel.Primary)]),
+                            [Map("Statutory", "History", CoverageLevel.Primary)]),
                         Option("world-history", "World History", ["Social Studies", "History"], CourseDuration.TwoSemesters, 1,
                             "A world history course covering global eras, geography, culture, conflict, exchange, and historical inquiry.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Primary), Map("MDE Summary", "Social Studies", CoverageLevel.Primary), Map("Statutory", "History", CoverageLevel.Primary)]),
+                            [Map("Statutory", "History", CoverageLevel.Primary)]),
                         Option("psychology", "Psychology", ["Social Studies"], CourseDuration.OneSemester, 0.5m,
                             "A social science elective covering behavior, cognition, development, research methods, and applications of psychological concepts.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Supporting)]),
+                            []),
                         Option("sociology", "Sociology", ["Social Studies"], CourseDuration.OneSemester, 0.5m,
                             "A social science elective covering culture, institutions, groups, social change, and sociological perspectives.",
-                            [Map("MMC Reference", "Social Studies", CoverageLevel.Supporting)])
+                            [])
                     ]),
                 Semester("personal-finance", "Personal Finance", ["Personal Finance", "Mathematics"], 0.5m,
                     "A one-semester personal finance course covering budgeting, banking, credit, insurance, taxes, and long-term planning.",
@@ -170,7 +170,7 @@ public static class DefaultCoursePacks
             CourseDuration.TwoSemesters,
             1,
             description,
-            [Map("MMC Reference", "Mathematics", CoverageLevel.Primary), Map("MDE Summary", "Mathematics", CoverageLevel.Primary), Map("Statutory", "Mathematics", CoverageLevel.Primary)]);
+            [Map("Statutory", "Mathematics", CoverageLevel.Primary)]);
     }
 
     private static CourseTemplateOptionDefinition ScienceOption(string id, string title, string description)
@@ -182,7 +182,7 @@ public static class DefaultCoursePacks
             CourseDuration.TwoSemesters,
             1,
             description,
-            [Map("MMC Reference", "Science", CoverageLevel.Primary), Map("MDE Summary", "Science", CoverageLevel.Primary), Map("Statutory", "Science", CoverageLevel.Primary)]);
+            [Map("Statutory", "Science", CoverageLevel.Primary)]);
     }
 
     private static CourseTemplateOptionDefinition ArtsOption(string id, string title, string description)
@@ -257,7 +257,13 @@ public static class DefaultCoursePacks
         var subjectText = string.Join(", ", subjects);
         return new CurriculumPlan(
             $"Build a transcript-ready understanding of {title} through clear instruction, documented practice, applied work, and parent-reviewed evidence.",
-            $"Explain major concepts in {title}; apply course skills in written, oral, practical, or problem-based work; use appropriate vocabulary and resources; and produce evidence suitable for course records.",
+            string.Join(Environment.NewLine,
+            [
+                $"Explain major concepts and vocabulary in {title}.",
+                "Apply course skills in written, oral, practical, creative, or problem-based work.",
+                "Use appropriate texts, resources, tools, and evidence to support conclusions.",
+                "Produce portfolio-ready evidence of learning, revision, and reflection."
+            ]),
             TextsAndResourcesFor(title),
             duration == CourseDuration.TwoSemesters
                 ? $"Semester 1: foundations, core vocabulary, guided practice, and early projects. Semester 2: advanced topics, independent application, review, and a final portfolio or capstone evidence set for {subjectText}."
@@ -325,42 +331,42 @@ public static class DefaultCoursePacks
     {
         return title switch
         {
-            "English Language Arts 12" => "CommonLit high school texts; Project Gutenberg public-domain literature; Purdue OWL writing resources; parent-selected novels, essays, speeches, and poetry.",
-            "Math 12" => "Khan Academy high school math; CK-12 math resources; OpenStax Algebra and Statistics chapters as needed; parent-created application problems.",
-            "Pre-Algebra" => "Khan Academy pre-algebra; CK-12 Pre-Algebra; OpenStax Prealgebra; parent-created practice and real-life problems.",
-            "Algebra I" => "Khan Academy Algebra 1; CK-12 Algebra; OpenStax Elementary Algebra or Intermediate Algebra chapters; graphing calculator or Desmos activities.",
-            "Geometry" => "Khan Academy Geometry; CK-12 Geometry; Illustrative Mathematics geometry tasks; Desmos geometry and graphing activities.",
-            "Algebra II" => "Khan Academy Algebra 2; CK-12 Algebra II; OpenStax Intermediate Algebra or College Algebra chapters; Desmos activities.",
-            "Trigonometry" => "Khan Academy Trigonometry; CK-12 Trigonometry; OpenStax Precalculus trigonometry chapters; Desmos graphing activities.",
-            "Precalculus" => "OpenStax Precalculus; Khan Academy Precalculus; CK-12 Precalculus; Desmos graphing activities.",
-            "Calculus I" => "OpenStax Calculus Volume 1; Khan Academy Calculus; MIT OpenCourseWare single-variable calculus support; Desmos or graphing tools.",
-            "Calculus II" => "OpenStax Calculus Volume 2; Khan Academy Calculus; MIT OpenCourseWare single-variable calculus support; graphing and symbolic tools as appropriate.",
-            "Calculus III" => "OpenStax Calculus Volume 3; MIT OpenCourseWare multivariable calculus support; 3D graphing or visualization tools.",
-            "Physics" => "OpenStax Physics or College Physics; PhET simulations; Khan Academy Physics; home lab demonstrations or documented investigations.",
-            "Environmental Science" => "CK-12 Environmental Science; EPA educational resources; NOAA climate resources; local field observations and data collection.",
-            "Anatomy and Physiology" => "OpenStax Anatomy and Physiology; visible body or anatomy diagrams; Khan Academy health and medicine; parent-approved labs or models.",
-            "Chemistry" => "OpenStax Chemistry 2e or Chemistry: Atoms First; PhET chemistry simulations; Khan Academy Chemistry; safe home lab demonstrations.",
-            "Advanced Biology" => "OpenStax Biology 2e; HHMI BioInteractive; Khan Academy Biology; microscope, field, or model-based investigations where available.",
-            "Earth and Space Science" => "CK-12 Earth Science; NASA educational resources; NOAA weather and climate resources; sky observation and local geology records.",
-            "Forensic Science" => "Open educational forensic science readings; case-study packets; safe observation, measurement, chemistry, and biology demonstrations.",
-            "Astronomy" => "OpenStax Astronomy; NASA educational resources; sky observation logs; planetarium or observatory resources where available.",
-            "Government and Economics" => "iCivics; National Constitution Center; Federalist Papers excerpts; OpenStax American Government; EconEd and CFPB resources.",
-            "Government and Civics" => "iCivics; National Constitution Center; Federalist Papers excerpts; OpenStax American Government; local/state government sources.",
-            "Economics" => "EconEd; OpenStax Principles of Economics selected chapters; Khan Academy economics; CFPB personal finance resources.",
-            "U.S. History" => "OpenStax U.S. History; Library of Congress primary sources; National Archives DocsTeach; Gilder Lehrman resources.",
-            "World History" => "World History for Us All; OpenStax World History selected chapters; OER Project resources; primary source excerpts.",
-            "Psychology" => "OpenStax Psychology 2e; APA high school psychology resources; teacher-selected case studies and reflection prompts.",
-            "Sociology" => "OpenStax Introduction to Sociology 3e; Census and community data; teacher-selected articles and observation activities.",
-            "Personal Finance" => "CFPB Money Topics and youth financial education; FDIC Money Smart; Next Gen Personal Finance; practical household budgeting exercises.",
-            "Physical Education and Health" => "CDC health education resources; MedlinePlus; SHAPE America guidance; fitness logs and parent-approved activity plans.",
-            "Experiential Capstone" => "Parent-selected project resources; interviews or mentorship notes; research sources; project log; portfolio artifacts; final presentation materials.",
-            _ when title.Contains("Computer Science", StringComparison.OrdinalIgnoreCase) => "Code.org; freeCodeCamp; Khan Academy computing; project repository or notebook; parent-selected programming references.",
-            _ when title.Contains("Career", StringComparison.OrdinalIgnoreCase) => "Bureau of Labor Statistics Occupational Outlook Handbook; CareerOneStop; interview notes; resume and planning templates.",
-            _ when title.Contains("Creative Writing", StringComparison.OrdinalIgnoreCase) => "Writing prompts; mentor texts; Purdue OWL; NaNoWriMo Young Writers resources; revision workshop notes.",
-            _ when title.Contains("Entrepreneurship", StringComparison.OrdinalIgnoreCase) => "SBA and SCORE resources; business model canvas; budgeting worksheets; customer discovery notes; pitch materials.",
-            _ when title.Contains("Independent Research", StringComparison.OrdinalIgnoreCase) => "Library databases or public sources; citation guide; research notebook; outline drafts; final paper or presentation.",
-            _ when title.Contains("College", StringComparison.OrdinalIgnoreCase) => "College Board BigFuture; Federal Student Aid resources; application checklists; study planning templates.",
-            _ when title.Contains("Work-Based", StringComparison.OrdinalIgnoreCase) => "Supervisor or mentor feedback; work logs; employability skill rubrics; safety and workplace policy materials.",
+            "English Language Arts 12" => Lines("CommonLit high school texts | https://www.commonlit.org/", "Project Gutenberg public-domain literature | https://www.gutenberg.org/", "Purdue OWL writing resources | https://owl.purdue.edu/owl/", "Parent-selected novels, essays, speeches, and poetry"),
+            "Math 12" => Lines("Khan Academy high school math | https://www.khanacademy.org/math/high-school-math", "CK-12 math resources | https://www.ck12.org/", "OpenStax Algebra and Statistics chapters as needed | https://openstax.org/subjects/math", "Parent-created application problems"),
+            "Pre-Algebra" => Lines("Khan Academy pre-algebra | https://www.khanacademy.org/math/pre-algebra", "CK-12 Pre-Algebra | https://www.ck12.org/", "OpenStax Prealgebra | https://openstax.org/details/books/prealgebra-2e", "Parent-created practice and real-life problems"),
+            "Algebra I" => Lines("Khan Academy Algebra 1 | https://www.khanacademy.org/math/algebra", "CK-12 Algebra | https://www.ck12.org/", "OpenStax Elementary Algebra | https://openstax.org/details/books/elementary-algebra-2e", "Desmos graphing activities | https://www.desmos.com/"),
+            "Geometry" => Lines("Khan Academy Geometry | https://www.khanacademy.org/math/geometry", "CK-12 Geometry | https://www.ck12.org/", "Illustrative Mathematics geometry tasks | https://tasks.illustrativemathematics.org/", "Desmos geometry and graphing activities | https://www.desmos.com/"),
+            "Algebra II" => Lines("Khan Academy Algebra 2 | https://www.khanacademy.org/math/algebra2", "CK-12 Algebra II | https://www.ck12.org/", "OpenStax College Algebra | https://openstax.org/details/books/college-algebra-2e", "Desmos activities | https://www.desmos.com/"),
+            "Trigonometry" => Lines("Khan Academy Trigonometry | https://www.khanacademy.org/math/trigonometry", "CK-12 Trigonometry | https://www.ck12.org/", "OpenStax Precalculus trigonometry chapters | https://openstax.org/books/precalculus/pages/index", "Desmos graphing activities | https://www.desmos.com/"),
+            "Precalculus" => Lines("OpenStax Precalculus | https://openstax.org/details/books/precalculus-2e", "Khan Academy Precalculus | https://www.khanacademy.org/math/precalculus", "CK-12 Precalculus | https://www.ck12.org/", "Desmos graphing activities | https://www.desmos.com/"),
+            "Calculus I" => Lines("OpenStax Calculus Volume 1 | https://openstax.org/details/books/calculus-volume-1", "Khan Academy Calculus | https://www.khanacademy.org/math/calculus-1", "MIT OpenCourseWare single-variable calculus | https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/", "Desmos graphing tools | https://www.desmos.com/"),
+            "Calculus II" => Lines("OpenStax Calculus Volume 2 | https://openstax.org/details/books/calculus-volume-2", "Khan Academy Calculus | https://www.khanacademy.org/math/calculus-2", "MIT OpenCourseWare single-variable calculus | https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/", "Graphing and symbolic tools as appropriate"),
+            "Calculus III" => Lines("OpenStax Calculus Volume 3 | https://openstax.org/details/books/calculus-volume-3", "MIT OpenCourseWare multivariable calculus | https://ocw.mit.edu/courses/18-02sc-multivariable-calculus-fall-2010/", "3D graphing or visualization tools"),
+            "Physics" => Lines("OpenStax Physics | https://openstax.org/books/physics/pages/index", "OpenStax College Physics 2e | https://openstax.org/details/books/college-physics-2e", "PhET simulations | https://phet.colorado.edu/", "Home lab demonstrations or documented investigations"),
+            "Environmental Science" => Lines("CK-12 Environmental Science | https://www.ck12.org/", "EPA student resources | https://www.epa.gov/students", "NOAA education resources | https://www.noaa.gov/education", "Local field observations and data collection"),
+            "Anatomy and Physiology" => Lines("OpenStax Anatomy and Physiology 2e | https://openstax.org/details/books/anatomy-and-physiology-2e", "Khan Academy health and medicine | https://www.khanacademy.org/science/health-and-medicine", "Parent-approved labs or models"),
+            "Chemistry" => Lines("OpenStax Chemistry 2e | https://openstax.org/details/books/chemistry-2e", "PhET chemistry simulations | https://phet.colorado.edu/", "Khan Academy Chemistry | https://www.khanacademy.org/science/chemistry", "Safe home lab demonstrations"),
+            "Advanced Biology" => Lines("OpenStax Biology 2e | https://openstax.org/details/books/biology-2e", "HHMI BioInteractive | https://www.biointeractive.org/", "Khan Academy Biology | https://www.khanacademy.org/science/biology", "Microscope, field, or model-based investigations"),
+            "Earth and Space Science" => Lines("CK-12 Earth Science | https://www.ck12.org/", "NASA learning resources | https://www.nasa.gov/learning-resources/", "NOAA education resources | https://www.noaa.gov/education", "Sky observation and local geology records"),
+            "Forensic Science" => Lines("National Institute of Justice forensic science topics | https://nij.ojp.gov/topics/forensics", "Open educational forensic science readings", "Case-study packets", "Safe observation, measurement, chemistry, and biology demonstrations"),
+            "Astronomy" => Lines("OpenStax Astronomy 2e | https://openstax.org/details/books/astronomy-2e", "NASA learning resources | https://www.nasa.gov/learning-resources/", "Sky observation logs", "Planetarium or observatory resources where available"),
+            "Government and Economics" => Lines("iCivics | https://www.icivics.org/", "National Constitution Center | https://constitutioncenter.org/", "OpenStax American Government 3e | https://openstax.org/details/books/american-government-3e/", "CFPB youth financial education | https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/"),
+            "Government and Civics" => Lines("iCivics | https://www.icivics.org/", "National Constitution Center | https://constitutioncenter.org/", "OpenStax American Government 3e | https://openstax.org/details/books/american-government-3e/", "Local and state government sources"),
+            "Economics" => Lines("OpenStax Principles of Economics 3e | https://openstax.org/details/books/principles-economics-3e", "Khan Academy economics | https://www.khanacademy.org/economics-finance-domain", "CFPB consumer tools | https://www.consumerfinance.gov/consumer-tools/"),
+            "U.S. History" => Lines("OpenStax U.S. History | https://openstax.org/details/books/us-history", "Library of Congress primary sources | https://www.loc.gov/", "National Archives DocsTeach | https://www.docsteach.org/"),
+            "World History" => Lines("OpenStax World History Volume 2 | https://openstax.org/details/books/world-history-volume-2", "World History for Us All | https://whfua.history.ucla.edu/", "OER Project | https://www.oerproject.com/", "Primary source excerpts"),
+            "Psychology" => Lines("OpenStax Psychology 2e | https://openstax.org/details/books/psychology-2e", "APA high school psychology resources | https://www.apa.org/education-career/k12", "Teacher-selected case studies and reflection prompts"),
+            "Sociology" => Lines("OpenStax Introduction to Sociology 3e | https://openstax.org/details/books/introduction-sociology-3e", "U.S. Census data | https://www.census.gov/", "Teacher-selected articles and observation activities"),
+            "Personal Finance" => Lines("CFPB youth financial education | https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/", "FDIC Money Smart | https://www.fdic.gov/resources/consumers/money-smart", "Next Gen Personal Finance | https://www.ngpf.org/", "Practical household budgeting exercises"),
+            "Physical Education and Health" => Lines("CDC school health resources | https://www.cdc.gov/healthyschools/", "MedlinePlus | https://medlineplus.gov/", "SHAPE America | https://www.shapeamerica.org/", "Fitness logs and parent-approved activity plans"),
+            "Experiential Capstone" => Lines("Purdue OWL research and citation resources | https://owl.purdue.edu/owl/research_and_citation/", "Parent-selected project resources", "Interviews or mentorship notes", "Research sources", "Project log", "Portfolio artifacts", "Final presentation materials"),
+            _ when title.Contains("Computer Science", StringComparison.OrdinalIgnoreCase) => Lines("Code.org | https://code.org/", "freeCodeCamp | https://www.freecodecamp.org/", "Khan Academy computing | https://www.khanacademy.org/computing", "Project repository or notebook"),
+            _ when title.Contains("Career", StringComparison.OrdinalIgnoreCase) => Lines("Bureau of Labor Statistics Occupational Outlook Handbook | https://www.bls.gov/ooh/", "CareerOneStop | https://www.careeronestop.org/", "Interview notes", "Resume and planning templates"),
+            _ when title.Contains("Creative Writing", StringComparison.OrdinalIgnoreCase) => Lines("Writing prompts", "Mentor texts", "Purdue OWL | https://owl.purdue.edu/owl/", "NaNoWriMo Young Writers Program | https://ywp.nanowrimo.org/", "Revision workshop notes"),
+            _ when title.Contains("Entrepreneurship", StringComparison.OrdinalIgnoreCase) => Lines("U.S. Small Business Administration | https://www.sba.gov/", "SCORE resources | https://www.score.org/", "Business model canvas", "Budgeting worksheets", "Customer discovery notes"),
+            _ when title.Contains("Independent Research", StringComparison.OrdinalIgnoreCase) => Lines("Purdue OWL research and citation resources | https://owl.purdue.edu/owl/research_and_citation/", "Library databases or public sources", "Citation guide", "Research notebook", "Outline drafts", "Final paper or presentation"),
+            _ when title.Contains("College", StringComparison.OrdinalIgnoreCase) => Lines("College Board BigFuture | https://bigfuture.collegeboard.org/", "Federal Student Aid | https://studentaid.gov/", "Application checklists", "Study planning templates"),
+            _ when title.Contains("Work-Based", StringComparison.OrdinalIgnoreCase) => Lines("CareerOneStop skills and career resources | https://www.careeronestop.org/", "Supervisor or mentor feedback", "Work logs", "Employability skill rubrics", "Safety and workplace policy materials"),
             _ when title.Contains("Spanish", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("French", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("German", StringComparison.OrdinalIgnoreCase) ||
@@ -369,18 +375,23 @@ public static class DefaultCoursePacks
                 title.Contains("Arabic", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Italian", StringComparison.OrdinalIgnoreCase) ||
                 title == "American Sign Language" ||
-                title == "Latin" => "ACTFL Can-Do Statements; parent-selected language text or online course; conversation practice; vocabulary notebook; cultural readings and media.",
+                title == "Latin" => Lines("ACTFL Can-Do Statements | https://www.actfl.org/educator-resources/ncssfl-actfl-can-do-statements", "Parent-selected language text or online course", "Conversation practice", "Vocabulary notebook", "Cultural readings and media"),
             _ when title.Contains("Art", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Drawing", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Painting", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Photography", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Design", StringComparison.OrdinalIgnoreCase) ||
-                title.Contains("Ceramics", StringComparison.OrdinalIgnoreCase) => "Khan Academy art resources; museum education resources; artist examples; sketchbook or process journal; portfolio artifacts.",
+                title.Contains("Ceramics", StringComparison.OrdinalIgnoreCase) => Lines("Khan Academy art history | https://www.khanacademy.org/humanities/art-history", "Museum education resources", "Artist examples", "Sketchbook or process journal", "Portfolio artifacts"),
             _ when title.Contains("Theater", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Choir", StringComparison.OrdinalIgnoreCase) ||
                 title.Contains("Music", StringComparison.OrdinalIgnoreCase) ||
-                title.Contains("Band", StringComparison.OrdinalIgnoreCase) => "Parent-selected repertoire or script; performance recordings; music theory or theater resources; rehearsal log; critique notes.",
-            _ => "Parent-selected spine text or course platform; open educational resources; notebooks; project evidence; portfolio artifacts."
+                title.Contains("Band", StringComparison.OrdinalIgnoreCase) => Lines("Khan Academy music resources | https://www.khanacademy.org/humanities/music", "Parent-selected repertoire or script", "Performance recordings", "Music theory or theater resources", "Rehearsal log", "Critique notes"),
+            _ => Lines("Khan Academy | https://www.khanacademy.org/", "Parent-selected spine text or course platform", "Open educational resources", "Notebooks", "Project evidence", "Portfolio artifacts")
         };
+    }
+
+    private static string Lines(params string[] values)
+    {
+        return string.Join(Environment.NewLine, values);
     }
 }

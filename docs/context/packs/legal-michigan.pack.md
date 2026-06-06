@@ -20,11 +20,14 @@ Purpose: Michigan legal-reference and wording boundaries.
 - MMC reference categories are separate transcript-planning aids, not homeschool legal requirements.
 - Michigan is a seed profile, not a hard-coded product limit.
 - Statutory requirement areas are prioritized first in lists and summaries.
-- Overlapping source labels use shared parent-facing names where practical while preserving source views.
+- Statutory areas are canonical; seed MDE/MMC rows only for distinct categories not represented by statutory rows.
+- Parent-added requirements may extend Statutory, MDE Summary, or MMC Reference views and remain parent-owned.
+- English Language Arts, Mathematics, Science, Social Studies, and Civics variants should not duplicate statutory coverage rows.
+- Statutory coverage rows display source as `Statutory` only, not combined source labels.
 - Legal-facing changes refresh official sources first.
 
 ## Common Failure Modes
 
 - Saying compliant, approved, accredited, or submitted.
-- Merging statutory and MDE summary areas into one untraceable list.
+- Duplicating statutory areas through MDE/MMC aliases.
 - Merging MMC reference categories with statutory homeschool subject areas.

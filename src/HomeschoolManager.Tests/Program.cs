@@ -5,6 +5,7 @@ using HomeschoolManager.Domain.Access;
 using HomeschoolManager.Domain.Common;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Household;
+using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
@@ -66,12 +67,12 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue((await service.SeedMichiganAsync(parent)).Succeeded, "Second seed failed.");
 
         var checklist = await service.GetChecklistAsync();
-        AssertEqual(26, checklist.Count, "Unexpected seeded area count.");
+        AssertEqual(16, checklist.Count, "Unexpected seeded area count.");
         AssertEqual("Statutory", checklist[0].View, "Statutory requirements should be listed first.");
         AssertTrue(checklist.Any(item => item.View == "Statutory" && item.Name == "English Grammar"), "Missing statutory view area.");
-        AssertTrue(checklist.Any(item => item.View == "MDE Summary" && item.Name == "English Language Arts"), "Missing normalized MDE English Language Arts area.");
-        AssertTrue(checklist.Any(item => item.View == "MDE Summary" && item.Name == "Civics"), "Missing normalized MDE Civics area.");
-        AssertTrue(checklist.Any(item => item.View == "MMC Reference" && item.Name == "English Language Arts"), "Missing MMC reference view area.");
+        AssertTrue(checklist.Any(item => item.View == "MDE Summary" && item.Name == "U.S. Constitution"), "Missing MDE U.S. Constitution area.");
+        AssertTrue(checklist.Any(item => item.View == "MMC Reference" && item.Name == "Personal Finance"), "Missing MMC personal finance reference area.");
+        AssertFalse(checklist.Any(item => item.View != "Statutory" && item.Name == "English Language Arts"), "English Language Arts should be represented by statutory English subject rows.");
     }),
     ("Default Michigan course pack mappings match seeded requirement areas", () =>
     {
@@ -94,11 +95,17 @@ var tests = new List<(string Name, Func<Task> Test)>
 
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.MajorTopics), $"Missing major topics for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.TextsAndResources), $"Missing texts/resources for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Description.TextsAndResources.Split(Environment.NewLine).Any(line => line.Contains('|', StringComparison.Ordinal)), $"Texts/resources should include named resource links for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.InstructionalMethods), $"Missing instructional methods for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Description.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Instructional methods should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.AssessmentMethods), $"Missing assessment methods for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Description.AssessmentMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Assessment methods should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.GradingBasis), $"Missing grading basis for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Description.GradingBasis.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Grading basis should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.Goals), $"Missing curriculum goals for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.LearningObjectives), $"Missing learning objectives for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine).Length >= 3, $"Learning objectives should be separated for {template.TemplateId}/{option.OptionId}.");
+                AssertFalse(option.CurriculumPlan.LearningObjectives.Contains("Upon completion", StringComparison.OrdinalIgnoreCase), $"Learning objectives should finish the standard sentence without repeating it for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.MajorResources), $"Missing major resources for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.PlannedSequence), $"Missing planned sequence for {template.TemplateId}/{option.OptionId}.");
             }
@@ -112,6 +119,43 @@ var tests = new List<(string Name, Func<Task> Test)>
         var service = new RequirementService(repository);
         var result = await service.SeedMichiganAsync(UserContext.Student("Student"));
         AssertFalse(result.Succeeded, "Student seed command should fail.");
+    }),
+    ("Parent requirements extend requirement lists and mappings", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var requirementService = new RequirementService(repository);
+        var courseService = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        AssertFalse((await requirementService.AddParentRequirementAsync(
+            UserContext.Student("Student"),
+            new AddParentRequirementCommand("Statutory", "Family Civics Project", "Grade 12"))).Succeeded, "Student should not add parent requirements.");
+        AssertTrue((await requirementService.AddParentRequirementAsync(
+            parent,
+            new AddParentRequirementCommand("Statutory", "Family Civics Project", "Grade 12"))).Succeeded, "Parent requirement add failed.");
+
+        var checklist = await requirementService.GetChecklistAsync();
+        var parentRequirement = checklist.FirstOrDefault(item =>
+            item.View == "Statutory" &&
+            item.Name == "Family Civics Project" &&
+            item.RequiredOrRecommended == "Parent");
+        if (parentRequirement is null)
+        {
+            throw new InvalidOperationException("Parent requirement was not listed.");
+        }
+        var refreshedChecklist = await requirementService.GetChecklistAsync();
+        AssertEqual(1, refreshedChecklist.Count(item => item.Name == "Family Civics Project"), "Parent requirement should not duplicate on seed refresh.");
+
+        var createResult = await courseService.CreateCourseAsync(parent, new CreateCourseCommand("Civics Practicum", "Applied civic learning.", [], CourseDuration.OneSemester, 0.5m));
+        AssertTrue(createResult.Succeeded, "Course create without visible subject input should pass.");
+        var courseId = createResult.Value;
+        AssertTrue((await courseService.SetRequirementMappingsAsync(parent, new SetCourseRequirementMappingsCommand(
+            courseId,
+            [new RequirementMappingCommand(parentRequirement.RequirementAreaId, CoverageLevel.Primary, "Parent-added coverage.")]))).Succeeded, "Parent requirement mapping failed.");
+
+        var coverage = await courseService.GetCoverageSummaryAsync();
+        AssertTrue(coverage.Any(item => item.Name == "Family Civics Project" && item.IsMapped), "Parent requirement should appear in coverage summary.");
     }),
     ("Course requires title and valid planned credit", () =>
     {
@@ -262,13 +306,10 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         var coverage = await courseService.GetCoverageSummaryAsync();
         AssertEqual("Civics", coverage.First().Name, "Statutory coverage groups should be listed first.");
-        var englishLanguageArts = coverage.First(item => item.Name == "English Language Arts");
-        AssertTrue(englishLanguageArts.Source.Contains("MDE Summary", StringComparison.Ordinal), "English Language Arts should include MDE summary source.");
-        AssertTrue(englishLanguageArts.Source.Contains("MMC Reference", StringComparison.Ordinal), "English Language Arts should include MMC reference source.");
-        AssertTrue(englishLanguageArts.IsMapped, "English Language Arts should be mapped.");
+        AssertTrue(coverage.Any(item => item.Name == "Reading" && item.Source == "Statutory" && item.IsMapped), "Reading should be mapped through the statutory English subject rows.");
+        AssertTrue(coverage.Any(item => item.Name == "Writing" && item.Source == "Statutory" && item.IsMapped), "Writing should be mapped through the statutory English subject rows.");
         var mathematics = coverage.First(item => item.Name == "Mathematics");
         AssertTrue(mathematics.Source.Contains("Statutory", StringComparison.Ordinal), "Mathematics should include statutory source.");
-        AssertTrue(mathematics.Source.Contains("MDE Summary", StringComparison.Ordinal), "Mathematics should include MDE summary source.");
         AssertEqual(mathematics.CourseTitles.Count, mathematics.CourseTitles.Distinct().Count(), "Coverage summary should not duplicate course titles.");
     })),
     ("Selected course pack import imports only selected templates", (Func<Task>)(async () =>
@@ -315,9 +356,74 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(import.Succeeded, "Course pack import should repair missing Michigan requirement areas.");
 
         var coverage = await courseService.GetCoverageSummaryAsync();
-        var englishLanguageArts = coverage.First(item => item.Name == "English Language Arts");
-        AssertTrue(englishLanguageArts.Source.Contains("MMC Reference", StringComparison.Ordinal), "MMC ELA reference should be restored.");
-        AssertTrue(englishLanguageArts.IsMapped, "English Language Arts should be mapped after seed repair.");
+        var personalFinance = coverage.First(item => item.Name == "Personal Finance");
+        AssertTrue(personalFinance.Source.Contains("MMC Reference", StringComparison.Ordinal), "MMC personal finance reference should be restored.");
+        AssertTrue(personalFinance.IsMapped, "Personal Finance should be mapped after seed repair.");
+    })),
+    ("Imported course mappings migrate away from stale duplicate requirement rows", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var requirementSet = MichiganRequirementSeed.CreateSet();
+        var staleEnglishMde = new RequirementArea(
+            DeterministicGuid("MDE Summary:English Language Arts"),
+            requirementSet.Id,
+            "English Language Arts",
+            "",
+            "All grades",
+            "Guidance",
+            "MDE Summary");
+        var staleEnglishMmc = new RequirementArea(
+            DeterministicGuid("MMC Reference:English Language Arts"),
+            requirementSet.Id,
+            "English Language Arts",
+            "",
+            "High school",
+            "Reference",
+            "MMC Reference");
+        var staleAreas = MichiganRequirementSeed.CreateAreas()
+            .Concat([staleEnglishMde, staleEnglishMmc])
+            .ToArray();
+        await repository.SaveRequirementSeedAsync(requirementSet, staleAreas);
+
+        var courseId = Guid.NewGuid();
+        await repository.SaveCourseAsync(new Course(
+            courseId,
+            student.Id,
+            schoolYear.Id,
+            "English Language Arts 12",
+            ["English Language Arts"],
+            CourseDuration.TwoSemesters,
+            1,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "ela-12",
+            null,
+            null,
+            [
+                new RequirementMapping(Guid.NewGuid(), courseId, staleEnglishMde.Id, CoverageLevel.Primary, "Old MDE mapping."),
+                new RequirementMapping(Guid.NewGuid(), courseId, staleEnglishMmc.Id, CoverageLevel.Primary, "Old MMC mapping.")
+            ]));
+
+        var service = new CourseService(repository);
+        var coverage = await service.GetCoverageSummaryAsync();
+        AssertFalse(coverage.Any(item => item.Name == "English Language Arts"), "Duplicate ELA requirement rows should be removed from coverage lists.");
+        AssertTrue(coverage.Any(item => item.Name == "Reading" && item.Source == "Statutory" && item.IsMapped), "Imported ELA course should migrate to statutory Reading coverage.");
+        AssertTrue(coverage.Any(item => item.Name == "Writing" && item.Source == "Statutory" && item.IsMapped), "Imported ELA course should migrate to statutory Writing coverage.");
+
+        var detail = await service.GetCourseDetailAsync(courseId);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        AssertFalse(detail.Mappings.Any(mapping => mapping.RequirementAreaName == "English Language Arts"), "Stale ELA mappings should be removed from imported course details.");
     })),
     ("Imported course detail backfill fills blank pack fields without overwriting parent text", (Func<Task>)(async () =>
     {
@@ -355,13 +461,66 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual("Parent custom description.", detail.Description, "Backfill should not overwrite parent description.");
         AssertTrue(detail.MajorTopics.Contains("Advanced functions", StringComparison.OrdinalIgnoreCase), "Backfill should fill major topics.");
         AssertTrue(detail.TextsAndResources.Contains("OpenStax Precalculus", StringComparison.OrdinalIgnoreCase), "Backfill should fill resources.");
-        AssertTrue(detail.InstructionalMethods.Contains("Explicit instruction", StringComparison.OrdinalIgnoreCase), "Backfill should fill instructional methods.");
+        AssertTrue(detail.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Backfill should fill instructional methods.");
         AssertTrue(detail.AssessmentMethods.Contains("formative", StringComparison.OrdinalIgnoreCase), "Backfill should fill assessment methods.");
         AssertTrue(detail.GradingBasis.Contains("Mastery", StringComparison.OrdinalIgnoreCase), "Backfill should fill grading basis.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.Goals), "Backfill should fill curriculum goals.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.LearningObjectives), "Backfill should fill learning objectives.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.MajorResources), "Backfill should fill curriculum resources.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.PlannedSequence), "Backfill should fill planned sequence.");
+    })),
+    ("Imported course detail backfill upgrades legacy pack defaults", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync();
+        var schoolYear = await repository.GetSchoolYearAsync();
+        if (student is null || schoolYear is null)
+        {
+            throw new InvalidOperationException("Setup did not create student and school year.");
+        }
+
+        var courseId = Guid.NewGuid();
+        await repository.SaveCourseAsync(new Course(
+            courseId,
+            student.Id,
+            schoolYear.Id,
+            "Precalculus",
+            ["Mathematics"],
+            CourseDuration.TwoSemesters,
+            1,
+            DefaultCoursePacks.MichiganCollegeReadyPackId,
+            "math-12",
+            new CourseDescription(
+                "Parent custom description.",
+                "Explicit instruction with guided practice, discussion, independent reading or problem work, applied projects, and parent feedback.",
+                "Advanced functions; trigonometry.",
+                "OpenStax Precalculus; Khan Academy Precalculus; CK-12 Precalculus; Desmos graphing activities.",
+                "Ongoing formative checks, reviewed assignments, discussion or conference notes, quizzes or problem sets where appropriate.",
+                "Mastery-aligned letter grade using parent-reviewed evidence."),
+            new CurriculumPlan(
+                "Parent custom goals.",
+                "Explain major concepts in Precalculus; apply course skills in written, oral, practical, or problem-based work; use appropriate vocabulary and resources; and produce evidence suitable for course records.",
+                "OpenStax Precalculus; Khan Academy Precalculus; CK-12 Precalculus; Desmos graphing activities.",
+                "Parent custom sequence.",
+                "Parent custom notes."),
+            []));
+
+        var service = new CourseService(repository);
+        var detail = await service.GetCourseDetailAsync(courseId);
+        if (detail is null)
+        {
+            throw new InvalidOperationException("Course detail was not found.");
+        }
+
+        AssertEqual("Parent custom description.", detail.Description, "Backfill should not overwrite parent description.");
+        AssertTrue(detail.TextsAndResources.Contains('|'), "Legacy resources should upgrade to linked item rows.");
+        AssertTrue(detail.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy instructional methods should upgrade to the hybrid default.");
+        AssertTrue(detail.AssessmentMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy assessment methods should upgrade to the hybrid default.");
+        AssertTrue(detail.GradingBasis.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy grading basis should upgrade to the hybrid default.");
+        AssertTrue(detail.LearningObjectives.Split(Environment.NewLine).Length >= 3, "Legacy learning objectives should upgrade to separated objective rows.");
+        AssertEqual("Parent custom goals.", detail.Goals, "Backfill should not overwrite parent goals.");
+        AssertEqual("Parent custom sequence.", detail.PlannedSequence, "Backfill should not overwrite parent sequence.");
     }))
 };
 
@@ -458,4 +617,10 @@ static void AssertThrows<TException>(Action action)
     }
 
     throw new InvalidOperationException($"Expected {typeof(TException).Name}.");
+}
+
+static Guid DeterministicGuid(string value)
+{
+    var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+    return new Guid(bytes);
 }

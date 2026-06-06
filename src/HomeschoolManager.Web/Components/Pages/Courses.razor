@@ -6,6 +6,7 @@
 @using HomeschoolManager.Web.Services
 @inject CourseService CourseService
 @inject SessionState Session
+@inject NavigationManager NavigationManager
 
 <PageTitle>Courses</PageTitle>
 
@@ -23,10 +24,13 @@
         {
             <section class="form-section">
                 <div class="section-heading-row">
-                    <h2>Create course</h2>
+                    @if (courses.Count == 0 || showCreateCourse)
+                    {
+                        <h2>Create course</h2>
+                    }
                     @if (courses.Count > 0)
                     {
-                        <button class="btn btn-outline-primary btn-sm" @onclick="ToggleCreateCourse">
+                        <button class="@CreateCourseButtonCss()" @onclick="ToggleCreateCourse">
                             @(showCreateCourse ? "Hide" : "New Course")
                         </button>
                     }
@@ -38,9 +42,6 @@
                     @ValidationFor("newCourse.Title")
                     <label class="form-label" for="course-description">Description</label>
                     <textarea id="course-description" class="form-control" rows="4" @bind="newCourse.Description"></textarea>
-                    <label class="form-label" for="subject-areas">Subject areas <span class="required-marker">*</span></label>
-                    <input id="subject-areas" class="form-control" @bind="newCourse.SubjectAreasText" />
-                    @ValidationFor("newCourse.SubjectAreas")
                     <label class="form-label" for="duration">Duration <span class="required-marker">*</span></label>
                     <select id="duration" class="form-select" @bind="newCourse.Duration">
                         <option value="@CourseDuration.OneSemester">One semester</option>
@@ -68,24 +69,18 @@
                         <tr>
                             <th>Title</th>
                             <th>Description</th>
-                            <th>Subjects</th>
                             <th>Duration</th>
-                            <th>Planned credit</th>
-                            <th>Mappings</th>
-                            <th></th>
+                            <th>Credits</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var course in courses)
                         {
-                            <tr>
+                            <tr class="clickable-row" @onclick="() => OpenCourse(course.Id)">
                                 <td>@course.Title</td>
                                 <td>@DisplayDescription(course.Description)</td>
-                                <td>@string.Join(", ", course.SubjectAreas)</td>
                                 <td>@DurationText(course.Duration)</td>
                                 <td>@course.PlannedCreditValue</td>
-                                <td>@course.MappingCount</td>
-                                <td><a href="@($"/courses/{course.Id}")">Open</a></td>
                             </tr>
                         }
                     </tbody>
@@ -279,6 +274,18 @@
         showCreateCourse = !showCreateCourse;
     }
 
+    private string CreateCourseButtonCss()
+    {
+        return showCreateCourse
+            ? "btn btn-outline-secondary btn-sm new-course-button"
+            : "btn btn-primary new-course-button";
+    }
+
+    private void OpenCourse(Guid courseId)
+    {
+        NavigationManager.NavigateTo($"/courses/{courseId}");
+    }
+
     private void TogglePackDetails()
     {
         showPackDetails = !showPackDetails;
@@ -457,11 +464,6 @@
             fieldErrors["newCourse.Title"] = "Title is required.";
         }
 
-        if (newCourse.SubjectAreas.Count == 0)
-        {
-            fieldErrors["newCourse.SubjectAreas"] = "At least one subject area is required.";
-        }
-
         if (!Enum.IsDefined(newCourse.Duration))
         {
             fieldErrors["newCourse.Duration"] = "Duration is required.";
@@ -485,12 +487,10 @@
     {
         public string Title { get; set; } = "";
         public string Description { get; set; } = "";
-        public string SubjectAreasText { get; set; } = "";
         public CourseDuration Duration { get; set; } = CourseDuration.TwoSemesters;
         public decimal PlannedCreditValue { get; set; } = 1;
 
-        public IReadOnlyList<string> SubjectAreas => SubjectAreasText
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        public IReadOnlyList<string> SubjectAreas => [];
     }
 
     private sealed record PageMessage(string Text, string CssClass);
