@@ -72,8 +72,9 @@ public sealed record LearningModule
         LearningObjectives = Lines(LearningObjectiveItems.Select(item => item.Text));
         ResourceItems = NormalizeResources(resourceItems, resources);
         Resources = Lines(ResourceItems.Select(SerializeResource));
-        Lessons = NormalizeLessons(LessonsForModule(lessons ?? [], Id));
-        Assignments = NormalizeAssignments(AssignmentsForModule(assignments ?? [], Id, Lessons));
+        var normalizedLessons = NormalizeLessons(LessonsForModule(lessons ?? [], Id));
+        Assignments = NormalizeAssignments(AssignmentsForModule(assignments ?? [], Id, normalizedLessons));
+        Lessons = NormalizeLessonAssignmentLinks(normalizedLessons, Assignments);
         AssignmentEvidencePlaceholder = assignmentEvidencePlaceholder.Trim();
         Status = status;
     }
@@ -92,14 +93,19 @@ public sealed record LearningModule
             .ToArray();
         return this with
         {
-            Lessons = normalizedLessons,
+            Lessons = NormalizeLessonAssignmentLinks(normalizedLessons, assignments),
             Assignments = NormalizeAssignments(AssignmentsForModule(assignments, Id, normalizedLessons))
         };
     }
 
     public LearningModule WithAssignments(IReadOnlyList<ModuleAssignment> assignments)
     {
-        return this with { Assignments = NormalizeAssignments(AssignmentsForModule(assignments, Id, Lessons)) };
+        var normalizedAssignments = NormalizeAssignments(AssignmentsForModule(assignments, Id, Lessons));
+        return this with
+        {
+            Assignments = normalizedAssignments,
+            Lessons = NormalizeLessonAssignmentLinks(Lessons, normalizedAssignments)
+        };
     }
 
     private static IReadOnlyList<ModuleLearningObjective> NormalizeLearningObjectives(
@@ -222,6 +228,22 @@ public sealed record LearningModule
             .OrderBy(assignment => assignment.SequenceOrder)
             .ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase)
             .Select((assignment, index) => assignment with { SequenceOrder = index + 1 })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<Lesson> NormalizeLessonAssignmentLinks(
+        IReadOnlyList<Lesson> lessons,
+        IReadOnlyList<ModuleAssignment> assignments)
+    {
+        var knownAssignmentIds = assignments.Select(assignment => assignment.Id).ToHashSet();
+        return lessons
+            .Select(lesson => lesson with
+            {
+                LinkedAssignmentIds = lesson.LinkedAssignmentIds
+                    .Where(knownAssignmentIds.Contains)
+                    .Distinct()
+                    .ToArray()
+            })
             .ToArray();
     }
 

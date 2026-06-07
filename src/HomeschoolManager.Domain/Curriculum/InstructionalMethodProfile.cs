@@ -7,5 +7,6 @@ public enum InstructionalMethodProfile
     ProjectBasedApplied = 2,
     InquiryDiscussion = 3,
     IndependentStudy = 4,
-    MasteryPractice = 5
+    MasteryPractice = 5,
+    Digital = 6
 }

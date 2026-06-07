@@ -1,7 +1,7 @@
 # Curriculum Planning Rules
 
 - Status: accepted
-- Last reviewed: 2026-06-06
+- Last reviewed: 2026-06-07
 - Canonical for: course-first curriculum planning behavior
 - Related ADRs: [ADR-0002](../adr/ADR-0002-michigan-as-seeded-jurisdiction-not-hardcoded-app.md)
 - Related docs: [Course Pack Rules](course-pack-rules.md), [Requirement Mapping Rules](../legal-requirements/requirement-mapping-rules.md), [Domain Module Map](../architecture/domain-module-map.md)
@@ -21,6 +21,12 @@ Courses may be archived. Archived courses remain retained records with modules, 
 Course deletion is for active planning records that do not have student work attached. If student work exists, deletion should fail for that course and direct the parent to archive it instead. Bulk delete actions may continue deleting other eligible courses.
 
 Learning modules are course-owned instructional units inside a course. They organize the course into teachable topic arcs while the course remains the transcript-facing record. Lessons inside modules provide the concrete instructional steps and resources.
+
+Module packs are course-level artifacts for moving a module shell between courses or systems. They may include module details and lightweight lesson or assignment sequencing references, but they must not embed lesson or assignment bodies.
+
+Single-course course packs are course-level artifacts for moving the course detail-page shape plus module references. They must not embed module, lesson, or assignment bodies.
+
+Course plan bundles are structured `.zip` artifacts for moving a complete course plan. They contain a course plan manifest, one single-course `.coursepack` per course, and module folders containing `.modulepack`, `.lessonpack`, and `.assignmentpack` files.
 
 ## Course Requirements
 
@@ -81,9 +87,28 @@ A lesson may include:
 - Sequence order within the module.
 - Introductory text for the student.
 - Optional link to a module learning objective.
-- One or more itemized resources.
+- Lesson type, difficulty, estimated minutes, suggested days, tags, prerequisites, and subject-area planning metadata.
+- Lesson-specific learning objectives that may break module objectives into smaller measurable targets.
+- Optional parent-defined standards alignment.
+- Student-facing success criteria.
+- Ordered student workflow steps.
+- One or more itemized resources with student instructions, note prompts, estimated time, source notes, and citation metadata.
+- Problem sets or structured practice.
+- Portfolio connections.
+- Rubric or evaluation criteria.
+- Reflection prompts.
+- Parent/instructor notes.
+- Optional links to module assignments.
 
 Lesson resources may be readings, textbook chapters, articles, videos, websites, files, or physical resources.
+
+Expected answers, worked solutions, and parent/instructor notes are planning and evaluation support. They must not be shown in the student lesson view by default.
+
+Lesson-to-assignment links are planning links. They help the student and parent see which assignment uses the lesson material, but they do not create completion evidence or grades by themselves.
+
+Lesson packs are module-level artifacts. A `.lessonpack` may contain one or more lesson definitions and imports by appending lessons to the selected module, not by replacing existing module lessons.
+
+Current `.lessonpack` files are JSON envelopes with a lesson array. Future lesson packs that include attached files should use a zip archive containing the `.lessonpack` JSON plus referenced files.
 
 ## Assignments
 
@@ -95,12 +120,27 @@ An assignment may include:
 - Sequence order within the module.
 - Assignment type.
 - Instructional method profile.
+- Short summary.
+- Student-facing goal.
 - Student-facing instructions.
-- Estimated effort.
+- Estimated effort label and optional structured minute range.
 - Due date or timing label.
 - Linked module objectives.
 - Linked lesson ids.
 - Required output or evidence expectation.
+- Required deliverables.
+- Submission formats.
+- Assignment-specific resources.
+- Ordered assignment steps.
+- Assessment skills.
+- Student checklist.
+- Portfolio connection.
+- Rubric or linked rubric id.
+- Revision policy.
+- Completion criteria.
+- Reflection prompts.
+- Evidence retention requirements.
+- Structured scoring plan.
 - Parent notes.
 - Portfolio-candidate marker.
 - Planned points or planned weight.
@@ -108,13 +148,33 @@ An assignment may include:
 
 Assignment status and planned points are planning fields. They must not create a grade, credit award, or evidence record without a later explicit parent/admin action.
 
+Assignment rubrics, scoring plans, completion criteria, and evidence requirements are planning and review support. They must not create grades, completion evidence, or retained records without a later explicit parent/admin action.
+
+Assignment packs are module-level artifacts. A `.assignmentpack` may contain one or more assignment definitions and imports by appending assignments to the selected module, not by replacing existing module assignments.
+
+Current `.assignmentpack` files are JSON envelopes with an assignment array. Lesson links inside assignment packs should use lesson source ids and lesson titles so links can reconnect when matching lessons exist in the target module. Missing lesson links should not block import.
+
+Future assignment packs that include attached files should use a zip archive containing the `.assignmentpack` JSON plus referenced files.
+
+## Module Packs
+
+A `.modulepack` may contain one module shell. It may include module title, description, term name, estimated length, instructions, module objectives, module resources, assignment/evidence placeholder, status, and lightweight lesson or assignment sequencing references.
+
+Module packs must not include full lesson or assignment details. Lesson and assignment bodies belong in `.lessonpack` and `.assignmentpack` files.
+
+Importing a module pack appends a new module to the selected course. It must not replace existing modules or create lesson or assignment bodies.
+
 ## Requirement Mapping
 
 Requirement mappings are separate from course identity. A course can support several requirement areas with coverage levels of primary, secondary, or supporting.
 
 ## Course Packs
 
-Course packs are importable templates. Imported courses become editable parent-owned records and must keep stable source pack/template identifiers so repeated imports do not duplicate the same template course.
+Single-course `.coursepack` files are importable course shells. Imported courses become editable parent-owned records.
+
+Built-in course plans are importable templates. Imported courses should keep stable source plan/template identifiers so repeated built-in plan imports do not duplicate the same template course.
+
+Course plan bundles should import courses, modules, lessons, and assignments from their folder structure. Requirement mappings that do not match the local jurisdiction seed should be skipped rather than blocking import.
 
 Built-in course pack defaults may populate blank course description and curriculum plan fields for already imported courses. This migration-style backfill must preserve parent-entered text.
 

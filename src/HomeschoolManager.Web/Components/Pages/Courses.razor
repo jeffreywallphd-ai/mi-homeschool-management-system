@@ -87,6 +87,41 @@
             </section>
         }
 
+        @if (Session.IsParentAdmin)
+        {
+            <section class="status-panel">
+                <div class="section-heading-row">
+                    <h2>Import a course</h2>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadCoursePackTemplate">
+                        Download coursepack template
+                    </button>
+                </div>
+                <label class="form-label" for="single-course-pack-import">Single-course .coursepack</label>
+                <InputFile id="single-course-pack-import" class="form-control" accept=".coursepack,application/json" OnChange="SelectSingleCoursePackFile" disabled="@isImportingSingleCoursePack" />
+                @if (!string.IsNullOrWhiteSpace(selectedSingleCoursePackFileName))
+                {
+                    <p class="form-text">Ready to import: @selectedSingleCoursePackFileName</p>
+                }
+                <button class="btn btn-outline-primary btn-sm mt-2" disabled="@(selectedSingleCoursePackFileBytes is null || isImportingSingleCoursePack || !HasSelectedStudent)" @onclick="ImportSelectedSingleCoursePack">
+                    @if (isImportingSingleCoursePack)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                        <span>Importing...</span>
+                    }
+                    else
+                    {
+                        <span>Import Course</span>
+                    }
+                </button>
+                @if (!string.IsNullOrWhiteSpace(singleCoursePackImportStatus))
+                {
+                    <div class="@singleCoursePackImportStatusCss" role="status" aria-live="polite">
+                        @singleCoursePackImportStatus
+                    </div>
+                }
+            </section>
+        }
+
         <section class="status-panel">
             <div class="section-heading-row course-list-heading-row">
                 <h2>Course list</h2>
@@ -146,25 +181,25 @@
 
     <aside class="workbench-support">
         <section class="support-card">
-            <h2>Course packs</h2>
+            <h2>Course plan</h2>
             @if (Session.IsParentAdmin)
             {
                 <div class="mb-3">
-                    <label class="form-label" for="course-pack-install">Install .coursepack</label>
-                    <InputFile id="course-pack-install" class="form-control" accept=".coursepack,application/json" OnChange="SelectCoursePackFile" disabled="@isInstallingCoursePack" />
+                    <label class="form-label" for="course-pack-install">Import course plan .zip</label>
+                    <InputFile id="course-pack-install" class="form-control" accept=".zip,application/zip" OnChange="SelectCoursePlanBundleFile" disabled="@isInstallingCoursePack" />
                     @if (!string.IsNullOrWhiteSpace(selectedCoursePackFileName))
                     {
-                        <p class="form-text">Ready to install: @selectedCoursePackFileName</p>
+                        <p class="form-text">Ready to import: @selectedCoursePackFileName</p>
                     }
-                    <button class="btn btn-outline-primary btn-sm mt-2" disabled="@(selectedCoursePackFileBytes is null || isInstallingCoursePack)" @onclick="InstallSelectedCoursePack">
+                    <button class="btn btn-outline-primary btn-sm mt-2" disabled="@(selectedCoursePackFileBytes is null || isInstallingCoursePack || !HasSelectedStudent)" @onclick="ImportSelectedCoursePlanBundle">
                         @if (isInstallingCoursePack)
                         {
                             <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                            <span>Installing...</span>
+                            <span>Importing...</span>
                         }
                         else
                         {
-                            <span>Install</span>
+                            <span>Import Bundle</span>
                         }
                     </button>
                     @if (!string.IsNullOrWhiteSpace(coursePackInstallStatus))
@@ -175,7 +210,7 @@
                     }
                 </div>
             }
-            <label class="form-label" for="course-pack">Pack</label>
+            <label class="form-label" for="course-pack">Plan</label>
             <select id="course-pack" class="form-select" @bind="selectedPackId" @bind:after="SelectPack">
                 @foreach (var pack in coursePacks)
                 {
@@ -187,7 +222,7 @@
                 <div class="course-pack-actions">
                     <p class="mb-0">@selectedPack.Description</p>
                     <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadSelectedPack">
-                        Download .coursepack
+                        Download course plan .zip
                     </button>
                 </div>
                 <p>@selectedTemplateIds.Count selected course(s), @CreditText(SelectedPackCreditTotal()) planned credits</p>
@@ -195,11 +230,11 @@
                 {
                     <div class="course-pack-actions">
                         <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-primary" disabled="@(!HasSelectedStudent)" @onclick="ImportFullPack">Import full pack</button>
+                            <button class="btn btn-primary" disabled="@(!HasSelectedStudent)" @onclick="ImportFullPack">Import full plan</button>
                             <button class="btn btn-outline-primary" disabled="@(!HasSelectedStudent)" @onclick="ImportSelectedPack">Import selected</button>
                         </div>
                         <button class="btn btn-link btn-sm" @onclick="TogglePackDetails">
-                            @(showPackDetails ? "Hide pack details" : "Show pack details")
+                            @(showPackDetails ? "Hide plan details" : "Show plan details")
                         </button>
                     </div>
                 }
@@ -324,6 +359,11 @@
     private string coursePackInstallStatus = "";
     private string coursePackInstallStatusCss = "alert alert-info mt-2";
     private const long MaxCoursePackFileSize = 25 * 1024 * 1024;
+    private byte[]? selectedSingleCoursePackFileBytes;
+    private string selectedSingleCoursePackFileName = "";
+    private bool isImportingSingleCoursePack;
+    private string singleCoursePackImportStatus = "";
+    private string singleCoursePackImportStatusCss = "alert alert-info mt-2";
 
     protected override async Task OnInitializedAsync()
     {
@@ -541,7 +581,7 @@
     private async Task DownloadSelectedPack()
     {
         messages.Clear();
-        var result = await CourseService.DownloadCoursePackAsync(selectedPackId);
+        var result = await CourseService.DownloadCoursePlanBundleAsync(selectedPackId);
         if (!result.Succeeded || result.Value is null)
         {
             messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
@@ -556,16 +596,122 @@
         messages.Add(new PageMessage($"Downloaded {result.Value.FileName}.", "alert alert-success"));
     }
 
-    private async Task SelectCoursePackFile(InputFileChangeEventArgs eventArgs)
+    private async Task DownloadCoursePackTemplate()
+    {
+        messages.Clear();
+        var result = CourseService.DownloadCoursePackTemplate();
+        if (!result.Succeeded || result.Value is null)
+        {
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            result.Value.FileName,
+            result.Value.ContentType,
+            Convert.ToBase64String(result.Value.Content));
+        messages.Add(new PageMessage($"Downloaded {result.Value.FileName}.", "alert alert-success"));
+    }
+
+    private async Task SelectSingleCoursePackFile(InputFileChangeEventArgs eventArgs)
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        singleCoursePackImportStatus = "";
+        var file = eventArgs.File;
+        if (!file.Name.EndsWith(".coursepack", StringComparison.OrdinalIgnoreCase))
+        {
+            SetSingleCoursePackImportStatus("Choose a single-course .coursepack file.", false);
+            selectedSingleCoursePackFileBytes = null;
+            selectedSingleCoursePackFileName = "";
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: MaxCoursePackFileSize);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            selectedSingleCoursePackFileBytes = memory.ToArray();
+            selectedSingleCoursePackFileName = file.Name;
+            SetSingleCoursePackImportStatus("Course file is ready. Click Import Course to add it to this student's course list.", true);
+        }
+        catch (IOException)
+        {
+            selectedSingleCoursePackFileBytes = null;
+            selectedSingleCoursePackFileName = "";
+            SetSingleCoursePackImportStatus("The course file could not be read. Try choosing it again.", false);
+        }
+        catch (InvalidOperationException)
+        {
+            selectedSingleCoursePackFileBytes = null;
+            selectedSingleCoursePackFileName = "";
+            SetSingleCoursePackImportStatus("The course file is too large to import here. Use a file under 25 MB.", false);
+        }
+    }
+
+    private async Task ImportSelectedSingleCoursePack()
+    {
+        messages.Clear();
+        fieldErrors.Clear();
+        var user = Session.CurrentUser;
+        if (user is null)
+        {
+            SetSingleCoursePackImportStatus("Sign in as parent/admin to import a course.", false);
+            return;
+        }
+
+        if (!TryGetSelectedStudentId(out var studentId))
+        {
+            SetSingleCoursePackImportStatus("Choose a student before importing a course.", false);
+            return;
+        }
+
+        if (selectedSingleCoursePackFileBytes is null)
+        {
+            SetSingleCoursePackImportStatus("Choose a .coursepack file before importing.", false);
+            return;
+        }
+
+        isImportingSingleCoursePack = true;
+        SetSingleCoursePackImportStatus("Importing course. This should only take a moment.", true);
+        StateHasChanged();
+
+        try
+        {
+            var result = await CourseService.ImportCoursePackAsync(user, studentId, selectedSingleCoursePackFileBytes);
+            if (!result.Succeeded)
+            {
+                SetSingleCoursePackImportStatus(CoursePackImportFailureText(result.Errors), false);
+                return;
+            }
+
+            selectedSingleCoursePackFileBytes = null;
+            selectedSingleCoursePackFileName = "";
+            SetSingleCoursePackImportStatus($"Imported {result.Value?.CourseTitle ?? "course"}.", true);
+            await Refresh();
+        }
+        catch (Exception)
+        {
+            SetSingleCoursePackImportStatus("The course could not be imported. The file may be damaged or in a format this app does not support.", false);
+        }
+        finally
+        {
+            isImportingSingleCoursePack = false;
+        }
+    }
+
+    private async Task SelectCoursePlanBundleFile(InputFileChangeEventArgs eventArgs)
     {
         messages.Clear();
         fieldErrors.Clear();
         coursePackInstallStatus = "";
         coursePackInstallStatusCss = "alert alert-info mt-2";
         var file = eventArgs.File;
-        if (!file.Name.EndsWith(".coursepack", StringComparison.OrdinalIgnoreCase))
+        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
         {
-            SetCoursePackInstallStatus("Choose a .coursepack file to install.", false);
+            SetCoursePackInstallStatus("Choose a course plan .zip file to import.", false);
             selectedCoursePackFileBytes = null;
             selectedCoursePackFileName = "";
             return;
@@ -578,23 +724,23 @@
             await stream.CopyToAsync(memory);
             selectedCoursePackFileBytes = memory.ToArray();
             selectedCoursePackFileName = file.Name;
-            SetCoursePackInstallStatus("Course pack file is ready. Click Install to add it to the pack list.", true);
+            SetCoursePackInstallStatus("Course plan bundle is ready. Click Import Bundle to add it to this student's course list.", true);
         }
         catch (IOException)
         {
             selectedCoursePackFileBytes = null;
             selectedCoursePackFileName = "";
-            SetCoursePackInstallStatus("The course pack file could not be read. Try choosing it again.", false);
+            SetCoursePackInstallStatus("The course plan bundle could not be read. Try choosing it again.", false);
         }
         catch (InvalidOperationException)
         {
             selectedCoursePackFileBytes = null;
             selectedCoursePackFileName = "";
-            SetCoursePackInstallStatus("The course pack file is too large to install here. Use a file under 25 MB.", false);
+            SetCoursePackInstallStatus("The course plan bundle is too large to import here. Use a file under 25 MB.", false);
         }
     }
 
-    private async Task InstallSelectedCoursePack()
+    private async Task ImportSelectedCoursePlanBundle()
     {
         messages.Clear();
         fieldErrors.Clear();
@@ -602,39 +748,43 @@
         var user = Session.CurrentUser;
         if (user is null)
         {
-            SetCoursePackInstallStatus("Sign in as parent/admin to install a course pack file.", false);
+            SetCoursePackInstallStatus("Sign in as parent/admin to import a course plan bundle.", false);
+            return;
+        }
+
+        if (!TryGetSelectedStudentId(out var studentId))
+        {
+            SetCoursePackInstallStatus("Choose a student before importing a course plan bundle.", false);
             return;
         }
 
         if (selectedCoursePackFileBytes is null)
         {
-            SetCoursePackInstallStatus("Choose a .coursepack file before installing.", false);
+            SetCoursePackInstallStatus("Choose a course plan .zip file before importing.", false);
             return;
         }
 
         isInstallingCoursePack = true;
-        SetCoursePackInstallStatus("Installing course pack. This may take a moment for larger packs.", true);
+        SetCoursePackInstallStatus("Importing course plan bundle. This may take a moment because courses, modules, lessons, and assignments are being added.", true);
         StateHasChanged();
 
         try
         {
-            var result = await CourseService.InstallCoursePackFileAsync(user, selectedCoursePackFileBytes);
+            var result = await CourseService.ImportCoursePlanBundleAsync(user, studentId, selectedCoursePackFileBytes);
             if (!result.Succeeded)
             {
                 SetCoursePackInstallStatus(InstallFailureText(result.Errors), false);
                 return;
             }
 
-            coursePacks = await CourseService.ListCoursePacksAsync();
-            selectedPackId = result.Value?.Id ?? selectedPackId;
-            await SelectPack();
             selectedCoursePackFileBytes = null;
             selectedCoursePackFileName = "";
-            SetCoursePackInstallStatus($"Installed {result.Value?.Name ?? "course pack"}. Use Import full pack or Import selected to add courses to the student course list.", true);
+            SetCoursePackInstallStatus($"Imported {result.Value?.CourseCount ?? 0} course(s), {result.Value?.ModuleCount ?? 0} module(s), {result.Value?.LessonCount ?? 0} lesson(s), and {result.Value?.AssignmentCount ?? 0} assignment(s).", true);
+            await Refresh();
         }
         catch (Exception)
         {
-            SetCoursePackInstallStatus("The course pack could not be installed. The file may be damaged or in a format this app does not support yet.", false);
+            SetCoursePackInstallStatus("The course plan bundle could not be imported. The file may be damaged or in a format this app does not support.", false);
         }
         finally
         {
@@ -650,37 +800,63 @@
             : "alert alert-danger mt-2";
     }
 
+    private void SetSingleCoursePackImportStatus(string text, bool isSuccessOrProgress)
+    {
+        singleCoursePackImportStatus = text;
+        singleCoursePackImportStatusCss = isSuccessOrProgress
+            ? "alert alert-info mt-2"
+            : "alert alert-danger mt-2";
+    }
+
     private static string InstallFailureText(IReadOnlyList<string> errors)
     {
         if (errors.Count == 0)
         {
-            return "The course pack could not be installed. The file may be damaged or in a format this app does not support yet.";
+            return "The course plan bundle could not be imported. The file may be damaged or in a format this app does not support.";
         }
 
         var first = errors[0];
-        if (first.Contains("already built into the system", StringComparison.OrdinalIgnoreCase))
-        {
-            return "This course pack is already included in the app, so it does not need to be installed.";
-        }
-
         if (first.Contains("version", StringComparison.OrdinalIgnoreCase))
         {
-            return "This course pack was made for a different version of the app and cannot be installed yet.";
+            return "This course plan bundle was made for a different version of the app and cannot be imported yet.";
+        }
+
+        if (first.Contains("does not recognize", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"The course plan bundle could not be imported. {first}";
+        }
+
+        if (first.Contains("valid JSON", StringComparison.OrdinalIgnoreCase) ||
+            first.Contains("readable course plan bundle", StringComparison.OrdinalIgnoreCase) ||
+            first.Contains("could not be read", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The selected file is not a readable course plan zip. Choose a downloaded course plan .zip file and try again.";
+        }
+
+        return $"The course plan bundle could not be imported. {first}";
+    }
+
+    private static string CoursePackImportFailureText(IReadOnlyList<string> errors)
+    {
+        if (errors.Count == 0)
+        {
+            return "The course could not be imported. The file may be damaged or in a format this app does not support.";
+        }
+
+        var first = errors[0];
+        if (first.Contains("version", StringComparison.OrdinalIgnoreCase))
+        {
+            return "This course file was made for a different version of the app and cannot be imported yet.";
         }
 
         if (first.Contains("valid JSON", StringComparison.OrdinalIgnoreCase) ||
             first.Contains("recognized course pack", StringComparison.OrdinalIgnoreCase) ||
             first.Contains("could not be read", StringComparison.OrdinalIgnoreCase))
         {
-            return "The selected file is not a readable course pack. Choose a downloaded .coursepack file and try again.";
+            return "The selected file is not a readable single-course file. Choose a downloaded .coursepack file and try again.";
         }
 
-        if (first.Contains("zip", StringComparison.OrdinalIgnoreCase))
-        {
-            return "This course pack uses a zipped attachment format that is not supported yet.";
-        }
-
-        return $"The course pack could not be installed. {first}";
+        return $"The course could not be imported. {first}";
     }
 
     private async Task SelectPack()

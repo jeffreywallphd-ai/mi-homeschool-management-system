@@ -18,7 +18,246 @@ namespace HomeschoolManager.Application.Courses;
 public sealed class CourseService
 {
     private readonly IHomeschoolRepository repository;
+    private const string DefaultPublisherId = "homeschool-manager";
+    private const string DefaultPackVersion = "2026.1";
     private static readonly JsonSerializerOptions CoursePackJsonOptions = CreateCoursePackJsonOptions();
+    private static readonly LessonPackEnvelope LessonPackTemplate = new(
+        "homeschool-manager.lessonpack",
+        1,
+        DateTimeOffset.UnixEpoch,
+        "json",
+        "Future lesson packs with attached files should use a zip archive containing this JSON plus files.",
+        "Lesson Pack Template",
+        "Replace this sample lesson with one or more lessons to add to a learning module.",
+        [
+            new LessonPackLesson(
+                "sample-lesson-1",
+                1,
+                "Sample Lesson Title",
+                "Introduce the lesson topic, explain why it matters, and name what the student should pay attention to while using the resources.",
+                "Optional module objective text this lesson supports.",
+                LessonType.SelfGuided,
+                180,
+                3,
+                LessonDifficultyLevel.AdvancedHighSchool,
+                ["Mathematics", "Agriculture", "Ecology"],
+                ["algebra", "rates", "portfolio"],
+                ["Algebra II", "Basic spreadsheet use"],
+                [new LessonLearningObjective("sample-objective-1", "Use equations, units, rates, ratios, and proportional reasoning to model a practical situation.", BloomLevel.Apply)],
+                [new StandardsAlignment("Parent-defined", "MATH-APP-01", "Applies mathematical modeling to real-world scenarios.")],
+                ["I can define variables with units.", "I can explain whether my answer is reasonable."],
+                [
+                    new LessonStep(1, "Read and take notes", LessonStepType.Reading, "Read the assigned resource and take notes on the key variables.", 30, true),
+                    new LessonStep(2, "Complete practice", LessonStepType.ProblemSet, "Complete the practice problems and show units in every calculation.", 60, true),
+                    new LessonStep(3, "Create evidence", LessonStepType.PortfolioArtifact, "Create a small artifact that shows what you learned.", 90, true)
+                ],
+                [
+                    new LessonPackResource(
+                        "Sample article or video",
+                        LessonResourceType.Article,
+                        "https://example.com/resource",
+                        "",
+                        false,
+                        "Brief note about why this resource belongs in the lesson.",
+                        true,
+                        25,
+                        "Use this resource to identify three concrete facts or examples.",
+                        "What measurable variables appear in this resource?",
+                        new LessonResourceCitation("Sample Resource", "Example Publisher", null),
+                        false,
+                        "Check source terms before reuse.")
+                ],
+                [
+                    new LessonProblemSet(
+                        "sample-problem-set-1",
+                        "Sample Problem Set",
+                        "Show all work and include units.",
+                        45,
+                        [
+                            new LessonProblem(
+                                "sample-problem-1",
+                                "Write a practice problem prompt here.",
+                                ProblemResponseType.WorkedSolution,
+                                "Expected answer for parent review.",
+                                "Optional solution for parent review.",
+                                ["modeling", "unit reasoning"],
+                                "Medium")
+                        ])
+                ],
+                [
+                    new LessonPortfolioConnection(
+                        "Portfolio Section",
+                        "Sample Artifact",
+                        "Explains how the lesson artifact may support the larger portfolio.",
+                        ["Related course or project"],
+                        "Revise this artifact later with stronger evidence.")
+                ],
+                new LessonRubric(
+                    "sample-rubric",
+                    "4-point",
+                    [
+                        new LessonRubricCriterion(
+                            "Evidence quality",
+                            "Evidence is accurate, complete, and clearly explained.",
+                            "Evidence is mostly accurate and explained.",
+                            "Evidence is incomplete or weakly explained.",
+                            "Evidence is missing or unclear.")
+                    ]),
+                ["What assumption mattered most?", "What would improve this work?"],
+                new LessonInstructorNotes(
+                    "Parent-facing overview of how to guide and evaluate this lesson.",
+                    ["Student explains reasoning.", "Student uses evidence from resources."],
+                    ["Work lacks units or clear evidence."],
+                    ["Ask the student to explain the model or artifact aloud."]),
+                ["sample-assignment-1"],
+                ["Sample Assignment Title"])
+        ],
+        TemplateIdentity("lessonpack-template"),
+        true);
+    private static readonly AssignmentPackEnvelope AssignmentPackTemplate = new(
+        "homeschool-manager.assignmentpack",
+        1,
+        DateTimeOffset.UnixEpoch,
+        "json",
+        "Future assignment packs with attached files should use a zip archive containing this JSON plus files.",
+        "Assignment Pack Template",
+        "Replace this sample assignment with one or more assignments to add to a learning module.",
+        [
+            new AssignmentPackAssignment(
+                "sample-assignment-1",
+                1,
+                "Sample Assignment Title",
+                AssignmentType.PortfolioArtifact,
+                InstructionalMethodProfile.Hybrid,
+                "Describe what the student should do, which resources to use, and how the finished work should be submitted or saved.",
+                "60-90 minutes",
+                "After completing the related lesson.",
+                null,
+                ["Optional module objective text this assignment supports."],
+                ["sample-lesson-1"],
+                ["Sample Lesson Title"],
+                "Completed work, notes, project artifact, response, or other evidence the parent can review.",
+                "Optional parent notes about adaptation, feedback, or portfolio value.",
+                true,
+                100m,
+                null,
+                AssignmentStatus.Planned,
+                "Create a short portfolio-ready artifact that shows learning from the related lesson.",
+                "Show what you learned by creating evidence that a parent can review and save.",
+                60,
+                90,
+                ["Complete response or artifact", "Evidence from the related lesson", "Brief reflection"],
+                [AssignmentSubmissionFormat.PortfolioEntry, AssignmentSubmissionFormat.Reflection],
+                new AssignmentPortfolioConnection(
+                    true,
+                    "Course Portfolio",
+                    "Sample Assignment Artifact",
+                    "Demonstrates learning from the related module objective.",
+                    "Revise after parent feedback before saving in the final portfolio.",
+                    ["Related course"]),
+                new LessonRubric(
+                    "sample-assignment-rubric",
+                    "4-point",
+                    [
+                        new LessonRubricCriterion(
+                            "Evidence quality",
+                            "Evidence is complete, accurate, and clearly explained.",
+                            "Evidence is mostly complete and understandable.",
+                            "Evidence is partial or needs more explanation.",
+                            "Evidence is missing or unclear.")
+                    ]),
+                "",
+                ["lesson evidence", "clear explanation"],
+                ["I included all required parts.", "I checked my work before submitting."],
+                [
+                    new AssignmentResource(
+                        "Related lesson resources",
+                        LessonResourceType.Website,
+                        "",
+                        "",
+                        false,
+                        true,
+                        "Use the resources linked in the related lesson.",
+                        "Placeholder resource reference.")
+                ],
+                [
+                    new AssignmentStep(1, "Review lesson material", "Review the related lesson resources and notes.", 20),
+                    new AssignmentStep(2, "Create evidence", "Complete the assignment artifact or response.", 45),
+                    new AssignmentStep(3, "Reflect and submit", "Check the required parts and write a short reflection.", 15)
+                ],
+                new AssignmentRevisionPolicy(true, "Revise after parent feedback if the work is portfolio-bound.", 1),
+                new AssignmentCompletionCriteria(["All required deliverables are included.", "Work can be understood without verbal explanation."], true, 3),
+                ["What did this assignment help you understand?", "What would you improve before saving it?"],
+                new AssignmentEvidenceRequirements(true, AssignmentEvidenceType.PortfolioArtifact, ["pdf", "docx", "png"], true, true),
+                new AssignmentScoring(100m, null, AssignmentGradingMode.Rubric, true, true))
+        ],
+        TemplateIdentity("assignmentpack-template"),
+        true);
+    private static readonly ModulePackEnvelope ModulePackTemplate = new(
+        "homeschool-manager.modulepack",
+        1,
+        DateTimeOffset.UnixEpoch,
+        "json",
+        "Future module packs with attached files should use a zip archive containing this JSON plus files.",
+        "Module Pack Template",
+        "Replace this sample module with one module shell. Import lesson and assignment details separately with lessonpack and assignmentpack files.",
+        new ModulePackModule(
+            "sample-module-1",
+            1,
+            "Sample Module Title",
+            "Brief module description.",
+            "",
+            "2 weeks",
+            "Describe how the student should work through this module.",
+            [
+                new ModulePackObjective("Sample module objective.", "Optional linked course objective.")
+            ],
+            [
+                new ModulePackResource("Sample module-level resource", "https://example.com", "", false)
+            ],
+            "Describe assignment or evidence expectations at the module level.",
+            ModuleStatus.Planned,
+            [
+                new ModulePackItemReference("sample-lesson-1", "Sample Lesson Title", 1)
+            ],
+            [
+                new ModulePackItemReference("sample-assignment-1", "Sample Assignment Title", 1)
+            ]),
+        TemplateIdentity("modulepack-template"),
+        true);
+    private static readonly SingleCoursePackEnvelope CoursePackTemplate = new(
+        "homeschool-manager.coursepack",
+        2,
+        DateTimeOffset.UnixEpoch,
+        "json",
+        "Single-course course packs do not include module, lesson, or assignment bodies. Use a course plan bundle when moving a complete plan.",
+        new SingleCoursePackCourse(
+            "sample-course-1",
+            "Sample Course Title",
+            ["Sample subject area"],
+            CourseDuration.TwoSemesters,
+            1.0m,
+            new CoursePackDescription(
+                "Describe the course purpose, scope, and student expectations.",
+                "Describe instructional methods.",
+                "",
+                "List course-level texts and resources here.",
+                "Describe assessment methods.",
+                "Describe grading basis."),
+            new CoursePackCurriculumPlan(
+                "Describe broad course goals.",
+                "Write one learning objective per line.",
+                "",
+                "Describe the planned course sequence.",
+                "Add parent planning notes."),
+            [
+                new SingleCourseRequirementMapping("Statutory", "Sample Requirement Area", CoverageLevel.Primary, "Optional mapping note.")
+            ],
+            [
+                new CourseModuleReference("sample-module-1", "Sample Module Title", 1, "Semester 1")
+            ]),
+        TemplateIdentity("coursepack-template"),
+        true);
 
     public event Action? CourseNavigationChanged;
 
@@ -287,6 +526,365 @@ public sealed class CourseService
             "application/json",
             Encoding.UTF8.GetBytes(json),
             false));
+    }
+
+    public OperationResult<CoursePackDownloadFile> DownloadCoursePackTemplate()
+    {
+        var template = CoursePackTemplate with { DownloadedAtUtc = DateTimeOffset.UtcNow };
+        return OperationResult<CoursePackDownloadFile>.Success(new CoursePackDownloadFile(
+            "coursepack-template.coursepack",
+            "application/json",
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(template, CoursePackJsonOptions)),
+            false));
+    }
+
+    public async Task<OperationResult<CoursePackDownloadFile>> DownloadCoursePlanBundleAsync(
+        string packId,
+        CancellationToken cancellationToken = default)
+    {
+        var pack = (await GetAvailableCoursePacksAsync(cancellationToken))
+            .FirstOrDefault(item => string.Equals(item.Id, packId, StringComparison.OrdinalIgnoreCase));
+        if (pack is null)
+        {
+            return OperationResult<CoursePackDownloadFile>.Failure("Course plan was not found.");
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        var identity = BuiltInPackIdentity(pack);
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var plan = new CoursePlanPackEnvelope(
+                "homeschool-manager.courseplanpack",
+                1,
+                DateTimeOffset.UtcNow,
+                "json",
+                "This manifest lists which single-course course packs belong in the course plan bundle.",
+                pack.Id,
+                pack.Name,
+                pack.Description,
+                CoursePlanPacingLabel(schoolYear),
+                pack.Courses
+                    .OrderBy(course => course.TemplateId, StringComparer.OrdinalIgnoreCase)
+                    .Select((course, index) =>
+                    {
+                        var option = course.DefaultOption;
+                        var termName = option.Modules
+                            .Select(module => ResolveTermName(module.TermNumber, schoolYear))
+                            .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? "";
+                        return new CoursePlanOffering(course.TemplateId, option.Title, termName, index + 1);
+                    })
+                    .ToArray(),
+                identity,
+                false);
+            WriteZipJson(archive, "courseplan.courseplanpack", plan);
+
+            foreach (var template in pack.Courses)
+            {
+                var option = template.DefaultOption;
+                var courseFolder = $"courses/{SafeFileName(option.Title)}";
+                WriteZipJson(
+                    archive,
+                    $"{courseFolder}/course.coursepack",
+                    BuildSingleCoursePackEnvelope(option, template.TemplateId, schoolYear, DateTimeOffset.UtcNow, identity));
+
+                foreach (var module in option.Modules.OrderBy(module => module.SequenceOrder))
+                {
+                    var moduleFolder = $"{courseFolder}/modules/{module.SequenceOrder:00}-{SafeFileName(module.Title)}";
+                    WriteZipJson(
+                        archive,
+                        $"{moduleFolder}/module.modulepack",
+                        BuildModulePackEnvelope(option.Title, module, schoolYear, DateTimeOffset.UtcNow, identity));
+                    WriteZipJson(
+                        archive,
+                        $"{moduleFolder}/lessons.lessonpack",
+                        BuildLessonPackEnvelope(option.Title, module, DateTimeOffset.UtcNow, identity));
+                    WriteZipJson(
+                        archive,
+                        $"{moduleFolder}/assignments.assignmentpack",
+                        BuildAssignmentPackEnvelope(option.Title, module, DateTimeOffset.UtcNow, identity));
+                }
+            }
+        }
+
+        return OperationResult<CoursePackDownloadFile>.Success(new CoursePackDownloadFile(
+            $"{SafeFileName(pack.Id)}.zip",
+            "application/zip",
+            stream.ToArray(),
+            true));
+    }
+
+    public async Task<OperationResult<CourseImportResult>> ImportCoursePackAsync(
+        UserContext user,
+        Guid? studentId,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<CourseImportResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var parsed = ParseSingleCoursePackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<CourseImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        return await ImportSingleCoursePackEnvelopeAsync(parsed.Value, studentId, cancellationToken);
+    }
+
+    public async Task<OperationResult<CoursePlanBundleImportResult>> ImportCoursePlanBundleAsync(
+        UserContext user,
+        Guid? studentId,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<CoursePlanBundleImportResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        if (content.Length == 0)
+        {
+            return OperationResult<CoursePlanBundleImportResult>.Failure("Choose a course plan bundle before importing.");
+        }
+
+        var totals = new CoursePlanBundleMutableImportResult();
+        try
+        {
+            using var stream = new MemoryStream(content);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            var planId = ReadCoursePlanId(archive) ?? "imported-courseplan";
+            var courseEntries = archive.Entries
+                .Where(entry => entry.FullName.EndsWith(".coursepack", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (courseEntries.Length == 0)
+            {
+                return OperationResult<CoursePlanBundleImportResult>.Failure("The course plan bundle did not contain any course files.");
+            }
+
+            foreach (var courseEntry in courseEntries)
+            {
+                var coursePack = ParseSingleCoursePackFile(ReadZipEntry(courseEntry));
+                if (!coursePack.Succeeded || coursePack.Value is null)
+                {
+                    return OperationResult<CoursePlanBundleImportResult>.Failure(coursePack.Errors.ToArray());
+                }
+
+                var import = await ImportSingleCoursePackEnvelopeAsync(
+                    coursePack.Value,
+                    studentId,
+                    cancellationToken,
+                    planId,
+                    updateExisting: true);
+                if (!import.Succeeded || import.Value is null)
+                {
+                    return OperationResult<CoursePlanBundleImportResult>.Failure(import.Errors.ToArray());
+                }
+
+                totals.CourseCount++;
+                var courseFolder = ParentFolder(courseEntry.FullName);
+                var course = await repository.GetCourseAsync(import.Value.CourseId, cancellationToken);
+                if (course is null)
+                {
+                    continue;
+                }
+
+                var moduleEntries = archive.Entries
+                    .Where(entry =>
+                        entry.FullName.StartsWith($"{courseFolder}/modules/", StringComparison.OrdinalIgnoreCase) &&
+                        entry.FullName.EndsWith(".modulepack", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                foreach (var moduleEntry in moduleEntries)
+                {
+                    var moduleImport = await UpsertModulePackIntoCourseAsync(import.Value.CourseId, ReadZipEntry(moduleEntry), cancellationToken);
+                    if (!moduleImport.Succeeded || moduleImport.Value is null)
+                    {
+                        return OperationResult<CoursePlanBundleImportResult>.Failure(moduleImport.Errors.ToArray());
+                    }
+
+                    totals.ModuleCount++;
+                    var moduleFolder = ParentFolder(moduleEntry.FullName);
+                    var lessonEntry = archive.Entries.FirstOrDefault(entry =>
+                        entry.FullName.StartsWith($"{moduleFolder}/", StringComparison.OrdinalIgnoreCase) &&
+                        entry.FullName.EndsWith(".lessonpack", StringComparison.OrdinalIgnoreCase));
+                    if (lessonEntry is not null)
+                    {
+                        var lessonImport = await ImportMissingLessonPackAsync(import.Value.CourseId, moduleImport.Value.ModuleId, ReadZipEntry(lessonEntry), cancellationToken);
+                        if (!lessonImport.Succeeded || lessonImport.Value is null)
+                        {
+                            return OperationResult<CoursePlanBundleImportResult>.Failure(lessonImport.Errors.ToArray());
+                        }
+
+                        totals.LessonCount += lessonImport.Value.LessonCount;
+                    }
+
+                    var assignmentEntry = archive.Entries.FirstOrDefault(entry =>
+                        entry.FullName.StartsWith($"{moduleFolder}/", StringComparison.OrdinalIgnoreCase) &&
+                        entry.FullName.EndsWith(".assignmentpack", StringComparison.OrdinalIgnoreCase));
+                    if (assignmentEntry is not null)
+                    {
+                        var assignmentImport = await ImportMissingAssignmentPackAsync(import.Value.CourseId, moduleImport.Value.ModuleId, ReadZipEntry(assignmentEntry), cancellationToken);
+                        if (!assignmentImport.Succeeded || assignmentImport.Value is null)
+                        {
+                            return OperationResult<CoursePlanBundleImportResult>.Failure(assignmentImport.Errors.ToArray());
+                        }
+
+                        totals.AssignmentCount += assignmentImport.Value.AssignmentCount;
+                    }
+                }
+            }
+        }
+        catch (InvalidDataException)
+        {
+            return OperationResult<CoursePlanBundleImportResult>.Failure("The selected file is not a readable course plan bundle.");
+        }
+
+        return OperationResult<CoursePlanBundleImportResult>.Success(new CoursePlanBundleImportResult(
+            totals.CourseCount,
+            totals.ModuleCount,
+            totals.LessonCount,
+            totals.AssignmentCount));
+    }
+
+    public async Task<OperationResult<LessonPackDownloadFile>> DownloadModuleLessonPackAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<LessonPackDownloadFile>.Failure("Learning module was not found.");
+        }
+
+        var envelope = new LessonPackEnvelope(
+            "homeschool-manager.lessonpack",
+            1,
+            DateTimeOffset.UtcNow,
+            "json",
+            "Future lesson packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{course.Title} - {module.Title} Lessons",
+            $"Lessons downloaded from the {module.Title} module.",
+            module.Lessons
+                .OrderBy(lesson => lesson.SequenceOrder)
+                .Select(lesson => ToLessonPackLesson(lesson, module.Assignments))
+                .ToArray(),
+            SourceIdentityForCourse(course),
+            false);
+
+        var json = JsonSerializer.Serialize(envelope, CoursePackJsonOptions);
+        var fileName = $"{SafeFileName(course.Title)}-{SafeFileName(module.Title)}.lessonpack";
+        return OperationResult<LessonPackDownloadFile>.Success(new LessonPackDownloadFile(
+            fileName,
+            "application/json",
+            Encoding.UTF8.GetBytes(json)));
+    }
+
+    public OperationResult<LessonPackDownloadFile> DownloadLessonPackTemplate()
+    {
+        var template = LessonPackTemplate with { DownloadedAtUtc = DateTimeOffset.UtcNow };
+        return OperationResult<LessonPackDownloadFile>.Success(new LessonPackDownloadFile(
+            "lessonpack-template.lessonpack",
+            "application/json",
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(template, CoursePackJsonOptions))));
+    }
+
+    public async Task<OperationResult<AssignmentPackDownloadFile>> DownloadModuleAssignmentPackAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<AssignmentPackDownloadFile>.Failure("Learning module was not found.");
+        }
+
+        var envelope = new AssignmentPackEnvelope(
+            "homeschool-manager.assignmentpack",
+            1,
+            DateTimeOffset.UtcNow,
+            "json",
+            "Future assignment packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{course.Title} - {module.Title} Assignments",
+            $"Assignments downloaded from the {module.Title} module.",
+            module.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .Select(assignment => ToAssignmentPackAssignment(assignment, module.Lessons))
+                .ToArray(),
+            SourceIdentityForCourse(course),
+            false);
+
+        var json = JsonSerializer.Serialize(envelope, CoursePackJsonOptions);
+        var fileName = $"{SafeFileName(course.Title)}-{SafeFileName(module.Title)}.assignmentpack";
+        return OperationResult<AssignmentPackDownloadFile>.Success(new AssignmentPackDownloadFile(
+            fileName,
+            "application/json",
+            Encoding.UTF8.GetBytes(json)));
+    }
+
+    public OperationResult<AssignmentPackDownloadFile> DownloadAssignmentPackTemplate()
+    {
+        var template = AssignmentPackTemplate with { DownloadedAtUtc = DateTimeOffset.UtcNow };
+        return OperationResult<AssignmentPackDownloadFile>.Success(new AssignmentPackDownloadFile(
+            "assignmentpack-template.assignmentpack",
+            "application/json",
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(template, CoursePackJsonOptions))));
+    }
+
+    public async Task<OperationResult<ModulePackDownloadFile>> DownloadModulePackAsync(
+        Guid courseId,
+        Guid moduleId,
+        CancellationToken cancellationToken = default)
+    {
+        await BackfillImportedCoursePackDetailsAsync(cancellationToken);
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<ModulePackDownloadFile>.Failure("Learning module was not found.");
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        var termName = schoolYear?.Terms.FirstOrDefault(term => term.Id == module.TermId)?.Name ?? "";
+        var envelope = new ModulePackEnvelope(
+            "homeschool-manager.modulepack",
+            1,
+            DateTimeOffset.UtcNow,
+            "json",
+            "Future module packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{course.Title} - {module.Title} Module",
+            $"Module shell downloaded from the {course.Title} course. Lesson and assignment details are not included.",
+            ToModulePackModule(module, termName),
+            SourceIdentityForCourse(course),
+            false);
+
+        var json = JsonSerializer.Serialize(envelope, CoursePackJsonOptions);
+        var fileName = $"{SafeFileName(course.Title)}-{SafeFileName(module.Title)}.modulepack";
+        return OperationResult<ModulePackDownloadFile>.Success(new ModulePackDownloadFile(
+            fileName,
+            "application/json",
+            Encoding.UTF8.GetBytes(json)));
+    }
+
+    public OperationResult<ModulePackDownloadFile> DownloadModulePackTemplate()
+    {
+        var template = ModulePackTemplate with { DownloadedAtUtc = DateTimeOffset.UtcNow };
+        return OperationResult<ModulePackDownloadFile>.Success(new ModulePackDownloadFile(
+            "modulepack-template.modulepack",
+            "application/json",
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(template, CoursePackJsonOptions))));
     }
 
     private static CoursePackDownloadFile DownloadCoursePackArchivePlaceholder(CoursePackDefinition pack)
@@ -789,15 +1387,12 @@ public sealed class CourseService
 
         try
         {
-            var lesson = new Lesson(
+            var lesson = BuildLesson(
                 Guid.NewGuid(),
                 module.Id,
                 "",
                 module.Lessons.Count + 1,
-                command.Title,
-                command.IntroductoryText,
-                command.LinkedModuleObjective,
-                BuildLessonResourceItems(command.Resources));
+                command);
             await SaveModuleAsync(course, module.WithLessons(module.Lessons.Concat([lesson]).ToArray()), cancellationToken);
             CourseNavigationChanged?.Invoke();
             return OperationResult<Guid>.Success(lesson.Id);
@@ -805,6 +1400,55 @@ public sealed class CourseService
         catch (DomainException ex)
         {
             return OperationResult<Guid>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult<LessonPackImportResult>> ImportLessonPackAsync(
+        UserContext user,
+        Guid courseId,
+        Guid moduleId,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<LessonPackImportResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var parsed = ParseLessonPackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<LessonPackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<LessonPackImportResult>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var nextOrder = module.Lessons.Count + 1;
+            var existingSourceIds = module.Lessons
+                .Select(lesson => lesson.SourceLessonId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var importedLessons = parsed.Value.Lessons
+                .OrderBy(lesson => lesson.SequenceOrder <= 0 ? int.MaxValue : lesson.SequenceOrder)
+                .ThenBy(lesson => lesson.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(lesson => BuildImportedLesson(module.Id, lesson, nextOrder++, existingSourceIds, module.Assignments))
+                .ToArray();
+
+            await SaveModuleAsync(course, module.WithLessons(module.Lessons.Concat(importedLessons).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<LessonPackImportResult>.Success(new LessonPackImportResult(importedLessons.Length));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<LessonPackImportResult>.Failure(ex.Message);
         }
     }
 
@@ -829,15 +1473,12 @@ public sealed class CourseService
 
         try
         {
-            var updatedLesson = new Lesson(
+            var updatedLesson = BuildLesson(
                 existing.Id,
                 module.Id,
                 existing.SourceLessonId,
                 existing.SequenceOrder,
-                command.Title,
-                command.IntroductoryText,
-                command.LinkedModuleObjective,
-                BuildLessonResourceItems(command.Resources));
+                command);
             var lessons = module.Lessons
                 .Select(lesson => lesson.Id == command.LessonId ? updatedLesson : lesson)
                 .ToArray();
@@ -978,7 +1619,25 @@ public sealed class CourseService
                 command.IsPortfolioCandidate,
                 command.PlannedPoints,
                 command.PlannedWeight,
-                command.Status);
+                command.Status,
+                command.AssignmentSummary,
+                command.StudentFacingGoal,
+                command.EstimatedMinutesMin,
+                command.EstimatedMinutesMax,
+                command.RequiredDeliverables,
+                command.SubmissionFormats,
+                BuildAssignmentPortfolioConnection(command.PortfolioConnection),
+                BuildRubric(command.Rubric),
+                command.LinkedRubricId,
+                command.AssessmentSkills,
+                command.StudentChecklist,
+                BuildAssignmentResources(command.Resources ?? []),
+                BuildAssignmentSteps(command.AssignmentSteps ?? []),
+                BuildRevisionPolicy(command.RevisionPolicy),
+                BuildCompletionCriteria(command.CompletionCriteria),
+                command.ReflectionPrompts,
+                BuildEvidenceRequirements(command.EvidenceRequirements),
+                BuildScoring(command.Scoring));
             await SaveModuleAsync(course, module.WithAssignments(module.Assignments.Concat([assignment]).ToArray()), cancellationToken);
             CourseNavigationChanged?.Invoke();
             return OperationResult<Guid>.Success(assignment.Id);
@@ -986,6 +1645,93 @@ public sealed class CourseService
         catch (DomainException ex)
         {
             return OperationResult<Guid>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult<AssignmentPackImportResult>> ImportAssignmentPackAsync(
+        UserContext user,
+        Guid courseId,
+        Guid moduleId,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var parsed = ParseAssignmentPackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var nextOrder = module.Assignments.Count + 1;
+            var existingSourceIds = module.Assignments
+                .Select(assignment => assignment.SourceAssignmentId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var importedAssignments = parsed.Value.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder <= 0 ? int.MaxValue : assignment.SequenceOrder)
+                .ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(assignment => BuildImportedAssignment(module, assignment, nextOrder++, existingSourceIds))
+                .ToArray();
+
+            await SaveModuleAsync(course, module.WithAssignments(module.Assignments.Concat(importedAssignments).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<AssignmentPackImportResult>.Success(new AssignmentPackImportResult(importedAssignments.Length));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<OperationResult<ModulePackImportResult>> ImportModulePackAsync(
+        UserContext user,
+        Guid courseId,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<ModulePackImportResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var parsed = ParseModulePackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<ModulePackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult<ModulePackImportResult>.Failure("Course was not found.");
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        try
+        {
+            var module = BuildImportedModule(course.Id, parsed.Value.Module, course.Modules.Count + 1, schoolYear);
+            await repository.SaveCourseAsync(course.WithModules(course.Modules.Concat([module]).ToArray()), cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<ModulePackImportResult>.Success(new ModulePackImportResult(module.Id, module.Title));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<ModulePackImportResult>.Failure(ex.Message);
         }
     }
 
@@ -1028,7 +1774,25 @@ public sealed class CourseService
                 command.IsPortfolioCandidate,
                 command.PlannedPoints,
                 command.PlannedWeight,
-                command.Status) with { Id = existing.Id };
+                command.Status,
+                command.AssignmentSummary,
+                command.StudentFacingGoal,
+                command.EstimatedMinutesMin,
+                command.EstimatedMinutesMax,
+                command.RequiredDeliverables,
+                command.SubmissionFormats,
+                BuildAssignmentPortfolioConnection(command.PortfolioConnection),
+                BuildRubric(command.Rubric),
+                command.LinkedRubricId,
+                command.AssessmentSkills,
+                command.StudentChecklist,
+                BuildAssignmentResources(command.Resources ?? []),
+                BuildAssignmentSteps(command.AssignmentSteps ?? []),
+                BuildRevisionPolicy(command.RevisionPolicy),
+                BuildCompletionCriteria(command.CompletionCriteria),
+                command.ReflectionPrompts,
+                BuildEvidenceRequirements(command.EvidenceRequirements),
+                BuildScoring(command.Scoring)) with { Id = existing.Id };
             var assignments = module.Assignments
                 .Select(assignment => assignment.Id == command.AssignmentId ? updatedAssignment : assignment)
                 .ToArray();
@@ -1349,6 +2113,23 @@ public sealed class CourseService
             lesson.Title,
             lesson.IntroductoryText,
             lesson.LinkedModuleObjective,
+            lesson.LessonType,
+            lesson.EstimatedMinutes,
+            lesson.SuggestedDays,
+            lesson.DifficultyLevel,
+            lesson.SubjectAreas,
+            lesson.Tags,
+            lesson.Prerequisites,
+            lesson.LearningObjectives
+                .Select(objective => new LessonLearningObjectiveView(objective.ObjectiveId, objective.Text, objective.BloomLevel))
+                .ToArray(),
+            lesson.StandardsAlignments
+                .Select(item => new StandardsAlignmentView(item.Framework, item.Code, item.Description))
+                .ToArray(),
+            lesson.SuccessCriteria,
+            lesson.LessonSteps
+                .Select(step => new LessonStepView(step.StepOrder, step.Title, step.StepType, step.Instructions, step.EstimatedMinutes, step.Required))
+                .ToArray(),
             lesson.Resources
                 .Select(resource => new LessonResourceView(
                     resource.Id,
@@ -1357,8 +2138,64 @@ public sealed class CourseService
                     resource.Url,
                     resource.FilePath,
                     resource.IsPhysicalResource,
-                    resource.SourceNote))
-                .ToArray());
+                    resource.SourceNote,
+                    resource.Required,
+                    resource.EstimatedMinutes,
+                    resource.StudentInstructions,
+                    resource.NotesPrompt,
+                    resource.Citation is null
+                        ? null
+                        : new LessonResourceCitationView(resource.Citation.Title, resource.Citation.Publisher, resource.Citation.AccessedAtUtc),
+                    resource.OfflineAvailable,
+                    resource.License))
+                .ToArray(),
+            lesson.ProblemSets
+                .Select(problemSet => new LessonProblemSetView(
+                    problemSet.ProblemSetId,
+                    problemSet.Title,
+                    problemSet.Instructions,
+                    problemSet.EstimatedMinutes,
+                    problemSet.Problems
+                        .Select(problem => new LessonProblemView(
+                            problem.ProblemId,
+                            problem.Prompt,
+                            problem.ResponseType,
+                            problem.ExpectedAnswer,
+                            problem.Solution,
+                            problem.Skills,
+                            problem.Difficulty))
+                        .ToArray()))
+                .ToArray(),
+            lesson.PortfolioConnections
+                .Select(connection => new LessonPortfolioConnectionView(
+                    connection.PortfolioSection,
+                    connection.ArtifactTitle,
+                    connection.ArtifactPurpose,
+                    connection.CrossCourseLinks,
+                    connection.ReuseInstructions))
+                .ToArray(),
+            lesson.Rubric is null
+                ? null
+                : new LessonRubricView(
+                    lesson.Rubric.RubricId,
+                    lesson.Rubric.Scale,
+                    lesson.Rubric.Criteria
+                        .Select(criteria => new LessonRubricCriterionView(
+                            criteria.Criterion,
+                            criteria.Level4,
+                            criteria.Level3,
+                            criteria.Level2,
+                            criteria.Level1))
+                        .ToArray()),
+            lesson.ReflectionPrompts,
+            lesson.InstructorNotes is null
+                ? null
+                : new LessonInstructorNotesView(
+                    lesson.InstructorNotes.Overview,
+                    lesson.InstructorNotes.LookFors,
+                    lesson.InstructorNotes.CommonIssues,
+                    lesson.InstructorNotes.SuggestedFeedback),
+            lesson.LinkedAssignmentIds);
     }
 
     private static AssignmentView ToAssignmentView(ModuleAssignment assignment)
@@ -1382,7 +2219,25 @@ public sealed class CourseService
             assignment.IsPortfolioCandidate,
             assignment.PlannedPoints,
             assignment.PlannedWeight,
-            assignment.Status);
+            assignment.Status,
+            assignment.AssignmentSummary,
+            assignment.StudentFacingGoal,
+            assignment.EstimatedMinutesMin,
+            assignment.EstimatedMinutesMax,
+            assignment.RequiredDeliverables,
+            assignment.SubmissionFormats,
+            assignment.PortfolioConnection,
+            assignment.Rubric,
+            assignment.LinkedRubricId,
+            assignment.AssessmentSkills,
+            assignment.StudentChecklist,
+            assignment.Resources,
+            assignment.AssignmentSteps,
+            assignment.RevisionPolicy,
+            assignment.CompletionCriteria,
+            assignment.ReflectionPrompts,
+            assignment.EvidenceRequirements,
+            assignment.Scoring);
     }
 
     private static IReadOnlyList<AssignmentVariantView> AssignmentVariantsFor(
@@ -1421,7 +2276,25 @@ public sealed class CourseService
                     variant.IsPortfolioCandidate,
                     variant.PlannedPoints,
                     variant.PlannedWeight,
-                    variant.Status)))
+                    variant.Status,
+                    variant.AssignmentSummary,
+                    variant.StudentFacingGoal,
+                    variant.EstimatedMinutesMin,
+                    variant.EstimatedMinutesMax,
+                    variant.RequiredDeliverables ?? [],
+                    variant.SubmissionFormats ?? [],
+                    variant.PortfolioConnection,
+                    variant.Rubric,
+                    variant.LinkedRubricId,
+                    variant.AssessmentSkills ?? [],
+                    variant.StudentChecklist ?? [],
+                    variant.Resources ?? [],
+                    variant.AssignmentSteps ?? [],
+                    variant.RevisionPolicy,
+                    variant.CompletionCriteria,
+                    variant.ReflectionPrompts ?? [],
+                    variant.EvidenceRequirements,
+                    variant.Scoring)))
             .ToArray();
     }
 
@@ -1443,7 +2316,25 @@ public sealed class CourseService
         bool isPortfolioCandidate,
         decimal? plannedPoints,
         decimal? plannedWeight,
-        AssignmentStatus status)
+        AssignmentStatus status,
+        string assignmentSummary = "",
+        string studentFacingGoal = "",
+        int? estimatedMinutesMin = null,
+        int? estimatedMinutesMax = null,
+        IReadOnlyList<string>? requiredDeliverables = null,
+        IReadOnlyList<AssignmentSubmissionFormat>? submissionFormats = null,
+        AssignmentPortfolioConnection? portfolioConnection = null,
+        LessonRubric? rubric = null,
+        string linkedRubricId = "",
+        IReadOnlyList<string>? assessmentSkills = null,
+        IReadOnlyList<string>? studentChecklist = null,
+        IReadOnlyList<AssignmentResource>? resources = null,
+        IReadOnlyList<AssignmentStep>? assignmentSteps = null,
+        AssignmentRevisionPolicy? revisionPolicy = null,
+        AssignmentCompletionCriteria? completionCriteria = null,
+        IReadOnlyList<string>? reflectionPrompts = null,
+        AssignmentEvidenceRequirements? evidenceRequirements = null,
+        AssignmentScoring? scoring = null)
     {
         return new ModuleAssignment(
             Guid.NewGuid(),
@@ -1464,7 +2355,176 @@ public sealed class CourseService
             isPortfolioCandidate,
             plannedPoints,
             plannedWeight,
-            status);
+            status,
+            assignmentSummary,
+            studentFacingGoal,
+            estimatedMinutesMin,
+            estimatedMinutesMax,
+            requiredDeliverables,
+            submissionFormats,
+            portfolioConnection,
+            rubric,
+            linkedRubricId,
+            assessmentSkills,
+            studentChecklist,
+            resources,
+            assignmentSteps,
+            revisionPolicy,
+            completionCriteria,
+            reflectionPrompts,
+            evidenceRequirements,
+            scoring);
+    }
+
+    private static ModuleAssignment BuildImportedAssignment(
+        LearningModule module,
+        AssignmentPackAssignment assignment,
+        int sequenceOrder,
+        HashSet<string> existingSourceIds)
+    {
+        return BuildAssignment(
+            module.Id,
+            UniqueAssignmentSourceId(RepairSourceId(assignment.SourceAssignmentId, assignment.Title, sequenceOrder), existingSourceIds),
+            sequenceOrder,
+            assignment.Title,
+            assignment.Type,
+            assignment.MethodProfile,
+            assignment.Instructions,
+            assignment.EstimatedEffort,
+            assignment.DueTimingLabel,
+            assignment.DueDate,
+            assignment.LinkedModuleObjectives ?? [],
+            ResolveAssignmentPackLessonLinks(module.Lessons, assignment.LinkedLessonSourceIds, assignment.LinkedLessonTitles),
+            assignment.RequiredOutput,
+            assignment.ParentNotes,
+            assignment.IsPortfolioCandidate,
+            assignment.PlannedPoints,
+            assignment.PlannedWeight,
+            assignment.Status,
+            assignment.AssignmentSummary,
+            assignment.StudentFacingGoal,
+            assignment.EstimatedMinutesMin,
+            assignment.EstimatedMinutesMax,
+            assignment.RequiredDeliverables,
+            assignment.SubmissionFormats,
+            assignment.PortfolioConnection,
+            assignment.Rubric,
+            assignment.LinkedRubricId,
+            assignment.AssessmentSkills,
+            assignment.StudentChecklist,
+            assignment.Resources,
+            assignment.AssignmentSteps,
+            assignment.RevisionPolicy,
+            assignment.CompletionCriteria,
+            assignment.ReflectionPrompts,
+            assignment.EvidenceRequirements,
+            assignment.Scoring);
+    }
+
+    private static string UniqueAssignmentSourceId(string sourceAssignmentId, HashSet<string> existingSourceIds)
+    {
+        var normalized = string.IsNullOrWhiteSpace(sourceAssignmentId) ? "" : sourceAssignmentId.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return "";
+        }
+
+        if (existingSourceIds.Add(normalized))
+        {
+            return normalized;
+        }
+
+        var index = 2;
+        string candidate;
+        do
+        {
+            candidate = $"{normalized}-{index++}";
+        }
+        while (!existingSourceIds.Add(candidate));
+
+        return candidate;
+    }
+
+    private static IReadOnlyList<Guid> ResolveAssignmentPackLessonLinks(
+        IReadOnlyList<Lesson> lessons,
+        IReadOnlyList<string>? sourceLessonIds,
+        IReadOnlyList<string>? lessonTitles)
+    {
+        var linked = new List<Guid>();
+        foreach (var sourceLessonId in sourceLessonIds ?? [])
+        {
+            var match = lessons.FirstOrDefault(lesson =>
+                !string.IsNullOrWhiteSpace(lesson.SourceLessonId) &&
+                string.Equals(lesson.SourceLessonId, sourceLessonId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                linked.Add(match.Id);
+            }
+        }
+
+        foreach (var lessonTitle in lessonTitles ?? [])
+        {
+            var match = lessons.FirstOrDefault(lesson =>
+                string.Equals(lesson.Title, lessonTitle, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                linked.Add(match.Id);
+            }
+        }
+
+        return linked.Distinct().ToArray();
+    }
+
+    private static AssignmentPackAssignment ToAssignmentPackAssignment(
+        ModuleAssignment assignment,
+        IReadOnlyList<Lesson> lessons)
+    {
+        var linkedLessons = assignment.LinkedLessonIds
+            .Select(id => lessons.FirstOrDefault(lesson => lesson.Id == id))
+            .Where(lesson => lesson is not null)
+            .Select(lesson => lesson!)
+            .ToArray();
+
+        return new AssignmentPackAssignment(
+            assignment.SourceAssignmentId,
+            assignment.SequenceOrder,
+            assignment.Title,
+            assignment.Type,
+            assignment.MethodProfile,
+            assignment.Instructions,
+            assignment.EstimatedEffort,
+            assignment.DueTimingLabel,
+            assignment.DueDate,
+            assignment.LinkedModuleObjectives,
+            linkedLessons
+                .Select(lesson => lesson.SourceLessonId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToArray(),
+            linkedLessons.Select(lesson => lesson.Title).ToArray(),
+            assignment.RequiredOutput,
+            assignment.ParentNotes,
+            assignment.IsPortfolioCandidate,
+            assignment.PlannedPoints,
+            assignment.PlannedWeight,
+            assignment.Status,
+            assignment.AssignmentSummary,
+            assignment.StudentFacingGoal,
+            assignment.EstimatedMinutesMin,
+            assignment.EstimatedMinutesMax,
+            assignment.RequiredDeliverables,
+            assignment.SubmissionFormats,
+            assignment.PortfolioConnection,
+            assignment.Rubric,
+            assignment.LinkedRubricId,
+            assignment.AssessmentSkills,
+            assignment.StudentChecklist,
+            assignment.Resources,
+            assignment.AssignmentSteps,
+            assignment.RevisionPolicy,
+            assignment.CompletionCriteria,
+            assignment.ReflectionPrompts,
+            assignment.EvidenceRequirements,
+            assignment.Scoring);
     }
 
     private static IReadOnlyList<CourseTermView> BuildTermViews(SchoolYear? schoolYear)
@@ -1505,8 +2565,411 @@ public sealed class CourseService
                 item.Url,
                 item.FilePath,
                 item.IsPhysicalResource,
-                item.SourceNote))
+                item.SourceNote,
+                item.Required,
+                item.EstimatedMinutes,
+                item.StudentInstructions,
+                item.NotesPrompt,
+                item.Citation is null
+                    ? null
+                    : new LessonResourceCitation(item.Citation.Title, item.Citation.Publisher, item.Citation.AccessedAtUtc),
+                item.OfflineAvailable,
+                item.License))
             .ToArray();
+    }
+
+    private static IReadOnlyList<LessonLearningObjective> BuildLessonLearningObjectives(
+        IReadOnlyList<LessonLearningObjectiveCommand> objectives)
+    {
+        return objectives
+            .Where(item => !string.IsNullOrWhiteSpace(item.Text))
+            .Select(item => new LessonLearningObjective(item.ObjectiveId, item.Text, item.BloomLevel))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<StandardsAlignment> BuildStandardsAlignments(
+        IReadOnlyList<StandardsAlignmentCommand> standards)
+    {
+        return standards
+            .Where(item => !string.IsNullOrWhiteSpace(item.Framework) || !string.IsNullOrWhiteSpace(item.Code) || !string.IsNullOrWhiteSpace(item.Description))
+            .Select(item => new StandardsAlignment(item.Framework, item.Code, item.Description))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LessonStep> BuildLessonSteps(IReadOnlyList<LessonStepCommand> steps)
+    {
+        return steps
+            .Where(item => !string.IsNullOrWhiteSpace(item.Title))
+            .Select(item => new LessonStep(item.StepOrder, item.Title, item.StepType, item.Instructions, item.EstimatedMinutes, item.Required))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LessonProblemSet> BuildProblemSets(IReadOnlyList<LessonProblemSetCommand> problemSets)
+    {
+        return problemSets
+            .Where(item => !string.IsNullOrWhiteSpace(item.Title))
+            .Select(item => new LessonProblemSet(
+                item.ProblemSetId,
+                item.Title,
+                item.Instructions,
+                item.EstimatedMinutes,
+                item.Problems
+                    .Where(problem => !string.IsNullOrWhiteSpace(problem.Prompt))
+                    .Select(problem => new LessonProblem(
+                        problem.ProblemId,
+                        problem.Prompt,
+                        problem.ResponseType,
+                        problem.ExpectedAnswer,
+                        problem.Solution,
+                        problem.Skills,
+                        problem.Difficulty))
+                    .ToArray()))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<LessonPortfolioConnection> BuildPortfolioConnections(
+        IReadOnlyList<LessonPortfolioConnectionCommand> connections)
+    {
+        return connections
+            .Where(item => !string.IsNullOrWhiteSpace(item.PortfolioSection) || !string.IsNullOrWhiteSpace(item.ArtifactTitle))
+            .Select(item => new LessonPortfolioConnection(
+                item.PortfolioSection,
+                item.ArtifactTitle,
+                item.ArtifactPurpose,
+                item.CrossCourseLinks,
+                item.ReuseInstructions))
+            .ToArray();
+    }
+
+    private static LessonRubric? BuildRubric(LessonRubricCommand? rubric)
+    {
+        if (rubric is null)
+        {
+            return null;
+        }
+
+        return new LessonRubric(
+            rubric.RubricId,
+            rubric.Scale,
+            rubric.Criteria
+                .Where(item => !string.IsNullOrWhiteSpace(item.Criterion))
+                .Select(item => new LessonRubricCriterion(item.Criterion, item.Level4, item.Level3, item.Level2, item.Level1))
+                .ToArray());
+    }
+
+    private static LessonInstructorNotes? BuildInstructorNotes(LessonInstructorNotesCommand? notes)
+    {
+        return notes is null
+            ? null
+            : new LessonInstructorNotes(notes.Overview, notes.LookFors, notes.CommonIssues, notes.SuggestedFeedback);
+    }
+
+    private static AssignmentPortfolioConnection? BuildAssignmentPortfolioConnection(AssignmentPortfolioConnectionCommand? connection)
+    {
+        return connection is null
+            ? null
+            : new AssignmentPortfolioConnection(
+                connection.IsPortfolioCandidate,
+                connection.PortfolioSection,
+                connection.ArtifactTitle,
+                connection.ArtifactPurpose,
+                connection.ReuseInstructions,
+                connection.CrossCourseLinks);
+    }
+
+    private static IReadOnlyList<AssignmentResource> BuildAssignmentResources(IReadOnlyList<AssignmentResourceCommand> resources)
+    {
+        return resources
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item => new AssignmentResource(
+                item.Name,
+                item.Type,
+                item.Url,
+                item.FilePath,
+                item.IsPhysicalResource,
+                item.Required,
+                item.StudentInstructions,
+                item.SourceNote,
+                item.Citation is null
+                    ? null
+                    : new LessonResourceCitation(item.Citation.Title, item.Citation.Publisher, item.Citation.AccessedAtUtc)))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<AssignmentStep> BuildAssignmentSteps(IReadOnlyList<AssignmentStepCommand> steps)
+    {
+        return steps
+            .Where(item => !string.IsNullOrWhiteSpace(item.Title))
+            .Select(item => new AssignmentStep(item.StepOrder, item.Title, item.Instructions, item.EstimatedMinutes))
+            .ToArray();
+    }
+
+    private static AssignmentRevisionPolicy? BuildRevisionPolicy(AssignmentRevisionPolicyCommand? policy)
+    {
+        return policy is null
+            ? null
+            : new AssignmentRevisionPolicy(policy.AllowRevision, policy.RevisionExpectation, policy.MinimumRevisionCount);
+    }
+
+    private static AssignmentCompletionCriteria? BuildCompletionCriteria(AssignmentCompletionCriteriaCommand? criteria)
+    {
+        return criteria is null
+            ? null
+            : new AssignmentCompletionCriteria(criteria.MinimumRequirements, criteria.RequiresParentReview, criteria.MasteryThreshold);
+    }
+
+    private static AssignmentEvidenceRequirements? BuildEvidenceRequirements(AssignmentEvidenceRequirementsCommand? requirements)
+    {
+        return requirements is null
+            ? null
+            : new AssignmentEvidenceRequirements(
+                requirements.RetainForRecords,
+                requirements.EvidenceType,
+                requirements.RecommendedFileTypes,
+                requirements.RequiresStudentExplanation,
+                requirements.RequiresParentEvaluation);
+    }
+
+    private static AssignmentScoring? BuildScoring(AssignmentScoringCommand? scoring)
+    {
+        return scoring is null
+            ? null
+            : new AssignmentScoring(
+                scoring.PlannedPoints,
+                scoring.PlannedWeight,
+                scoring.GradingMode,
+                scoring.CountsTowardGrade,
+                scoring.AllowPartialCredit);
+    }
+
+    private static Lesson BuildImportedLesson(
+        Guid moduleId,
+        LessonPackLesson lesson,
+        int sequenceOrder,
+        HashSet<string> existingSourceIds,
+        IReadOnlyList<ModuleAssignment>? assignments = null)
+    {
+        var sourceLessonId = UniqueLessonSourceId(RepairSourceId(lesson.SourceLessonId, lesson.Title, sequenceOrder), existingSourceIds);
+        return new Lesson(
+            Guid.NewGuid(),
+            moduleId,
+            sourceLessonId,
+            sequenceOrder,
+            lesson.Title,
+            lesson.IntroductoryText,
+            lesson.LinkedModuleObjective,
+            (lesson.Resources ?? [])
+                .Where(resource => !string.IsNullOrWhiteSpace(resource.Name))
+                .Select(resource => new LessonResource(
+                    Guid.NewGuid(),
+                    resource.Name,
+                    resource.Type,
+                    resource.Url,
+                    resource.FilePath,
+                    resource.IsPhysicalResource,
+                    resource.SourceNote,
+                    resource.Required,
+                    resource.EstimatedMinutes,
+                    resource.StudentInstructions,
+                    resource.NotesPrompt,
+                    resource.Citation,
+                    resource.OfflineAvailable,
+                    resource.License))
+                .ToArray(),
+            lesson.LessonType,
+            lesson.EstimatedMinutes,
+            lesson.SuggestedDays,
+            lesson.DifficultyLevel,
+            lesson.SubjectAreas,
+            lesson.Tags,
+            lesson.Prerequisites,
+            lesson.LearningObjectives,
+            lesson.StandardsAlignments,
+            lesson.SuccessCriteria,
+            lesson.LessonSteps,
+            lesson.ProblemSets,
+            lesson.PortfolioConnections,
+            lesson.Rubric,
+            lesson.ReflectionPrompts,
+            lesson.InstructorNotes,
+            ResolveLessonPackAssignmentLinks(assignments ?? [], lesson.LinkedAssignmentSourceIds, lesson.LinkedAssignmentTitles));
+    }
+
+    private static Lesson BuildLesson(
+        Guid lessonId,
+        Guid moduleId,
+        string sourceLessonId,
+        int sequenceOrder,
+        CreateLessonCommand command)
+    {
+        return new Lesson(
+            lessonId,
+            moduleId,
+            sourceLessonId,
+            sequenceOrder,
+            command.Title,
+            command.IntroductoryText,
+            command.LinkedModuleObjective,
+            BuildLessonResourceItems(command.Resources),
+            command.LessonType,
+            command.EstimatedMinutes,
+            command.SuggestedDays,
+            command.DifficultyLevel,
+            command.SubjectAreas,
+            command.Tags,
+            command.Prerequisites,
+            BuildLessonLearningObjectives(command.LearningObjectives ?? []),
+            BuildStandardsAlignments(command.StandardsAlignments ?? []),
+            command.SuccessCriteria,
+            BuildLessonSteps(command.LessonSteps ?? []),
+            BuildProblemSets(command.ProblemSets ?? []),
+            BuildPortfolioConnections(command.PortfolioConnections ?? []),
+            BuildRubric(command.Rubric),
+            command.ReflectionPrompts,
+            BuildInstructorNotes(command.InstructorNotes),
+            command.LinkedAssignmentIds);
+    }
+
+    private static Lesson BuildLesson(
+        Guid lessonId,
+        Guid moduleId,
+        string sourceLessonId,
+        int sequenceOrder,
+        UpdateLessonCommand command)
+    {
+        return new Lesson(
+            lessonId,
+            moduleId,
+            sourceLessonId,
+            sequenceOrder,
+            command.Title,
+            command.IntroductoryText,
+            command.LinkedModuleObjective,
+            BuildLessonResourceItems(command.Resources),
+            command.LessonType,
+            command.EstimatedMinutes,
+            command.SuggestedDays,
+            command.DifficultyLevel,
+            command.SubjectAreas,
+            command.Tags,
+            command.Prerequisites,
+            BuildLessonLearningObjectives(command.LearningObjectives ?? []),
+            BuildStandardsAlignments(command.StandardsAlignments ?? []),
+            command.SuccessCriteria,
+            BuildLessonSteps(command.LessonSteps ?? []),
+            BuildProblemSets(command.ProblemSets ?? []),
+            BuildPortfolioConnections(command.PortfolioConnections ?? []),
+            BuildRubric(command.Rubric),
+            command.ReflectionPrompts,
+            BuildInstructorNotes(command.InstructorNotes),
+            command.LinkedAssignmentIds);
+    }
+
+    private static string UniqueLessonSourceId(string sourceLessonId, HashSet<string> existingSourceIds)
+    {
+        var normalized = string.IsNullOrWhiteSpace(sourceLessonId) ? "" : sourceLessonId.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return "";
+        }
+
+        if (existingSourceIds.Add(normalized))
+        {
+            return normalized;
+        }
+
+        var index = 2;
+        string candidate;
+        do
+        {
+            candidate = $"{normalized}-{index++}";
+        }
+        while (!existingSourceIds.Add(candidate));
+
+        return candidate;
+    }
+
+    private static IReadOnlyList<Guid> ResolveLessonPackAssignmentLinks(
+        IReadOnlyList<ModuleAssignment> assignments,
+        IReadOnlyList<string>? sourceAssignmentIds,
+        IReadOnlyList<string>? assignmentTitles)
+    {
+        var linked = new List<Guid>();
+        foreach (var sourceAssignmentId in sourceAssignmentIds ?? [])
+        {
+            var match = assignments.FirstOrDefault(assignment =>
+                !string.IsNullOrWhiteSpace(assignment.SourceAssignmentId) &&
+                string.Equals(assignment.SourceAssignmentId, sourceAssignmentId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                linked.Add(match.Id);
+            }
+        }
+
+        foreach (var assignmentTitle in assignmentTitles ?? [])
+        {
+            var match = assignments.FirstOrDefault(assignment =>
+                string.Equals(assignment.Title, assignmentTitle, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                linked.Add(match.Id);
+            }
+        }
+
+        return linked.Distinct().ToArray();
+    }
+
+    private static LessonPackLesson ToLessonPackLesson(Lesson lesson, IReadOnlyList<ModuleAssignment> assignments)
+    {
+        var linkedAssignments = lesson.LinkedAssignmentIds
+            .Select(id => assignments.FirstOrDefault(assignment => assignment.Id == id))
+            .Where(assignment => assignment is not null)
+            .Select(assignment => assignment!)
+            .ToArray();
+
+        return new LessonPackLesson(
+            lesson.SourceLessonId,
+            lesson.SequenceOrder,
+            lesson.Title,
+            lesson.IntroductoryText,
+            lesson.LinkedModuleObjective,
+            lesson.LessonType,
+            lesson.EstimatedMinutes,
+            lesson.SuggestedDays,
+            lesson.DifficultyLevel,
+            lesson.SubjectAreas,
+            lesson.Tags,
+            lesson.Prerequisites,
+            lesson.LearningObjectives,
+            lesson.StandardsAlignments,
+            lesson.SuccessCriteria,
+            lesson.LessonSteps,
+            lesson.Resources
+                .Select(resource => new LessonPackResource(
+                    resource.Name,
+                    resource.Type,
+                    resource.Url,
+                    resource.FilePath,
+                    resource.IsPhysicalResource,
+                    resource.SourceNote,
+                    resource.Required,
+                    resource.EstimatedMinutes,
+                    resource.StudentInstructions,
+                    resource.NotesPrompt,
+                    resource.Citation,
+                    resource.OfflineAvailable,
+                    resource.License))
+                .ToArray(),
+            lesson.ProblemSets,
+            lesson.PortfolioConnections,
+            lesson.Rubric,
+            lesson.ReflectionPrompts,
+            lesson.InstructorNotes,
+            linkedAssignments
+                .Select(assignment => assignment.SourceAssignmentId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToArray(),
+            linkedAssignments.Select(assignment => assignment.Title).ToArray());
     }
 
     private static string Lines(IEnumerable<string> values)
@@ -1650,6 +3113,8 @@ public sealed class CourseService
             {
                 var moduleId = Guid.NewGuid();
                 var lessons = BuildLessons(moduleId, module.Lessons);
+                var assignments = BuildAssignments(moduleId, module.Assignments, lessons);
+                lessons = ApplyCoursePackLessonAssignmentLinks(lessons, module.Lessons, assignments);
                 return new LearningModule(
                     moduleId,
                     courseId,
@@ -1672,7 +3137,7 @@ public sealed class CourseService
                         .Select(item => new ModuleResource(item.Name, item.Link, "", item.IsPhysicalResource))
                         .ToArray(),
                     lessons,
-                    BuildAssignments(moduleId, module.Assignments, lessons));
+                    assignments);
             })
             .ToArray();
     }
@@ -1807,8 +3272,31 @@ public sealed class CourseService
                         resource.Url,
                         "",
                         resource.IsPhysicalResource,
-                        resource.SourceNote))
-                    .ToArray()))
+                        resource.SourceNote,
+                        resource.Required,
+                        resource.EstimatedMinutes,
+                        resource.StudentInstructions,
+                        resource.NotesPrompt,
+                        resource.Citation,
+                        resource.OfflineAvailable,
+                        resource.License))
+                    .ToArray(),
+                lesson.LessonType,
+                lesson.EstimatedMinutes,
+                lesson.SuggestedDays,
+                lesson.DifficultyLevel,
+                lesson.SubjectAreas ?? [],
+                lesson.Tags ?? [],
+                lesson.Prerequisites ?? [],
+                lesson.LearningObjectives ?? [],
+                lesson.StandardsAlignments ?? [],
+                lesson.SuccessCriteria ?? [],
+                lesson.LessonSteps ?? [],
+                lesson.ProblemSets ?? [],
+                lesson.PortfolioConnections ?? [],
+                lesson.Rubric,
+                lesson.ReflectionPrompts ?? [],
+                lesson.InstructorNotes))
             .ToArray();
     }
 
@@ -1841,9 +3329,121 @@ public sealed class CourseService
                     variant.IsPortfolioCandidate,
                     variant.PlannedPoints,
                     variant.PlannedWeight,
-                    variant.Status);
+                    variant.Status,
+                    variant.AssignmentSummary,
+                    variant.StudentFacingGoal,
+                    variant.EstimatedMinutesMin,
+                    variant.EstimatedMinutesMax,
+                    variant.RequiredDeliverables,
+                    variant.SubmissionFormats,
+                    variant.PortfolioConnection,
+                    variant.Rubric,
+                    variant.LinkedRubricId,
+                    variant.AssessmentSkills,
+                    variant.StudentChecklist,
+                    variant.Resources,
+                    variant.AssignmentSteps,
+                    variant.RevisionPolicy,
+                    variant.CompletionCriteria,
+                    variant.ReflectionPrompts,
+                    variant.EvidenceRequirements,
+                    variant.Scoring);
             })
             .ToArray();
+    }
+
+    private static IReadOnlyList<Lesson> ApplyCoursePackLessonAssignmentLinks(
+        IReadOnlyList<Lesson> lessons,
+        IReadOnlyList<CourseTemplateLessonDefinition> lessonDefinitions,
+        IReadOnlyList<ModuleAssignment> assignments)
+    {
+        return lessons
+            .Select(lesson =>
+            {
+                var definition = lessonDefinitions.FirstOrDefault(item =>
+                    string.Equals(item.LessonId, lesson.SourceLessonId, StringComparison.OrdinalIgnoreCase));
+                if (definition?.LinkedAssignmentIds is null || definition.LinkedAssignmentIds.Count == 0)
+                {
+                    return lesson;
+                }
+
+                var linkedAssignmentIds = definition.LinkedAssignmentIds
+                    .Select(sourceAssignmentId => assignments.FirstOrDefault(assignment =>
+                        string.Equals(assignment.SourceAssignmentId, sourceAssignmentId, StringComparison.OrdinalIgnoreCase))?.Id ?? Guid.Empty)
+                    .Where(id => id != Guid.Empty)
+                    .ToArray();
+
+                return lesson with { LinkedAssignmentIds = linkedAssignmentIds };
+            })
+            .ToArray();
+    }
+
+    private static ModulePackModule ToModulePackModule(LearningModule module, string termName)
+    {
+        return new ModulePackModule(
+            module.SourceModuleId,
+            module.SequenceOrder,
+            module.Title,
+            module.Description,
+            termName,
+            module.EstimatedLength,
+            module.Instructions,
+            module.LearningObjectiveItems
+                .Select(item => new ModulePackObjective(item.Text, item.LinkedCourseObjective))
+                .ToArray(),
+            module.ResourceItems
+                .Select(item => new ModulePackResource(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+                .ToArray(),
+            module.AssignmentEvidencePlaceholder,
+            module.Status,
+            module.Lessons
+                .OrderBy(lesson => lesson.SequenceOrder)
+                .Select(lesson => new ModulePackItemReference(lesson.SourceLessonId, lesson.Title, lesson.SequenceOrder))
+                .ToArray(),
+            module.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .Select(assignment => new ModulePackItemReference(assignment.SourceAssignmentId, assignment.Title, assignment.SequenceOrder))
+                .ToArray());
+    }
+
+    private static LearningModule BuildImportedModule(
+        Guid courseId,
+        ModulePackModule module,
+        int sequenceOrder,
+        SchoolYear? schoolYear)
+    {
+        return new LearningModule(
+            Guid.NewGuid(),
+            courseId,
+            RepairSourceId(module.SourceModuleId, module.Title, sequenceOrder),
+            sequenceOrder,
+            module.Title,
+            module.Description,
+            module.EstimatedLength,
+            module.Instructions,
+            "",
+            Lines((module.LearningObjectives ?? []).Select(item => item.Text)),
+            Lines((module.Resources ?? []).Select(item => item.Name)),
+            module.AssignmentEvidencePlaceholder,
+            module.Status,
+            ResolveTermId(module.TermName, schoolYear),
+            (module.LearningObjectives ?? [])
+                .Select(item => new ModuleLearningObjective(item.Text, item.LinkedCourseObjective))
+                .ToArray(),
+            (module.Resources ?? [])
+                .Select(item => new ModuleResource(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
+                .ToArray());
+    }
+
+    private static Guid? ResolveTermId(string termName, SchoolYear? schoolYear)
+    {
+        if (string.IsNullOrWhiteSpace(termName) || schoolYear is null)
+        {
+            return null;
+        }
+
+        return schoolYear.Terms.FirstOrDefault(term =>
+            string.Equals(term.Name, termName, StringComparison.OrdinalIgnoreCase))?.Id;
     }
 
     private static IReadOnlyList<Guid> MapAssignmentLessonLinks(
@@ -1946,6 +3546,638 @@ public sealed class CourseService
         return $"{mapping.RequirementAreaId:N}:{mapping.CoverageLevel}:{mapping.Notes}";
     }
 
+    private async Task<OperationResult<CourseImportResult>> ImportSingleCoursePackEnvelopeAsync(
+        SingleCoursePackEnvelope envelope,
+        Guid? studentId,
+        CancellationToken cancellationToken,
+        string sourcePackId = "imported-coursepack",
+        bool updateExisting = false)
+    {
+        var studentResult = await ResolveStudentAsync(studentId, cancellationToken);
+        if (!studentResult.Succeeded || studentResult.Value is null)
+        {
+            return OperationResult<CourseImportResult>.Failure(studentResult.Errors.ToArray());
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        if (schoolYear is null)
+        {
+            return OperationResult<CourseImportResult>.Failure("Create a school year before importing a course.");
+        }
+
+        try
+        {
+            var effectiveSourcePackId = PackIdentityKey(envelope.SourceIdentity, sourcePackId);
+            var existingCourse = updateExisting
+                ? (await repository.GetCoursesAsync(cancellationToken)).FirstOrDefault(course =>
+                    course.StudentId == studentResult.Value.Id &&
+                    !course.IsArchived &&
+                    string.Equals(course.SourcePackId, effectiveSourcePackId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(course.SourceTemplateId, RepairSourceId(envelope.Course.SourceCourseId, envelope.Course.Title, 1), StringComparison.OrdinalIgnoreCase))
+                : null;
+            var courseId = existingCourse?.Id ?? Guid.NewGuid();
+            var areas = await repository.GetRequirementAreasAsync(cancellationToken);
+            var sourceCourseId = RepairSourceId(envelope.Course.SourceCourseId, envelope.Course.Title, 1);
+            var importedDescription = envelope.Course.Description.ToDomain();
+            var importedPlan = envelope.Course.CurriculumPlan.ToDomain();
+            var course = existingCourse is null
+                ? new Course(
+                    courseId,
+                    studentResult.Value.Id,
+                    schoolYear.Id,
+                    envelope.Course.Title,
+                    NormalizeSubjectAreas(envelope.Course.SubjectAreas),
+                    envelope.Course.Duration,
+                    envelope.Course.PlannedCreditValue,
+                    effectiveSourcePackId,
+                    sourceCourseId,
+                    importedDescription,
+                    importedPlan,
+                    BuildSingleCourseMappings(courseId, envelope.Course.RequirementMappings, areas),
+                    [])
+                : new Course(
+                    existingCourse.Id,
+                    existingCourse.StudentId,
+                    existingCourse.SchoolYearId,
+                    string.IsNullOrWhiteSpace(existingCourse.Title) ? envelope.Course.Title : existingCourse.Title,
+                    existingCourse.SubjectAreas.Count == 0 ? NormalizeSubjectAreas(envelope.Course.SubjectAreas) : existingCourse.SubjectAreas,
+                    existingCourse.Duration,
+                    existingCourse.PlannedCreditValue,
+                    effectiveSourcePackId,
+                    sourceCourseId,
+                    MergeDescription(existingCourse.Description, importedDescription),
+                    MergeCurriculumPlan(existingCourse.CurriculumPlan, importedPlan),
+                    MergeSingleCourseMappings(existingCourse, envelope.Course.RequirementMappings, areas),
+                    existingCourse.Modules);
+
+            await repository.SaveCourseAsync(course, cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<CourseImportResult>.Success(new CourseImportResult(course.Id, course.Title));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<CourseImportResult>.Failure(ex.Message);
+        }
+    }
+
+    private async Task<OperationResult<ModulePackImportResult>> UpsertModulePackIntoCourseAsync(
+        Guid courseId,
+        byte[] content,
+        CancellationToken cancellationToken)
+    {
+        var parsed = ParseModulePackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<ModulePackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult<ModulePackImportResult>.Failure("Course was not found.");
+        }
+
+        var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        try
+        {
+            var existing = course.Modules.FirstOrDefault(module =>
+                !string.IsNullOrWhiteSpace(module.SourceModuleId) &&
+                string.Equals(
+                    module.SourceModuleId,
+                    RepairSourceId(parsed.Value.Module.SourceModuleId, parsed.Value.Module.Title, parsed.Value.Module.SequenceOrder),
+                    StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                var module = BuildImportedModule(course.Id, parsed.Value.Module, course.Modules.Count + 1, schoolYear);
+                await repository.SaveCourseAsync(course.WithModules(course.Modules.Concat([module]).ToArray()), cancellationToken);
+                CourseNavigationChanged?.Invoke();
+                return OperationResult<ModulePackImportResult>.Success(new ModulePackImportResult(module.Id, module.Title));
+            }
+
+            var packModule = BuildImportedModule(course.Id, parsed.Value.Module, existing.SequenceOrder, schoolYear);
+            var updated = existing with
+            {
+                Title = string.IsNullOrWhiteSpace(existing.Title) ? packModule.Title : existing.Title,
+                Description = string.IsNullOrWhiteSpace(existing.Description) ? packModule.Description : existing.Description,
+                EstimatedLength = string.IsNullOrWhiteSpace(existing.EstimatedLength) ? packModule.EstimatedLength : existing.EstimatedLength,
+                Instructions = string.IsNullOrWhiteSpace(existing.Instructions) ? packModule.Instructions : existing.Instructions,
+                LearningObjectives = string.IsNullOrWhiteSpace(existing.LearningObjectives) ? packModule.LearningObjectives : existing.LearningObjectives,
+                Resources = string.IsNullOrWhiteSpace(existing.Resources) ? packModule.Resources : existing.Resources,
+                AssignmentEvidencePlaceholder = string.IsNullOrWhiteSpace(existing.AssignmentEvidencePlaceholder) ? packModule.AssignmentEvidencePlaceholder : existing.AssignmentEvidencePlaceholder,
+                TermId = existing.TermId ?? packModule.TermId,
+                LearningObjectiveItems = existing.LearningObjectiveItems.Count == 0 ? packModule.LearningObjectiveItems : existing.LearningObjectiveItems,
+                ResourceItems = existing.ResourceItems.Count == 0 ? packModule.ResourceItems : existing.ResourceItems
+            };
+            await SaveModuleAsync(course, updated, cancellationToken);
+            CourseNavigationChanged?.Invoke();
+            return OperationResult<ModulePackImportResult>.Success(new ModulePackImportResult(updated.Id, updated.Title));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<ModulePackImportResult>.Failure(ex.Message);
+        }
+    }
+
+    private async Task<OperationResult<LessonPackImportResult>> ImportMissingLessonPackAsync(
+        Guid courseId,
+        Guid moduleId,
+        byte[] content,
+        CancellationToken cancellationToken)
+    {
+        var parsed = ParseLessonPackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<LessonPackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<LessonPackImportResult>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var nextOrder = module.Lessons.Count + 1;
+            var existingSourceIds = module.Lessons
+                .Select(lesson => lesson.SourceLessonId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var importedLessons = parsed.Value.Lessons
+                .Where(lesson => !existingSourceIds.Contains(RepairSourceId(lesson.SourceLessonId, lesson.Title, lesson.SequenceOrder)))
+                .OrderBy(lesson => lesson.SequenceOrder <= 0 ? int.MaxValue : lesson.SequenceOrder)
+                .ThenBy(lesson => lesson.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(lesson => BuildImportedLesson(module.Id, lesson, nextOrder++, existingSourceIds, module.Assignments))
+                .ToArray();
+
+            if (importedLessons.Length > 0)
+            {
+                await SaveModuleAsync(course, module.WithLessons(module.Lessons.Concat(importedLessons).ToArray()), cancellationToken);
+                CourseNavigationChanged?.Invoke();
+            }
+
+            return OperationResult<LessonPackImportResult>.Success(new LessonPackImportResult(importedLessons.Length));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<LessonPackImportResult>.Failure(ex.Message);
+        }
+    }
+
+    private async Task<OperationResult<AssignmentPackImportResult>> ImportMissingAssignmentPackAsync(
+        Guid courseId,
+        Guid moduleId,
+        byte[] content,
+        CancellationToken cancellationToken)
+    {
+        var parsed = ParseAssignmentPackFile(content);
+        if (!parsed.Succeeded || parsed.Value is null)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure(parsed.Errors.ToArray());
+        }
+
+        var course = await repository.GetCourseAsync(courseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == moduleId);
+        if (course is null || module is null)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure("Learning module was not found.");
+        }
+
+        try
+        {
+            var nextOrder = module.Assignments.Count + 1;
+            var existingSourceIds = module.Assignments
+                .Select(assignment => assignment.SourceAssignmentId)
+                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var importedAssignments = parsed.Value.Assignments
+                .Where(assignment => !existingSourceIds.Contains(RepairSourceId(assignment.SourceAssignmentId, assignment.Title, assignment.SequenceOrder)))
+                .OrderBy(assignment => assignment.SequenceOrder <= 0 ? int.MaxValue : assignment.SequenceOrder)
+                .ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(assignment => BuildImportedAssignment(module, assignment, nextOrder++, existingSourceIds))
+                .ToArray();
+
+            if (importedAssignments.Length > 0)
+            {
+                await SaveModuleAsync(course, module.WithAssignments(module.Assignments.Concat(importedAssignments).ToArray()), cancellationToken);
+                CourseNavigationChanged?.Invoke();
+            }
+
+            return OperationResult<AssignmentPackImportResult>.Success(new AssignmentPackImportResult(importedAssignments.Length));
+        }
+        catch (DomainException ex)
+        {
+            return OperationResult<AssignmentPackImportResult>.Failure(ex.Message);
+        }
+    }
+
+    private static IReadOnlyList<RequirementMapping> BuildSingleCourseMappings(
+        Guid courseId,
+        IReadOnlyList<SingleCourseRequirementMapping> mappings,
+        IReadOnlyList<RequirementArea> areas)
+    {
+        return mappings
+            .Select(mapping => TryBuildMapping(
+                courseId,
+                new CourseTemplateRequirementMapping(
+                    mapping.RequirementAreaView,
+                    mapping.RequirementAreaName,
+                    mapping.CoverageLevel,
+                    mapping.Notes),
+                areas))
+            .Where(mapping => mapping is not null)
+            .Select(mapping => mapping!)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<RequirementMapping> MergeSingleCourseMappings(
+        Course course,
+        IReadOnlyList<SingleCourseRequirementMapping> mappings,
+        IReadOnlyList<RequirementArea> areas)
+    {
+        var knownAreaIds = areas.Select(area => area.Id).ToHashSet();
+        var merged = course.RequirementMappings
+            .Where(mapping => knownAreaIds.Contains(mapping.RequirementAreaId))
+            .ToList();
+        foreach (var mapping in BuildSingleCourseMappings(course.Id, mappings, areas))
+        {
+            if (merged.Any(existing => existing.RequirementAreaId == mapping.RequirementAreaId))
+            {
+                continue;
+            }
+
+            merged.Add(mapping);
+        }
+
+        return merged
+            .OrderBy(mapping => AreaOrder(mapping.RequirementAreaId, areas))
+            .ThenBy(mapping => mapping.CoverageLevel)
+            .ToArray();
+    }
+
+    private static SingleCoursePackEnvelope BuildSingleCoursePackEnvelope(
+        CourseTemplateOptionDefinition option,
+        string sourceCourseId,
+        SchoolYear? schoolYear,
+        DateTimeOffset downloadedAtUtc,
+        PackSourceIdentity sourceIdentity)
+    {
+        return new SingleCoursePackEnvelope(
+            "homeschool-manager.coursepack",
+            2,
+            downloadedAtUtc,
+            "json",
+            "Single-course course packs include course details and module references only. Module, lesson, and assignment bodies live beside this file in a course plan bundle.",
+            new SingleCoursePackCourse(
+                sourceCourseId,
+                option.Title,
+                option.SubjectAreas,
+                option.Duration,
+                option.PlannedCreditValue,
+                CoursePackDescription.FromDomain(option.Description),
+                CoursePackCurriculumPlan.FromDomain(option.CurriculumPlan),
+                option.RequirementMappings
+                    .Select(mapping => new SingleCourseRequirementMapping(
+                        mapping.RequirementAreaView,
+                        mapping.RequirementAreaName,
+                        mapping.CoverageLevel,
+                        mapping.Notes))
+                    .ToArray(),
+                option.Modules
+                    .OrderBy(module => module.SequenceOrder)
+                    .Select(module => new CourseModuleReference(
+                        module.ModuleId,
+                        module.Title,
+                        module.SequenceOrder,
+                        ResolveTermName(module.TermNumber, schoolYear)))
+                    .ToArray()),
+            sourceIdentity,
+            false);
+    }
+
+    private static ModulePackEnvelope BuildModulePackEnvelope(
+        string courseTitle,
+        CourseTemplateModuleDefinition module,
+        SchoolYear? schoolYear,
+        DateTimeOffset downloadedAtUtc,
+        PackSourceIdentity sourceIdentity)
+    {
+        return new ModulePackEnvelope(
+            "homeschool-manager.modulepack",
+            1,
+            downloadedAtUtc,
+            "json",
+            "Future module packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{courseTitle} - {module.Title}",
+            $"Module shell from {courseTitle}. Import lessonpack and assignmentpack files from this folder to restore details.",
+            new ModulePackModule(
+                module.ModuleId,
+                module.SequenceOrder,
+                module.Title,
+                module.Description,
+                ResolveTermName(module.TermNumber, schoolYear),
+                module.EstimatedLength,
+                module.Instructions,
+                module.LearningObjectives
+                    .Select(objective => new ModulePackObjective(objective.Text, objective.LinkedCourseObjective))
+                    .ToArray(),
+                module.Resources
+                    .Select(resource => new ModulePackResource(resource.Name, resource.Link, "", resource.IsPhysicalResource))
+                    .ToArray(),
+                module.AssignmentEvidencePlaceholder,
+                module.Status,
+                module.Lessons
+                    .OrderBy(lesson => lesson.SequenceOrder)
+                    .Select(lesson => new ModulePackItemReference(lesson.LessonId, lesson.Title, lesson.SequenceOrder))
+                    .ToArray(),
+                module.Assignments
+                    .OrderBy(assignment => assignment.SequenceOrder)
+                    .Select(assignment => new ModulePackItemReference(assignment.AssignmentId, AssignmentTitleForPack(assignment), assignment.SequenceOrder))
+                    .ToArray()),
+            sourceIdentity,
+            false);
+    }
+
+    private static LessonPackEnvelope BuildLessonPackEnvelope(
+        string courseTitle,
+        CourseTemplateModuleDefinition module,
+        DateTimeOffset downloadedAtUtc,
+        PackSourceIdentity sourceIdentity)
+    {
+        return new LessonPackEnvelope(
+            "homeschool-manager.lessonpack",
+            1,
+            downloadedAtUtc,
+            "json",
+            "Future lesson packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{courseTitle} - {module.Title} Lessons",
+            $"Lessons from the {module.Title} module.",
+            module.Lessons
+                .OrderBy(lesson => lesson.SequenceOrder)
+                .Select(lesson => new LessonPackLesson(
+                    lesson.LessonId,
+                    lesson.SequenceOrder,
+                    lesson.Title,
+                    lesson.IntroductoryText,
+                    lesson.LinkedModuleObjective,
+                    lesson.LessonType,
+                    lesson.EstimatedMinutes,
+                    lesson.SuggestedDays,
+                    lesson.DifficultyLevel,
+                    lesson.SubjectAreas ?? [],
+                    lesson.Tags ?? [],
+                    lesson.Prerequisites ?? [],
+                    lesson.LearningObjectives ?? [],
+                    lesson.StandardsAlignments ?? [],
+                    lesson.SuccessCriteria ?? [],
+                    lesson.LessonSteps ?? [],
+                    lesson.Resources
+                        .Select(resource => new LessonPackResource(
+                            resource.Name,
+                            resource.Type,
+                            resource.Url,
+                            "",
+                            resource.IsPhysicalResource,
+                            resource.SourceNote,
+                            resource.Required,
+                            resource.EstimatedMinutes,
+                            resource.StudentInstructions,
+                            resource.NotesPrompt,
+                            resource.Citation,
+                            resource.OfflineAvailable,
+                            resource.License))
+                        .ToArray(),
+                    lesson.ProblemSets ?? [],
+                    lesson.PortfolioConnections ?? [],
+                    lesson.Rubric,
+                    lesson.ReflectionPrompts ?? [],
+                    lesson.InstructorNotes,
+                    lesson.LinkedAssignmentIds ?? [],
+                    []))
+                .ToArray(),
+            sourceIdentity,
+            false);
+    }
+
+    private static AssignmentPackEnvelope BuildAssignmentPackEnvelope(
+        string courseTitle,
+        CourseTemplateModuleDefinition module,
+        DateTimeOffset downloadedAtUtc,
+        PackSourceIdentity sourceIdentity)
+    {
+        return new AssignmentPackEnvelope(
+            "homeschool-manager.assignmentpack",
+            1,
+            downloadedAtUtc,
+            "json",
+            "Future assignment packs with attached files should use a zip archive containing this JSON plus files.",
+            $"{courseTitle} - {module.Title} Assignments",
+            $"Assignments from the {module.Title} module.",
+            module.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .Select(assignment =>
+                {
+                    var variant = assignment.Variants.FirstOrDefault(item => item.MethodProfile == InstructionalMethodProfile.Hybrid)
+                        ?? assignment.Variants.First();
+                    return new AssignmentPackAssignment(
+                        assignment.AssignmentId,
+                        assignment.SequenceOrder,
+                        variant.Title,
+                        variant.Type,
+                        variant.MethodProfile,
+                        variant.Instructions,
+                        variant.EstimatedEffort,
+                        variant.DueTimingLabel,
+                        null,
+                        variant.LinkedModuleObjectives,
+                        variant.LinkedLessonIds,
+                        [],
+                        variant.RequiredOutput,
+                        variant.ParentNotes,
+                        variant.IsPortfolioCandidate,
+                        variant.PlannedPoints,
+                        variant.PlannedWeight,
+                        variant.Status,
+                        variant.AssignmentSummary,
+                        variant.StudentFacingGoal,
+                        variant.EstimatedMinutesMin,
+                        variant.EstimatedMinutesMax,
+                        variant.RequiredDeliverables,
+                        variant.SubmissionFormats,
+                        variant.PortfolioConnection,
+                        variant.Rubric,
+                        variant.LinkedRubricId,
+                        variant.AssessmentSkills,
+                        variant.StudentChecklist,
+                        variant.Resources,
+                        variant.AssignmentSteps,
+                        variant.RevisionPolicy,
+                        variant.CompletionCriteria,
+                        variant.ReflectionPrompts,
+                        variant.EvidenceRequirements,
+                        variant.Scoring);
+                })
+                .ToArray(),
+            sourceIdentity,
+            false);
+    }
+
+    private static string AssignmentTitleForPack(CourseTemplateAssignmentDefinition assignment)
+    {
+        return assignment.Variants.FirstOrDefault(item => item.MethodProfile == InstructionalMethodProfile.Hybrid)?.Title
+            ?? assignment.Variants.FirstOrDefault()?.Title
+            ?? assignment.AssignmentId;
+    }
+
+    private static string RepairSourceId(string sourceId, string title, int sequenceOrder)
+    {
+        var normalized = string.IsNullOrWhiteSpace(sourceId) ? "" : sourceId.Trim();
+        if (!string.IsNullOrWhiteSpace(normalized) &&
+            !normalized.StartsWith("sample-", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(normalized, "example", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized;
+        }
+
+        var titlePart = SafeFileName(title);
+        return $"{titlePart}-{Math.Max(sequenceOrder, 1)}";
+    }
+
+    private static string ResolveTermName(int? termNumber, SchoolYear? schoolYear)
+    {
+        if (termNumber is null || schoolYear is null)
+        {
+            return "";
+        }
+
+        return schoolYear.Terms
+            .OrderBy(term => term.StartDate)
+            .ElementAtOrDefault(termNumber.Value - 1)
+            ?.Name ?? "";
+    }
+
+    private static string CoursePlanPacingLabel(SchoolYear? schoolYear)
+    {
+        if (schoolYear is null || schoolYear.Terms.Count <= 1)
+        {
+            return "Year";
+        }
+
+        return schoolYear.Terms.Any(term => term.Name.Contains("semester", StringComparison.OrdinalIgnoreCase))
+            ? "Semester"
+            : "Term";
+    }
+
+    private static void WriteZipJson<T>(ZipArchive archive, string path, T value)
+    {
+        var entry = archive.CreateEntry(path);
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.Write(JsonSerializer.Serialize(value, CoursePackJsonOptions));
+    }
+
+    private static byte[] ReadZipEntry(ZipArchiveEntry entry)
+    {
+        using var stream = entry.Open();
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
+
+    private static string? ReadCoursePlanId(ZipArchive archive)
+    {
+        var entry = archive.Entries.FirstOrDefault(item =>
+            item.FullName.Equals("courseplan.courseplanpack", StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var plan = JsonSerializer.Deserialize<CoursePlanPackEnvelope>(ReadZipEntry(entry), CoursePackJsonOptions);
+            if (plan is null)
+            {
+                return null;
+            }
+
+            return PackIdentityKey(plan.SourceIdentity, plan.PlanId);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string ParentFolder(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        var index = normalized.LastIndexOf('/');
+        return index < 0 ? "" : normalized[..index];
+    }
+
+    private static OperationResult<SingleCoursePackEnvelope> ParseSingleCoursePackFile(byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            return OperationResult<SingleCoursePackEnvelope>.Failure("Choose a .coursepack file before importing.");
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<SingleCoursePackEnvelope>(content, CoursePackJsonOptions);
+            if (envelope is null)
+            {
+                return OperationResult<SingleCoursePackEnvelope>.Failure("The course pack file could not be read.");
+            }
+
+            if (!string.Equals(envelope.Format, "homeschool-manager.coursepack", StringComparison.Ordinal))
+            {
+                return OperationResult<SingleCoursePackEnvelope>.Failure("The file is not a recognized course pack.");
+            }
+
+            if (envelope.FormatVersion != 2)
+            {
+                return OperationResult<SingleCoursePackEnvelope>.Failure("This course pack format version is not supported for single-course import.");
+            }
+
+            if (!string.Equals(envelope.PackageMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationResult<SingleCoursePackEnvelope>.Failure("Choose a single-course .coursepack JSON file or a full course plan .zip file.");
+            }
+
+            var validationErrors = ValidateSingleCoursePack(envelope);
+            return validationErrors.Count > 0
+                ? OperationResult<SingleCoursePackEnvelope>.Failure(validationErrors.ToArray())
+                : OperationResult<SingleCoursePackEnvelope>.Success(envelope);
+        }
+        catch (JsonException)
+        {
+            return OperationResult<SingleCoursePackEnvelope>.Failure("The course pack file must contain valid JSON.");
+        }
+    }
+
+    private static IReadOnlyList<string> ValidateSingleCoursePack(SingleCoursePackEnvelope envelope)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(envelope.Course.Title))
+        {
+            errors.Add("Course title is required.");
+        }
+
+        if (envelope.Course.PlannedCreditValue <= 0)
+        {
+            errors.Add("Course credit value must be greater than zero.");
+        }
+
+        if (envelope.Course.ModuleReferences.Any(module => string.IsNullOrWhiteSpace(module.Title)))
+        {
+            errors.Add("Every module reference must include a title.");
+        }
+
+        return errors;
+    }
+
     private static bool ModulesMatch(
         IReadOnlyList<LearningModule> current,
         IReadOnlyList<LearningModule> updated)
@@ -1972,15 +4204,33 @@ public sealed class CourseService
 
     private static string LessonKey(Lesson lesson)
     {
-        var resourceKey = string.Join(";", lesson.Resources.Select(resource => $"{resource.Name}->{resource.Type}->{resource.Url}->{resource.FilePath}->{resource.IsPhysicalResource}->{resource.SourceNote}"));
-        return $"{lesson.Id:N}:{lesson.SourceLessonId}:{lesson.SequenceOrder}:{lesson.Title}:{lesson.IntroductoryText}:{lesson.LinkedModuleObjective}:{resourceKey}";
+        var subjectKey = string.Join(";", lesson.SubjectAreas);
+        var tagKey = string.Join(";", lesson.Tags);
+        var prerequisiteKey = string.Join(";", lesson.Prerequisites);
+        var objectiveKey = string.Join(";", lesson.LearningObjectives.Select(objective => $"{objective.ObjectiveId}->{objective.BloomLevel}->{objective.Text}"));
+        var standardKey = string.Join(";", lesson.StandardsAlignments.Select(standard => $"{standard.Framework}->{standard.Code}->{standard.Description}"));
+        var criteriaKey = string.Join(";", lesson.SuccessCriteria);
+        var stepKey = string.Join(";", lesson.LessonSteps.Select(step => $"{step.StepOrder}->{step.Title}->{step.StepType}->{step.Instructions}->{step.EstimatedMinutes}->{step.Required}"));
+        var resourceKey = string.Join(";", lesson.Resources.Select(resource => $"{resource.Name}->{resource.Type}->{resource.Url}->{resource.FilePath}->{resource.IsPhysicalResource}->{resource.SourceNote}->{resource.Required}->{resource.EstimatedMinutes}->{resource.StudentInstructions}->{resource.NotesPrompt}->{resource.Citation}->{resource.OfflineAvailable}->{resource.License}"));
+        var problemKey = string.Join(";", lesson.ProblemSets.Select(problemSet => $"{problemSet.ProblemSetId}->{problemSet.Title}->{problemSet.Instructions}->{problemSet.EstimatedMinutes}->{string.Join(",", problemSet.Problems)}"));
+        var portfolioKey = string.Join(";", lesson.PortfolioConnections.Select(connection => $"{connection.PortfolioSection}->{connection.ArtifactTitle}->{connection.ArtifactPurpose}->{string.Join(",", connection.CrossCourseLinks)}->{connection.ReuseInstructions}"));
+        var reflectionKey = string.Join(";", lesson.ReflectionPrompts);
+        var assignmentKey = string.Join(";", lesson.LinkedAssignmentIds.Order());
+        return $"{lesson.Id:N}:{lesson.SourceLessonId}:{lesson.SequenceOrder}:{lesson.Title}:{lesson.IntroductoryText}:{lesson.LinkedModuleObjective}:{lesson.LessonType}:{lesson.EstimatedMinutes}:{lesson.SuggestedDays}:{lesson.DifficultyLevel}:{subjectKey}:{tagKey}:{prerequisiteKey}:{objectiveKey}:{standardKey}:{criteriaKey}:{stepKey}:{resourceKey}:{problemKey}:{portfolioKey}:{lesson.Rubric}:{reflectionKey}:{lesson.InstructorNotes}:{assignmentKey}";
     }
 
     private static string AssignmentKey(ModuleAssignment assignment)
     {
         var objectiveKey = string.Join(";", assignment.LinkedModuleObjectives);
         var lessonKey = string.Join(";", assignment.LinkedLessonIds.Order());
-        return $"{assignment.Id:N}:{assignment.SourceAssignmentId}:{assignment.SequenceOrder}:{assignment.Title}:{assignment.Type}:{assignment.MethodProfile}:{assignment.Instructions}:{assignment.EstimatedEffort}:{assignment.DueTimingLabel}:{assignment.DueDate}:{objectiveKey}:{lessonKey}:{assignment.RequiredOutput}:{assignment.ParentNotes}:{assignment.IsPortfolioCandidate}:{assignment.PlannedPoints}:{assignment.PlannedWeight}:{assignment.Status}";
+        var deliverableKey = string.Join(";", assignment.RequiredDeliverables);
+        var formatKey = string.Join(";", assignment.SubmissionFormats);
+        var skillKey = string.Join(";", assignment.AssessmentSkills);
+        var checklistKey = string.Join(";", assignment.StudentChecklist);
+        var resourceKey = string.Join(";", assignment.Resources.Select(resource => $"{resource.Name}->{resource.Type}->{resource.Url}->{resource.FilePath}->{resource.IsPhysicalResource}->{resource.Required}->{resource.StudentInstructions}->{resource.SourceNote}->{resource.Citation}"));
+        var stepKey = string.Join(";", assignment.AssignmentSteps.Select(step => $"{step.StepOrder}->{step.Title}->{step.Instructions}->{step.EstimatedMinutes}"));
+        var reflectionKey = string.Join(";", assignment.ReflectionPrompts);
+        return $"{assignment.Id:N}:{assignment.SourceAssignmentId}:{assignment.SequenceOrder}:{assignment.Title}:{assignment.Type}:{assignment.MethodProfile}:{assignment.AssignmentSummary}:{assignment.StudentFacingGoal}:{assignment.Instructions}:{assignment.EstimatedEffort}:{assignment.EstimatedMinutesMin}:{assignment.EstimatedMinutesMax}:{assignment.DueTimingLabel}:{assignment.DueDate}:{objectiveKey}:{lessonKey}:{assignment.RequiredOutput}:{deliverableKey}:{formatKey}:{assignment.PortfolioConnection}:{assignment.Rubric}:{assignment.LinkedRubricId}:{skillKey}:{checklistKey}:{resourceKey}:{stepKey}:{assignment.RevisionPolicy}:{assignment.CompletionCriteria}:{reflectionKey}:{assignment.EvidenceRequirements}:{assignment.Scoring}:{assignment.ParentNotes}:{assignment.IsPortfolioCandidate}:{assignment.PlannedPoints}:{assignment.PlannedWeight}:{assignment.Status}";
     }
 
     private static int AreaOrder(Guid requirementAreaId, IReadOnlyList<RequirementArea> areas)
@@ -2182,6 +4432,287 @@ public sealed class CourseService
         }
     }
 
+    private static OperationResult<LessonPackEnvelope> ParseLessonPackFile(byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            return OperationResult<LessonPackEnvelope>.Failure("Choose a .lessonpack file before importing.");
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<LessonPackEnvelope>(content, CoursePackJsonOptions);
+            if (envelope is null)
+            {
+                return OperationResult<LessonPackEnvelope>.Failure("The lesson pack file could not be read.");
+            }
+
+            if (!string.Equals(envelope.Format, "homeschool-manager.lessonpack", StringComparison.Ordinal))
+            {
+                return OperationResult<LessonPackEnvelope>.Failure("The file is not a recognized lesson pack.");
+            }
+
+            if (envelope.FormatVersion != 1)
+            {
+                return OperationResult<LessonPackEnvelope>.Failure("This lesson pack format version is not supported.");
+            }
+
+            if (!string.Equals(envelope.PackageMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationResult<LessonPackEnvelope>.Failure("Zipped lesson pack imports are reserved for a later attachment workflow.");
+            }
+
+            var validationErrors = ValidateLessonPack(envelope);
+            return validationErrors.Count > 0
+                ? OperationResult<LessonPackEnvelope>.Failure(validationErrors.ToArray())
+                : OperationResult<LessonPackEnvelope>.Success(envelope);
+        }
+        catch (JsonException ex)
+        {
+            return OperationResult<LessonPackEnvelope>.Failure(PackJsonFailureText("lesson pack", ex));
+        }
+    }
+
+    private static OperationResult<AssignmentPackEnvelope> ParseAssignmentPackFile(byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            return OperationResult<AssignmentPackEnvelope>.Failure("Choose a .assignmentpack file before importing.");
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<AssignmentPackEnvelope>(content, CoursePackJsonOptions);
+            if (envelope is null)
+            {
+                return OperationResult<AssignmentPackEnvelope>.Failure("The assignment pack file could not be read.");
+            }
+
+            if (!string.Equals(envelope.Format, "homeschool-manager.assignmentpack", StringComparison.Ordinal))
+            {
+                return OperationResult<AssignmentPackEnvelope>.Failure("The file is not a recognized assignment pack.");
+            }
+
+            if (envelope.FormatVersion != 1)
+            {
+                return OperationResult<AssignmentPackEnvelope>.Failure("This assignment pack format version is not supported.");
+            }
+
+            if (!string.Equals(envelope.PackageMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationResult<AssignmentPackEnvelope>.Failure("Zipped assignment pack imports are reserved for a later attachment workflow.");
+            }
+
+            var validationErrors = ValidateAssignmentPack(envelope);
+            return validationErrors.Count > 0
+                ? OperationResult<AssignmentPackEnvelope>.Failure(validationErrors.ToArray())
+                : OperationResult<AssignmentPackEnvelope>.Success(envelope);
+        }
+        catch (JsonException ex)
+        {
+            return OperationResult<AssignmentPackEnvelope>.Failure(PackJsonFailureText("assignment pack", ex));
+        }
+    }
+
+    private static OperationResult<ModulePackEnvelope> ParseModulePackFile(byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            return OperationResult<ModulePackEnvelope>.Failure("Choose a .modulepack file before importing.");
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<ModulePackEnvelope>(content, CoursePackJsonOptions);
+            if (envelope is null)
+            {
+                return OperationResult<ModulePackEnvelope>.Failure("The module pack file could not be read.");
+            }
+
+            if (!string.Equals(envelope.Format, "homeschool-manager.modulepack", StringComparison.Ordinal))
+            {
+                return OperationResult<ModulePackEnvelope>.Failure("The file is not a recognized module pack.");
+            }
+
+            if (envelope.FormatVersion != 1)
+            {
+                return OperationResult<ModulePackEnvelope>.Failure("This module pack format version is not supported.");
+            }
+
+            if (!string.Equals(envelope.PackageMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationResult<ModulePackEnvelope>.Failure("Zipped module pack imports are reserved for a later attachment workflow.");
+            }
+
+            var validationErrors = ValidateModulePack(envelope);
+            return validationErrors.Count > 0
+                ? OperationResult<ModulePackEnvelope>.Failure(validationErrors.ToArray())
+                : OperationResult<ModulePackEnvelope>.Success(envelope);
+        }
+        catch (JsonException)
+        {
+            return OperationResult<ModulePackEnvelope>.Failure("The module pack file must contain valid JSON.");
+        }
+    }
+
+    private static IReadOnlyList<string> ValidateAssignmentPack(AssignmentPackEnvelope envelope)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(envelope.Name))
+        {
+            errors.Add("Assignment pack name is required.");
+        }
+
+        if (envelope.Assignments is null || envelope.Assignments.Count == 0)
+        {
+            errors.Add("Assignment pack must include at least one assignment.");
+        }
+
+        foreach (var assignment in envelope.Assignments ?? [])
+        {
+            var label = string.IsNullOrWhiteSpace(assignment.SourceAssignmentId) ? assignment.Title : assignment.SourceAssignmentId;
+            if (string.IsNullOrWhiteSpace(assignment.Title))
+            {
+                errors.Add("Every assignment must include a title.");
+            }
+
+            if (!Enum.IsDefined(assignment.Type))
+            {
+                errors.Add($"Assignment '{label}' has a type this app does not recognize.");
+            }
+
+            if (!Enum.IsDefined(assignment.MethodProfile))
+            {
+                errors.Add($"Assignment '{label}' has an instructional method profile this app does not recognize.");
+            }
+
+            if (string.IsNullOrWhiteSpace(assignment.Instructions))
+            {
+                errors.Add($"Assignment '{label}' must include instructions.");
+            }
+
+            if (string.IsNullOrWhiteSpace(assignment.RequiredOutput))
+            {
+                errors.Add($"Assignment '{label}' must include the expected output.");
+            }
+
+            if (assignment.PlannedPoints.HasValue && assignment.PlannedPoints.Value < 0)
+            {
+                errors.Add($"Assignment '{label}' cannot have negative planned points.");
+            }
+
+            if (assignment.PlannedWeight.HasValue && assignment.PlannedWeight.Value < 0)
+            {
+                errors.Add($"Assignment '{label}' cannot have negative planned weight.");
+            }
+
+            if (assignment.EstimatedMinutesMin.HasValue && assignment.EstimatedMinutesMin.Value < 0 ||
+                assignment.EstimatedMinutesMax.HasValue && assignment.EstimatedMinutesMax.Value < 0)
+            {
+                errors.Add($"Assignment '{label}' cannot have negative estimated minutes.");
+            }
+
+            if (assignment.EstimatedMinutesMin.HasValue &&
+                assignment.EstimatedMinutesMax.HasValue &&
+                assignment.EstimatedMinutesMax.Value < assignment.EstimatedMinutesMin.Value)
+            {
+                errors.Add($"Assignment '{label}' has maximum estimated minutes lower than minimum estimated minutes.");
+            }
+
+            if (!Enum.IsDefined(assignment.Status))
+            {
+                errors.Add($"Assignment '{label}' has a status this app does not recognize.");
+            }
+        }
+
+        return errors;
+    }
+
+    private static IReadOnlyList<string> ValidateModulePack(ModulePackEnvelope envelope)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(envelope.Name))
+        {
+            errors.Add("Module pack name is required.");
+        }
+
+        if (envelope.Module is null)
+        {
+            errors.Add("Module pack must include one module.");
+            return errors;
+        }
+
+        if (string.IsNullOrWhiteSpace(envelope.Module.Title))
+        {
+            errors.Add("Module title is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(envelope.Module.Instructions))
+        {
+            errors.Add("Module instructions are required.");
+        }
+
+        if (envelope.Module.LearningObjectives is null || envelope.Module.LearningObjectives.Count == 0)
+        {
+            errors.Add("Module pack must include at least one module objective.");
+        }
+
+        if (!Enum.IsDefined(envelope.Module.Status))
+        {
+            errors.Add("Module status is not recognized.");
+        }
+
+        return errors;
+    }
+
+    private static IReadOnlyList<string> ValidateLessonPack(LessonPackEnvelope envelope)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(envelope.Name))
+        {
+            errors.Add("Lesson pack name is required.");
+        }
+
+        if (envelope.Lessons is null || envelope.Lessons.Count == 0)
+        {
+            errors.Add("Lesson pack must include at least one lesson.");
+        }
+
+        foreach (var lesson in envelope.Lessons ?? [])
+        {
+            var label = string.IsNullOrWhiteSpace(lesson.SourceLessonId) ? lesson.Title : lesson.SourceLessonId;
+            if (string.IsNullOrWhiteSpace(lesson.Title))
+            {
+                errors.Add("Every lesson must include a title.");
+            }
+
+            if (string.IsNullOrWhiteSpace(lesson.IntroductoryText))
+            {
+                errors.Add($"Lesson '{label}' must include introductory text.");
+            }
+
+            if (lesson.Resources is null || lesson.Resources.Count == 0)
+            {
+                errors.Add($"Lesson '{label}' must include at least one resource.");
+            }
+
+            foreach (var resource in lesson.Resources ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(resource.Name))
+                {
+                    errors.Add($"Lesson '{label}' has a resource without a name.");
+                }
+
+                if (!Enum.IsDefined(resource.Type))
+                {
+                    errors.Add($"Lesson '{label}' has a resource type this app does not recognize.");
+                }
+            }
+        }
+
+        return errors;
+    }
+
     private static IReadOnlyList<string> ValidateCoursePack(CoursePackDefinition pack)
     {
         var errors = new List<string>();
@@ -2238,11 +4769,64 @@ public sealed class CourseService
         return options;
     }
 
+    private static string PackJsonFailureText(string packKind, JsonException exception)
+    {
+        return exception.Message.Contains("could not be converted", StringComparison.OrdinalIgnoreCase)
+            ? $"One {packKind} item uses a value this version of the app does not recognize. Update the app or revise the pack value and try again."
+            : $"The {packKind} file contains unreadable JSON. Choose a downloaded pack file and try again.";
+    }
+
     private static string SafeFileName(string value)
     {
         var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9._-]+", "-");
         normalized = normalized.Trim('-', '.', '_');
         return string.IsNullOrWhiteSpace(normalized) ? "course-pack" : normalized;
+    }
+
+    private static PackSourceIdentity BuiltInPackIdentity(CoursePackDefinition pack)
+    {
+        return new PackSourceIdentity(
+            DefaultPublisherId,
+            pack.Id,
+            DefaultPackVersion,
+            $"builtin.{pack.Id}");
+    }
+
+    private static PackSourceIdentity TemplateIdentity(string packId)
+    {
+        return new PackSourceIdentity(
+            DefaultPublisherId,
+            packId,
+            "template",
+            $"template.{packId}");
+    }
+
+    private static PackSourceIdentity SourceIdentityForCourse(Course course)
+    {
+        var packId = string.IsNullOrWhiteSpace(course.SourcePackId)
+            ? "parent-created"
+            : course.SourcePackId;
+        return new PackSourceIdentity(
+            DefaultPublisherId,
+            packId,
+            "local",
+            packId);
+    }
+
+    private static string PackIdentityKey(PackSourceIdentity? identity, string fallbackPackId)
+    {
+        if (!string.IsNullOrWhiteSpace(identity?.SourceNamespace))
+        {
+            return identity.SourceNamespace.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(identity?.PublisherId) &&
+            !string.IsNullOrWhiteSpace(identity.PackId))
+        {
+            return $"{identity.PublisherId.Trim()}.{identity.PackId.Trim()}";
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackPackId) ? "imported-pack" : fallbackPackId.Trim();
     }
 
     private sealed record CoursePackJsonEnvelope(
@@ -2252,4 +4836,258 @@ public sealed class CourseService
         string PackageMode,
         string ArchiveNote,
         CoursePackDefinition Pack);
+
+    private sealed record SingleCoursePackEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset DownloadedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        SingleCoursePackCourse Course,
+        PackSourceIdentity? SourceIdentity = null,
+        bool IsTemplate = false);
+
+    private sealed record SingleCoursePackCourse(
+        string SourceCourseId,
+        string Title,
+        IReadOnlyList<string> SubjectAreas,
+        CourseDuration Duration,
+        decimal PlannedCreditValue,
+        CoursePackDescription Description,
+        CoursePackCurriculumPlan CurriculumPlan,
+        IReadOnlyList<SingleCourseRequirementMapping> RequirementMappings,
+        IReadOnlyList<CourseModuleReference> ModuleReferences);
+
+    private sealed record CoursePackDescription(
+        string Description,
+        string InstructionalMethods,
+        string MajorTopics,
+        string TextsAndResources,
+        string AssessmentMethods,
+        string GradingBasis)
+    {
+        public static CoursePackDescription FromDomain(CourseDescription description)
+        {
+            return new CoursePackDescription(
+                description.Description,
+                description.InstructionalMethods,
+                description.MajorTopics,
+                description.TextsAndResources,
+                description.AssessmentMethods,
+                description.GradingBasis);
+        }
+
+        public CourseDescription ToDomain()
+        {
+            return new CourseDescription(
+                Description,
+                InstructionalMethods,
+                MajorTopics,
+                TextsAndResources,
+                AssessmentMethods,
+                GradingBasis);
+        }
+    }
+
+    private sealed record CoursePackCurriculumPlan(
+        string Goals,
+        string LearningObjectives,
+        string MajorResources,
+        string PlannedSequence,
+        string ParentNotes)
+    {
+        public static CoursePackCurriculumPlan FromDomain(CurriculumPlan plan)
+        {
+            return new CoursePackCurriculumPlan(
+                plan.Goals,
+                plan.LearningObjectives,
+                plan.MajorResources,
+                plan.PlannedSequence,
+                plan.ParentNotes);
+        }
+
+        public CurriculumPlan ToDomain()
+        {
+            return new CurriculumPlan(
+                Goals,
+                LearningObjectives,
+                MajorResources,
+                PlannedSequence,
+                ParentNotes);
+        }
+    }
+
+    private sealed record SingleCourseRequirementMapping(
+        string RequirementAreaView,
+        string RequirementAreaName,
+        CoverageLevel CoverageLevel,
+        string Notes);
+
+    private sealed record CourseModuleReference(string SourceModuleId, string Title, int SequenceOrder, string TermName);
+
+    private sealed record CoursePlanPackEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset DownloadedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        string PlanId,
+        string Name,
+        string Description,
+        string Pacing,
+        IReadOnlyList<CoursePlanOffering> Offerings,
+        PackSourceIdentity? SourceIdentity = null,
+        bool IsTemplate = false);
+
+    private sealed record CoursePlanOffering(string SourceCourseId, string CourseTitle, string TermName, int SequenceOrder);
+
+    private sealed class CoursePlanBundleMutableImportResult
+    {
+        public int CourseCount { get; set; }
+        public int ModuleCount { get; set; }
+        public int LessonCount { get; set; }
+        public int AssignmentCount { get; set; }
+    }
+
+    private sealed record LessonPackEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset DownloadedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        string Name,
+        string Description,
+        IReadOnlyList<LessonPackLesson> Lessons,
+        PackSourceIdentity? SourceIdentity = null,
+        bool IsTemplate = false);
+
+    private sealed record LessonPackLesson(
+        string SourceLessonId,
+        int SequenceOrder,
+        string Title,
+        string IntroductoryText,
+        string LinkedModuleObjective,
+        LessonType LessonType,
+        int EstimatedMinutes,
+        int SuggestedDays,
+        LessonDifficultyLevel DifficultyLevel,
+        IReadOnlyList<string> SubjectAreas,
+        IReadOnlyList<string> Tags,
+        IReadOnlyList<string> Prerequisites,
+        IReadOnlyList<LessonLearningObjective> LearningObjectives,
+        IReadOnlyList<StandardsAlignment> StandardsAlignments,
+        IReadOnlyList<string> SuccessCriteria,
+        IReadOnlyList<LessonStep> LessonSteps,
+        IReadOnlyList<LessonPackResource> Resources,
+        IReadOnlyList<LessonProblemSet> ProblemSets,
+        IReadOnlyList<LessonPortfolioConnection> PortfolioConnections,
+        LessonRubric? Rubric,
+        IReadOnlyList<string> ReflectionPrompts,
+        LessonInstructorNotes? InstructorNotes,
+        IReadOnlyList<string> LinkedAssignmentSourceIds,
+        IReadOnlyList<string> LinkedAssignmentTitles);
+
+    private sealed record LessonPackResource(
+        string Name,
+        LessonResourceType Type,
+        string Url,
+        string FilePath,
+        bool IsPhysicalResource,
+        string SourceNote,
+        bool Required,
+        int EstimatedMinutes,
+        string StudentInstructions,
+        string NotesPrompt,
+        LessonResourceCitation? Citation,
+        bool OfflineAvailable,
+        string License);
+
+    private sealed record AssignmentPackEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset DownloadedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        string Name,
+        string Description,
+        IReadOnlyList<AssignmentPackAssignment> Assignments,
+        PackSourceIdentity? SourceIdentity = null,
+        bool IsTemplate = false);
+
+    private sealed record AssignmentPackAssignment(
+        string SourceAssignmentId,
+        int SequenceOrder,
+        string Title,
+        AssignmentType Type,
+        InstructionalMethodProfile MethodProfile,
+        string Instructions,
+        string EstimatedEffort,
+        string DueTimingLabel,
+        DateOnly? DueDate,
+        IReadOnlyList<string> LinkedModuleObjectives,
+        IReadOnlyList<string> LinkedLessonSourceIds,
+        IReadOnlyList<string> LinkedLessonTitles,
+        string RequiredOutput,
+        string ParentNotes,
+        bool IsPortfolioCandidate,
+        decimal? PlannedPoints,
+        decimal? PlannedWeight,
+        AssignmentStatus Status,
+        string AssignmentSummary = "",
+        string StudentFacingGoal = "",
+        int? EstimatedMinutesMin = null,
+        int? EstimatedMinutesMax = null,
+        IReadOnlyList<string>? RequiredDeliverables = null,
+        IReadOnlyList<AssignmentSubmissionFormat>? SubmissionFormats = null,
+        AssignmentPortfolioConnection? PortfolioConnection = null,
+        LessonRubric? Rubric = null,
+        string LinkedRubricId = "",
+        IReadOnlyList<string>? AssessmentSkills = null,
+        IReadOnlyList<string>? StudentChecklist = null,
+        IReadOnlyList<AssignmentResource>? Resources = null,
+        IReadOnlyList<AssignmentStep>? AssignmentSteps = null,
+        AssignmentRevisionPolicy? RevisionPolicy = null,
+        AssignmentCompletionCriteria? CompletionCriteria = null,
+        IReadOnlyList<string>? ReflectionPrompts = null,
+        AssignmentEvidenceRequirements? EvidenceRequirements = null,
+        AssignmentScoring? Scoring = null);
+
+    private sealed record ModulePackEnvelope(
+        string Format,
+        int FormatVersion,
+        DateTimeOffset DownloadedAtUtc,
+        string PackageMode,
+        string ArchiveNote,
+        string Name,
+        string Description,
+        ModulePackModule Module,
+        PackSourceIdentity? SourceIdentity = null,
+        bool IsTemplate = false);
+
+    private sealed record PackSourceIdentity(
+        string PublisherId,
+        string PackId,
+        string PackVersion,
+        string SourceNamespace);
+
+    private sealed record ModulePackModule(
+        string SourceModuleId,
+        int SequenceOrder,
+        string Title,
+        string Description,
+        string TermName,
+        string EstimatedLength,
+        string Instructions,
+        IReadOnlyList<ModulePackObjective> LearningObjectives,
+        IReadOnlyList<ModulePackResource> Resources,
+        string AssignmentEvidencePlaceholder,
+        ModuleStatus Status,
+        IReadOnlyList<ModulePackItemReference> LessonSequence,
+        IReadOnlyList<ModulePackItemReference> AssignmentSequence);
+
+    private sealed record ModulePackObjective(string Text, string LinkedCourseObjective);
+
+    private sealed record ModulePackResource(string Name, string Link, string FilePath, bool IsPhysicalResource);
+
+    private sealed record ModulePackItemReference(string SourceId, string Title, int SequenceOrder);
 }

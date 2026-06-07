@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HomeschoolManager.Domain\HomeschoolManager.Domain.csproj" />
     <EmbeddedResource Include="Courses\Packs\mi-general-high-school-core-final.coursepack" />
+    <EmbeddedResource Include="Courses\Packs\mi-general-high-school-core-final.zip" />
   </ItemGroup>
 
   <PropertyGroup>

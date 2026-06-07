@@ -6,9 +6,13 @@
 @using HomeschoolManager.Domain.Access
 @using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @inject CourseService CourseService
 @inject RequirementService RequirementService
 @inject SessionState Session
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Course Detail</PageTitle>
 
@@ -205,6 +209,8 @@ else
                 </section>
 
                 @CurrentMappingsSection()
+
+                @ModulesSection()
             </aside>
         </div>
     }
@@ -212,6 +218,22 @@ else
     @if (!Session.IsParentAdmin)
     {
         @CurrentMappingsSection()
+    }
+
+    @if (deleteModuleId.HasValue)
+    {
+        <div class="modal-backdrop-panel" role="presentation">
+            <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-course-module-heading">
+                <h2 id="delete-course-module-heading">Delete module?</h2>
+                <p>This permanently removes the selected module from the course. Type Delete to confirm.</p>
+                <label class="form-label" for="delete-module-confirmation">Confirmation</label>
+                <input id="delete-module-confirmation" class="form-control" @bind="deleteModuleConfirmation" />
+                <div class="modal-actions">
+                    <button class="btn btn-outline-secondary" @onclick="CloseDeleteModuleModal">Cancel</button>
+                    <button class="btn btn-danger" disabled="@(!CanConfirmModuleDelete())" @onclick="DeleteModule">Delete</button>
+                </div>
+            </section>
+        </div>
     }
 }
 
@@ -230,6 +252,14 @@ else
     private string selectedInstructionalMethodId = DefaultInstructionalMethodId;
     private string selectedAssessmentMethodId = DefaultAssessmentMethodId;
     private string selectedGradingBasisId = DefaultGradingBasisId;
+    private const long MaxModulePackFileSize = 5 * 1024 * 1024;
+    private byte[]? selectedModulePackFileBytes;
+    private string selectedModulePackFileName = "";
+    private string modulePackStatus = "";
+    private string modulePackStatusCss = "alert alert-info mt-2";
+    private bool isImportingModulePack;
+    private Guid? deleteModuleId;
+    private string deleteModuleConfirmation = "";
     private const string DefaultInstructionalMethodId = "hybrid-instruction";
     private const string DefaultAssessmentMethodId = "hybrid-assessment";
     private const string DefaultGradingBasisId = "hybrid-grading";
@@ -488,9 +518,290 @@ else
         </section>;
     }
 
+    private RenderFragment ModulesSection()
+    {
+        return @<section class="form-section">
+            <div class="section-heading-row">
+                <h2>Modules</h2>
+                @if (Session.IsParentAdmin)
+                {
+                    <button class="btn btn-primary btn-sm" @onclick="CreateModule">New module</button>
+                }
+            </div>
+            @if (Session.IsParentAdmin)
+            {
+                <div class="lesson-pack-tools">
+                    <div class="lesson-pack-install">
+                        <label class="form-label" for="module-pack-install">Import .modulepack</label>
+                        <InputFile id="module-pack-install" class="form-control" accept=".modulepack,application/json" OnChange="SelectModulePackFile" disabled="@isImportingModulePack" />
+                        @if (!string.IsNullOrWhiteSpace(selectedModulePackFileName))
+                        {
+                            <p class="form-text">Ready to import: @selectedModulePackFileName</p>
+                        }
+                        <button class="btn btn-outline-primary btn-sm mt-2" disabled="@(selectedModulePackFileBytes is null || isImportingModulePack)" @onclick="ImportSelectedModulePack">
+                            @if (isImportingModulePack)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                <span>Importing...</span>
+                            }
+                            else
+                            {
+                                <span>Import module</span>
+                            }
+                        </button>
+                    </div>
+                    <div class="lesson-pack-downloads">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadModulePackTemplate">Download template</button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(modulePackStatus))
+                {
+                    <div class="@modulePackStatusCss" role="status" aria-live="polite">
+                        @modulePackStatus
+                    </div>
+                }
+            }
+            @if (detail?.Modules.Count == 0)
+            {
+                <p>No modules have been added for this course.</p>
+            }
+            else
+            {
+                <ul class="module-nav-list">
+                    @foreach (var module in OrderedModules())
+                    {
+                        <li>
+                            <button class="btn btn-outline-secondary btn-sm module-nav-button" @onclick="() => OpenModule(module.Id)">
+                                @module.SequenceOrder. @module.Title
+                            </button>
+                            @if (Session.IsParentAdmin)
+                            {
+                                <div class="module-order-actions">
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveModule(module.Id, -1)">Up</button>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => MoveModule(module.Id, 1)">Down</button>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => DownloadModulePack(module.Id)">Download</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => OpenDeleteModuleModal(module.Id)">Delete</button>
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>;
+    }
+
     private string ResourceToggleText()
     {
         return descriptionForm.ShowResourceForm ? "Hide" : "Add";
+    }
+
+    private IEnumerable<LearningModuleView> OrderedModules()
+    {
+        return detail is null
+            ? Enumerable.Empty<LearningModuleView>()
+            : detail.Modules.OrderBy(module => module.SequenceOrder);
+    }
+
+    private void OpenModule(Guid moduleId)
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/{moduleId}");
+    }
+
+    private void CreateModule()
+    {
+        NavigationManager.NavigateTo($"/courses/{CourseId}/modules/new");
+    }
+
+    private async Task MoveModule(Guid moduleId, int direction)
+    {
+        if (!Session.IsParentAdmin || detail is null)
+        {
+            return;
+        }
+
+        var modules = OrderedModules().ToList();
+        var index = modules.FindIndex(module => module.Id == moduleId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= modules.Count)
+        {
+            return;
+        }
+
+        (modules[index], modules[targetIndex]) = (modules[targetIndex], modules[index]);
+        await Run(() => CourseService.ReorderLearningModulesAsync(
+            ParentUser(),
+            new ReorderLearningModulesCommand(CourseId, modules.Select(module => module.Id).ToArray())));
+    }
+
+    private async Task SelectModulePackFile(InputFileChangeEventArgs eventArgs)
+    {
+        var file = eventArgs.File;
+        if (!file.Name.EndsWith(".modulepack", StringComparison.OrdinalIgnoreCase))
+        {
+            selectedModulePackFileBytes = null;
+            selectedModulePackFileName = "";
+            SetModulePackStatus("Choose a .modulepack file to import.", false);
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: MaxModulePackFileSize);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            selectedModulePackFileBytes = memory.ToArray();
+            selectedModulePackFileName = file.Name;
+            SetModulePackStatus("Module pack file is ready. Click Import module to add it to this course.", true);
+        }
+        catch (IOException)
+        {
+            selectedModulePackFileBytes = null;
+            selectedModulePackFileName = "";
+            SetModulePackStatus("The module pack file could not be read. Try choosing it again.", false);
+        }
+    }
+
+    private async Task ImportSelectedModulePack()
+    {
+        if (!Session.IsParentAdmin)
+        {
+            SetModulePackStatus("Sign in as parent/admin to import modules.", false);
+            return;
+        }
+
+        if (selectedModulePackFileBytes is null)
+        {
+            SetModulePackStatus("Choose a .modulepack file before importing.", false);
+            return;
+        }
+
+        isImportingModulePack = true;
+        SetModulePackStatus("Importing module. This may take a moment.", true);
+        StateHasChanged();
+
+        try
+        {
+            var result = await CourseService.ImportModulePackAsync(ParentUser(), CourseId, selectedModulePackFileBytes);
+            if (!result.Succeeded || result.Value is null)
+            {
+                SetModulePackStatus(ModulePackFailureText(result.Errors), false);
+                return;
+            }
+
+            selectedModulePackFileBytes = null;
+            selectedModulePackFileName = "";
+            SetModulePackStatus($"Imported module: {result.Value.ModuleTitle}.", true);
+            await Refresh();
+        }
+        catch (Exception)
+        {
+            SetModulePackStatus("The module pack could not be imported. The file may be damaged or in a format this app does not support yet.", false);
+        }
+        finally
+        {
+            isImportingModulePack = false;
+        }
+    }
+
+    private async Task DownloadModulePack(Guid moduleId)
+    {
+        var result = await CourseService.DownloadModulePackAsync(CourseId, moduleId);
+        if (!result.Succeeded || result.Value is null)
+        {
+            SetModulePackStatus("The module pack could not be prepared for download.", false);
+            return;
+        }
+
+        await DownloadModulePackFile(result.Value);
+        SetModulePackStatus("Module pack downloaded.", true);
+    }
+
+    private async Task DownloadModulePackTemplate()
+    {
+        var result = CourseService.DownloadModulePackTemplate();
+        if (!result.Succeeded || result.Value is null)
+        {
+            SetModulePackStatus("The module pack template could not be prepared for download.", false);
+            return;
+        }
+
+        await DownloadModulePackFile(result.Value);
+        SetModulePackStatus("Module pack template downloaded.", true);
+    }
+
+    private async Task DownloadModulePackFile(ModulePackDownloadFile file)
+    {
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            file.FileName,
+            file.ContentType,
+            Convert.ToBase64String(file.Content));
+    }
+
+    private void SetModulePackStatus(string text, bool isSuccessOrProgress)
+    {
+        modulePackStatus = text;
+        modulePackStatusCss = isSuccessOrProgress
+            ? "alert alert-info mt-2"
+            : "alert alert-danger mt-2";
+    }
+
+    private static string ModulePackFailureText(IReadOnlyList<string> errors)
+    {
+        if (errors.Count == 0)
+        {
+            return "The module pack could not be imported. The file may be damaged or in a format this app does not support yet.";
+        }
+
+        var first = errors[0];
+        if (first.Contains("version", StringComparison.OrdinalIgnoreCase))
+        {
+            return "This module pack was made for a different version of the app and cannot be imported yet.";
+        }
+
+        if (first.Contains("valid JSON", StringComparison.OrdinalIgnoreCase) ||
+            first.Contains("recognized module pack", StringComparison.OrdinalIgnoreCase) ||
+            first.Contains("could not be read", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The selected file is not a readable module pack. Choose a downloaded .modulepack file and try again.";
+        }
+
+        if (first.Contains("zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return "This module pack uses a zipped attachment format that is not supported yet.";
+        }
+
+        return $"The module pack could not be imported. {first}";
+    }
+
+    private void OpenDeleteModuleModal(Guid moduleId)
+    {
+        deleteModuleId = moduleId;
+        deleteModuleConfirmation = "";
+    }
+
+    private void CloseDeleteModuleModal()
+    {
+        deleteModuleId = null;
+        deleteModuleConfirmation = "";
+    }
+
+    private bool CanConfirmModuleDelete()
+    {
+        return string.Equals(deleteModuleConfirmation, "Delete", StringComparison.Ordinal);
+    }
+
+    private async Task DeleteModule()
+    {
+        if (!deleteModuleId.HasValue)
+        {
+            return;
+        }
+
+        await Run(() => CourseService.DeleteLearningModuleAsync(
+            ParentUser(),
+            new DeleteLearningModuleCommand(CourseId, deleteModuleId.Value, deleteModuleConfirmation)));
+        CloseDeleteModuleModal();
     }
 
     private void ToggleResourceForm()

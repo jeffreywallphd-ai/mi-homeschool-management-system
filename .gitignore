@@ -48,6 +48,7 @@ obj/
 publish/
 artifacts/
 .verify-output/
+tools/
 TestResults/
 coverage/
 *.coverage
@@ -77,6 +78,7 @@ compile_commands.json
 *.log
 *.bak
 *.swp
+*.courseplanbundle
 
 # vcpkg
 vcpkg_installed/

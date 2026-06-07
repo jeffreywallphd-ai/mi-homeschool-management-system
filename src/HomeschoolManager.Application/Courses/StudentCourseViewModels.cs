@@ -93,7 +93,23 @@ public sealed record StudentLessonView(
     string Title,
     string IntroductoryText,
     string LinkedModuleObjective,
-    IReadOnlyList<StudentLessonResourceView> Resources);
+    LessonType LessonType,
+    int EstimatedMinutes,
+    int SuggestedDays,
+    LessonDifficultyLevel DifficultyLevel,
+    IReadOnlyList<string> SubjectAreas,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Prerequisites,
+    IReadOnlyList<StudentLessonObjectiveView> LearningObjectives,
+    IReadOnlyList<StudentStandardsAlignmentView> StandardsAlignments,
+    IReadOnlyList<string> SuccessCriteria,
+    IReadOnlyList<StudentLessonStepView> LessonSteps,
+    IReadOnlyList<StudentLessonResourceView> Resources,
+    IReadOnlyList<StudentLessonProblemSetView> ProblemSets,
+    IReadOnlyList<StudentLessonPortfolioConnectionView> PortfolioConnections,
+    StudentLessonRubricView? Rubric,
+    IReadOnlyList<string> ReflectionPrompts,
+    IReadOnlyList<string> LinkedAssignmentTitles);
 
 public sealed record StudentLessonResourceView(
     string Name,
@@ -101,7 +117,63 @@ public sealed record StudentLessonResourceView(
     string Url,
     string FileName,
     bool IsPhysicalResource,
-    string SourceNote);
+    string SourceNote,
+    bool Required,
+    int EstimatedMinutes,
+    string StudentInstructions,
+    string NotesPrompt,
+    StudentLessonResourceCitationView? Citation,
+    bool OfflineAvailable,
+    string License);
+
+public sealed record StudentLessonResourceCitationView(string Title, string Publisher, DateTimeOffset? AccessedAtUtc);
+
+public sealed record StudentLessonObjectiveView(string ObjectiveId, string Text, BloomLevel BloomLevel);
+
+public sealed record StudentStandardsAlignmentView(string Framework, string Code, string Description);
+
+public sealed record StudentLessonStepView(
+    int StepOrder,
+    string Title,
+    LessonStepType StepType,
+    string Instructions,
+    int EstimatedMinutes,
+    bool Required);
+
+public sealed record StudentLessonProblemSetView(
+    string ProblemSetId,
+    string Title,
+    string Instructions,
+    int EstimatedMinutes,
+    IReadOnlyList<StudentLessonProblemView> Problems);
+
+public sealed record StudentLessonProblemView(
+    string ProblemId,
+    string Prompt,
+    ProblemResponseType ResponseType,
+    string ExpectedAnswer,
+    string Solution,
+    IReadOnlyList<string> Skills,
+    string Difficulty);
+
+public sealed record StudentLessonPortfolioConnectionView(
+    string PortfolioSection,
+    string ArtifactTitle,
+    string ArtifactPurpose,
+    IReadOnlyList<string> CrossCourseLinks,
+    string ReuseInstructions);
+
+public sealed record StudentLessonRubricView(
+    string RubricId,
+    string Scale,
+    IReadOnlyList<StudentLessonRubricCriterionView> Criteria);
+
+public sealed record StudentLessonRubricCriterionView(
+    string Criterion,
+    string Level4,
+    string Level3,
+    string Level2,
+    string Level1);
 
 public sealed record StudentAssignmentView(
     int SequenceOrder,
@@ -110,10 +182,27 @@ public sealed record StudentAssignmentView(
     InstructionalMethodProfile MethodProfile,
     string Instructions,
     string EstimatedEffort,
+    int? EstimatedMinutesMin,
+    int? EstimatedMinutesMax,
     string DueTimingLabel,
     DateOnly? DueDate,
     IReadOnlyList<string> LinkedModuleObjectives,
     IReadOnlyList<string> RelatedLessonTitles,
     string RequiredOutput,
     bool IsPortfolioCandidate,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary,
+    string StudentFacingGoal,
+    IReadOnlyList<string> RequiredDeliverables,
+    IReadOnlyList<AssignmentSubmissionFormat> SubmissionFormats,
+    AssignmentPortfolioConnection? PortfolioConnection,
+    LessonRubric? Rubric,
+    IReadOnlyList<string> AssessmentSkills,
+    IReadOnlyList<string> StudentChecklist,
+    IReadOnlyList<AssignmentResource> Resources,
+    IReadOnlyList<AssignmentStep> AssignmentSteps,
+    AssignmentRevisionPolicy? RevisionPolicy,
+    AssignmentCompletionCriteria? CompletionCriteria,
+    IReadOnlyList<string> ReflectionPrompts,
+    AssignmentEvidenceRequirements? EvidenceRequirements,
+    AssignmentScoring? Scoring);

@@ -142,6 +142,41 @@ a, .btn-link {
     flex: 1 1 16rem;
 }
 
+.lesson-pack-tools,
+.assignment-pack-tools {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 0.75rem 0 1rem;
+}
+
+.lesson-pack-install,
+.assignment-pack-install {
+    flex: 1 1 16rem;
+}
+
+.lesson-pack-downloads,
+.assignment-pack-downloads {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.student-nested-panel {
+    border-left: 3px solid #d7d7d7;
+    margin: 0.75rem 0;
+    padding: 0.25rem 0 0.25rem 0.85rem;
+}
+
+.two-column-field-row {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .new-course-button {
     font-size: 1.05rem;
     padding: 0.55rem 1rem;

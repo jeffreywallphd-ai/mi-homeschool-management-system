@@ -63,14 +63,38 @@ public sealed record CourseTemplateLessonDefinition(
     string Title,
     string IntroductoryText,
     string LinkedModuleObjective,
-    IReadOnlyList<CourseTemplateLessonResourceDefinition> Resources);
+    IReadOnlyList<CourseTemplateLessonResourceDefinition> Resources,
+    LessonType LessonType = LessonType.SelfGuided,
+    int EstimatedMinutes = 0,
+    int SuggestedDays = 0,
+    LessonDifficultyLevel DifficultyLevel = LessonDifficultyLevel.StandardHighSchool,
+    IReadOnlyList<string>? SubjectAreas = null,
+    IReadOnlyList<string>? Tags = null,
+    IReadOnlyList<string>? Prerequisites = null,
+    IReadOnlyList<LessonLearningObjective>? LearningObjectives = null,
+    IReadOnlyList<StandardsAlignment>? StandardsAlignments = null,
+    IReadOnlyList<string>? SuccessCriteria = null,
+    IReadOnlyList<LessonStep>? LessonSteps = null,
+    IReadOnlyList<LessonProblemSet>? ProblemSets = null,
+    IReadOnlyList<LessonPortfolioConnection>? PortfolioConnections = null,
+    LessonRubric? Rubric = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    LessonInstructorNotes? InstructorNotes = null,
+    IReadOnlyList<string>? LinkedAssignmentIds = null);
 
 public sealed record CourseTemplateLessonResourceDefinition(
     string Name,
     LessonResourceType Type,
     string Url,
     bool IsPhysicalResource,
-    string SourceNote);
+    string SourceNote,
+    bool Required = true,
+    int EstimatedMinutes = 0,
+    string StudentInstructions = "",
+    string NotesPrompt = "",
+    LessonResourceCitation? Citation = null,
+    bool OfflineAvailable = false,
+    string License = "");
 
 public sealed record CourseTemplateAssignmentDefinition(
     string AssignmentId,
@@ -92,7 +116,25 @@ public sealed record CourseTemplateAssignmentVariantDefinition(
     bool IsPortfolioCandidate,
     decimal? PlannedPoints,
     decimal? PlannedWeight,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary = "",
+    string StudentFacingGoal = "",
+    int? EstimatedMinutesMin = null,
+    int? EstimatedMinutesMax = null,
+    IReadOnlyList<string>? RequiredDeliverables = null,
+    IReadOnlyList<AssignmentSubmissionFormat>? SubmissionFormats = null,
+    AssignmentPortfolioConnection? PortfolioConnection = null,
+    LessonRubric? Rubric = null,
+    string LinkedRubricId = "",
+    IReadOnlyList<string>? AssessmentSkills = null,
+    IReadOnlyList<string>? StudentChecklist = null,
+    IReadOnlyList<AssignmentResource>? Resources = null,
+    IReadOnlyList<AssignmentStep>? AssignmentSteps = null,
+    AssignmentRevisionPolicy? RevisionPolicy = null,
+    AssignmentCompletionCriteria? CompletionCriteria = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    AssignmentEvidenceRequirements? EvidenceRequirements = null,
+    AssignmentScoring? Scoring = null);
 
 public sealed record CourseTemplateRequirementMapping(
     string RequirementAreaView,

@@ -77,7 +77,24 @@ public sealed record CreateLessonCommand(
     string Title,
     string IntroductoryText,
     string LinkedModuleObjective,
-    IReadOnlyList<LessonResourceCommand> Resources);
+    IReadOnlyList<LessonResourceCommand> Resources,
+    LessonType LessonType = LessonType.SelfGuided,
+    int EstimatedMinutes = 0,
+    int SuggestedDays = 0,
+    LessonDifficultyLevel DifficultyLevel = LessonDifficultyLevel.StandardHighSchool,
+    IReadOnlyList<string>? SubjectAreas = null,
+    IReadOnlyList<string>? Tags = null,
+    IReadOnlyList<string>? Prerequisites = null,
+    IReadOnlyList<LessonLearningObjectiveCommand>? LearningObjectives = null,
+    IReadOnlyList<StandardsAlignmentCommand>? StandardsAlignments = null,
+    IReadOnlyList<string>? SuccessCriteria = null,
+    IReadOnlyList<LessonStepCommand>? LessonSteps = null,
+    IReadOnlyList<LessonProblemSetCommand>? ProblemSets = null,
+    IReadOnlyList<LessonPortfolioConnectionCommand>? PortfolioConnections = null,
+    LessonRubricCommand? Rubric = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    LessonInstructorNotesCommand? InstructorNotes = null,
+    IReadOnlyList<Guid>? LinkedAssignmentIds = null);
 
 public sealed record UpdateLessonCommand(
     Guid CourseId,
@@ -86,7 +103,24 @@ public sealed record UpdateLessonCommand(
     string Title,
     string IntroductoryText,
     string LinkedModuleObjective,
-    IReadOnlyList<LessonResourceCommand> Resources);
+    IReadOnlyList<LessonResourceCommand> Resources,
+    LessonType LessonType = LessonType.SelfGuided,
+    int EstimatedMinutes = 0,
+    int SuggestedDays = 0,
+    LessonDifficultyLevel DifficultyLevel = LessonDifficultyLevel.StandardHighSchool,
+    IReadOnlyList<string>? SubjectAreas = null,
+    IReadOnlyList<string>? Tags = null,
+    IReadOnlyList<string>? Prerequisites = null,
+    IReadOnlyList<LessonLearningObjectiveCommand>? LearningObjectives = null,
+    IReadOnlyList<StandardsAlignmentCommand>? StandardsAlignments = null,
+    IReadOnlyList<string>? SuccessCriteria = null,
+    IReadOnlyList<LessonStepCommand>? LessonSteps = null,
+    IReadOnlyList<LessonProblemSetCommand>? ProblemSets = null,
+    IReadOnlyList<LessonPortfolioConnectionCommand>? PortfolioConnections = null,
+    LessonRubricCommand? Rubric = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    LessonInstructorNotesCommand? InstructorNotes = null,
+    IReadOnlyList<Guid>? LinkedAssignmentIds = null);
 
 public sealed record ReorderLessonsCommand(Guid CourseId, Guid ModuleId, IReadOnlyList<Guid> LessonIds);
 
@@ -98,7 +132,69 @@ public sealed record LessonResourceCommand(
     string Url,
     string FilePath,
     bool IsPhysicalResource,
-    string SourceNote);
+    string SourceNote,
+    bool Required = true,
+    int EstimatedMinutes = 0,
+    string StudentInstructions = "",
+    string NotesPrompt = "",
+    LessonResourceCitationCommand? Citation = null,
+    bool OfflineAvailable = false,
+    string License = "");
+
+public sealed record LessonResourceCitationCommand(string Title, string Publisher, DateTimeOffset? AccessedAtUtc);
+
+public sealed record LessonLearningObjectiveCommand(string ObjectiveId, string Text, BloomLevel BloomLevel);
+
+public sealed record StandardsAlignmentCommand(string Framework, string Code, string Description);
+
+public sealed record LessonStepCommand(
+    int StepOrder,
+    string Title,
+    LessonStepType StepType,
+    string Instructions,
+    int EstimatedMinutes,
+    bool Required);
+
+public sealed record LessonProblemSetCommand(
+    string ProblemSetId,
+    string Title,
+    string Instructions,
+    int EstimatedMinutes,
+    IReadOnlyList<LessonProblemCommand> Problems);
+
+public sealed record LessonProblemCommand(
+    string ProblemId,
+    string Prompt,
+    ProblemResponseType ResponseType,
+    string ExpectedAnswer,
+    string Solution,
+    IReadOnlyList<string> Skills,
+    string Difficulty);
+
+public sealed record LessonPortfolioConnectionCommand(
+    string PortfolioSection,
+    string ArtifactTitle,
+    string ArtifactPurpose,
+    IReadOnlyList<string> CrossCourseLinks,
+    string ReuseInstructions);
+
+public sealed record LessonRubricCommand(
+    string RubricId,
+    string Scale,
+    IReadOnlyList<LessonRubricCriterionCommand> Criteria);
+
+public sealed record LessonRubricCriterionCommand(
+    string Criterion,
+    string Level4,
+    string Level3,
+    string Level2,
+    string Level1);
+
+public sealed record LessonInstructorNotesCommand(
+    string Overview,
+    IReadOnlyList<string> LookFors,
+    IReadOnlyList<string> CommonIssues,
+    IReadOnlyList<string> SuggestedFeedback);
 
 public sealed record CreateAssignmentCommand(
     Guid CourseId,
@@ -117,7 +213,25 @@ public sealed record CreateAssignmentCommand(
     bool IsPortfolioCandidate,
     decimal? PlannedPoints,
     decimal? PlannedWeight,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary = "",
+    string StudentFacingGoal = "",
+    int? EstimatedMinutesMin = null,
+    int? EstimatedMinutesMax = null,
+    IReadOnlyList<string>? RequiredDeliverables = null,
+    IReadOnlyList<AssignmentSubmissionFormat>? SubmissionFormats = null,
+    AssignmentPortfolioConnectionCommand? PortfolioConnection = null,
+    LessonRubricCommand? Rubric = null,
+    string LinkedRubricId = "",
+    IReadOnlyList<string>? AssessmentSkills = null,
+    IReadOnlyList<string>? StudentChecklist = null,
+    IReadOnlyList<AssignmentResourceCommand>? Resources = null,
+    IReadOnlyList<AssignmentStepCommand>? AssignmentSteps = null,
+    AssignmentRevisionPolicyCommand? RevisionPolicy = null,
+    AssignmentCompletionCriteriaCommand? CompletionCriteria = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    AssignmentEvidenceRequirementsCommand? EvidenceRequirements = null,
+    AssignmentScoringCommand? Scoring = null);
 
 public sealed record UpdateAssignmentCommand(
     Guid CourseId,
@@ -137,7 +251,74 @@ public sealed record UpdateAssignmentCommand(
     bool IsPortfolioCandidate,
     decimal? PlannedPoints,
     decimal? PlannedWeight,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary = "",
+    string StudentFacingGoal = "",
+    int? EstimatedMinutesMin = null,
+    int? EstimatedMinutesMax = null,
+    IReadOnlyList<string>? RequiredDeliverables = null,
+    IReadOnlyList<AssignmentSubmissionFormat>? SubmissionFormats = null,
+    AssignmentPortfolioConnectionCommand? PortfolioConnection = null,
+    LessonRubricCommand? Rubric = null,
+    string LinkedRubricId = "",
+    IReadOnlyList<string>? AssessmentSkills = null,
+    IReadOnlyList<string>? StudentChecklist = null,
+    IReadOnlyList<AssignmentResourceCommand>? Resources = null,
+    IReadOnlyList<AssignmentStepCommand>? AssignmentSteps = null,
+    AssignmentRevisionPolicyCommand? RevisionPolicy = null,
+    AssignmentCompletionCriteriaCommand? CompletionCriteria = null,
+    IReadOnlyList<string>? ReflectionPrompts = null,
+    AssignmentEvidenceRequirementsCommand? EvidenceRequirements = null,
+    AssignmentScoringCommand? Scoring = null);
+
+public sealed record AssignmentPortfolioConnectionCommand(
+    bool IsPortfolioCandidate,
+    string PortfolioSection,
+    string ArtifactTitle,
+    string ArtifactPurpose,
+    string ReuseInstructions,
+    IReadOnlyList<string> CrossCourseLinks);
+
+public sealed record AssignmentResourceCommand(
+    string Name,
+    LessonResourceType Type,
+    string Url,
+    string FilePath,
+    bool IsPhysicalResource,
+    bool Required,
+    string StudentInstructions,
+    string SourceNote,
+    LessonResourceCitationCommand? Citation = null);
+
+public sealed record AssignmentStepCommand(
+    int StepOrder,
+    string Title,
+    string Instructions,
+    int EstimatedMinutes);
+
+public sealed record AssignmentRevisionPolicyCommand(
+    bool AllowRevision,
+    string RevisionExpectation,
+    int MinimumRevisionCount);
+
+public sealed record AssignmentCompletionCriteriaCommand(
+    IReadOnlyList<string> MinimumRequirements,
+    bool RequiresParentReview,
+    decimal? MasteryThreshold);
+
+public sealed record AssignmentEvidenceRequirementsCommand(
+    bool RetainForRecords,
+    AssignmentEvidenceType EvidenceType,
+    IReadOnlyList<string> RecommendedFileTypes,
+    bool RequiresStudentExplanation,
+    bool RequiresParentEvaluation);
+
+public sealed record AssignmentScoringCommand(
+    decimal? PlannedPoints,
+    decimal? PlannedWeight,
+    AssignmentGradingMode GradingMode,
+    bool CountsTowardGrade,
+    bool AllowPartialCredit);
 
 public sealed record ReorderAssignmentsCommand(Guid CourseId, Guid ModuleId, IReadOnlyList<Guid> AssignmentIds);
 

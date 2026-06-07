@@ -62,6 +62,57 @@ else
                 <label class="form-label" for="lesson-intro">Introductory text <span class="required-marker">*</span></label>
                 <textarea id="lesson-intro" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.IntroductoryText" @bind:after="AutoSaveLesson"></textarea>
                 @ValidationFor("lesson.IntroductoryText")
+
+                <div class="form-grid two-column-form-grid">
+                    <div>
+                        <label class="form-label" for="lesson-type">Lesson type</label>
+                        <select id="lesson-type" class="form-select" disabled="@(!CanEdit)" @bind="lessonForm.LessonType" @bind:after="AutoSaveLesson">
+                            @foreach (var type in Enum.GetValues<LessonType>())
+                            {
+                                <option value="@type">@EnumLabel(type.ToString())</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="lesson-difficulty">Difficulty</label>
+                        <select id="lesson-difficulty" class="form-select" disabled="@(!CanEdit)" @bind="lessonForm.DifficultyLevel" @bind:after="AutoSaveLesson">
+                            @foreach (var level in Enum.GetValues<LessonDifficultyLevel>())
+                            {
+                                <option value="@level">@EnumLabel(level.ToString())</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="lesson-minutes">Estimated minutes</label>
+                        <input id="lesson-minutes" class="form-control" type="number" min="0" disabled="@(!CanEdit)" @bind="lessonForm.EstimatedMinutes" @bind:after="AutoSaveLesson" />
+                    </div>
+                    <div>
+                        <label class="form-label" for="lesson-days">Suggested days</label>
+                        <input id="lesson-days" class="form-control" type="number" min="0" disabled="@(!CanEdit)" @bind="lessonForm.SuggestedDays" @bind:after="AutoSaveLesson" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="form-section">
+                <h2>Planning Metadata</h2>
+                <label class="form-label" for="lesson-subjects">Subject areas</label>
+                <textarea id="lesson-subjects" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SubjectAreasText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-tags">Tags</label>
+                <textarea id="lesson-tags" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.TagsText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-prerequisites">Prerequisites</label>
+                <textarea id="lesson-prerequisites" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.PrerequisitesText" @bind:after="AutoSaveLesson"></textarea>
+            </section>
+
+            <section class="form-section">
+                <h2>Student Workflow</h2>
+                <label class="form-label" for="lesson-objectives">Lesson learning objectives</label>
+                <textarea id="lesson-objectives" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.LearningObjectivesText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-standards">Standards alignment</label>
+                <textarea id="lesson-standards" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.StandardsAlignmentsText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-success">Success criteria</label>
+                <textarea id="lesson-success" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SuccessCriteriaText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-steps">Lesson steps</label>
+                <textarea id="lesson-steps" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.LessonStepsText" @bind:after="AutoSaveLesson"></textarea>
             </section>
 
             <section class="form-section">
@@ -104,6 +155,18 @@ else
                                     {
                                         <small>@resource.SourceNote</small>
                                     }
+                                    @if (!string.IsNullOrWhiteSpace(resource.StudentInstructions))
+                                    {
+                                        <small>Student use: @resource.StudentInstructions</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(resource.NotesPrompt))
+                                    {
+                                        <small>Notes prompt: @resource.NotesPrompt</small>
+                                    }
+                                    @if (resource.EstimatedMinutes > 0)
+                                    {
+                                        <small>@resource.EstimatedMinutes minutes</small>
+                                    }
                                 </div>
                                 @if (CanEdit)
                                 {
@@ -135,13 +198,73 @@ else
                         </div>
                         <label class="form-label" for="lesson-resource-note">Source note</label>
                         <input id="lesson-resource-note" class="form-control" @bind="lessonForm.NewResourceSourceNote" />
+                        <div class="form-grid two-column-form-grid">
+                            <div class="form-check mt-2">
+                                <input id="lesson-resource-required" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceRequired" />
+                                <label class="form-check-label" for="lesson-resource-required">Required resource</label>
+                            </div>
+                            <div>
+                                <label class="form-label" for="lesson-resource-minutes">Estimated minutes</label>
+                                <input id="lesson-resource-minutes" class="form-control" type="number" min="0" @bind="lessonForm.NewResourceEstimatedMinutes" />
+                            </div>
+                        </div>
+                        <label class="form-label" for="lesson-resource-instructions">Student instructions</label>
+                        <textarea id="lesson-resource-instructions" class="form-control" rows="4" @bind="lessonForm.NewResourceStudentInstructions"></textarea>
+                        <label class="form-label" for="lesson-resource-notes-prompt">Notes prompt</label>
+                        <textarea id="lesson-resource-notes-prompt" class="form-control" rows="4" @bind="lessonForm.NewResourceNotesPrompt"></textarea>
                         <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
                     </div>
                 }
             </section>
+
+            <section class="form-section">
+                <h2>Practice and Evidence</h2>
+                <label class="form-label" for="lesson-problem-sets">Problem sets</label>
+                <textarea id="lesson-problem-sets" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.ProblemSetsText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-portfolio">Portfolio connections</label>
+                <textarea id="lesson-portfolio" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.PortfolioConnectionsText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-reflection">Reflection prompts</label>
+                <textarea id="lesson-reflection" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.ReflectionPromptsText" @bind:after="AutoSaveLesson"></textarea>
+            </section>
+
+            <section class="form-section">
+                <h2>Rubric and Parent Notes</h2>
+                <label class="form-label" for="lesson-rubric">Rubric criteria</label>
+                <textarea id="lesson-rubric" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.RubricText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-instructor-notes">Instructor overview</label>
+                <textarea id="lesson-instructor-notes" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.InstructorOverview" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-look-fors">Look fors</label>
+                <textarea id="lesson-look-fors" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.LookForsText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-common-issues">Common issues</label>
+                <textarea id="lesson-common-issues" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.CommonIssuesText" @bind:after="AutoSaveLesson"></textarea>
+                <label class="form-label" for="lesson-feedback">Suggested feedback</label>
+                <textarea id="lesson-feedback" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SuggestedFeedbackText" @bind:after="AutoSaveLesson"></textarea>
+            </section>
         </main>
 
         <aside class="workbench-support">
+            <section class="form-section">
+                <h2>Linked Assignments</h2>
+                @if (module.Assignments.Count == 0)
+                {
+                    <p>No module assignments are available to link.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @foreach (var assignment in module.Assignments.OrderBy(item => item.SequenceOrder))
+                        {
+                            <li>
+                                <label class="form-check-label">
+                                    <input class="form-check-input me-2" type="checkbox" disabled="@(!CanEdit)" checked="@lessonForm.LinkedAssignmentIds.Contains(assignment.Id)" @onchange="async _ => await ToggleLinkedAssignment(assignment.Id)" />
+                                    @assignment.SequenceOrder. @assignment.Title
+                                </label>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
             <section class="form-section">
                 <div class="section-heading-row">
                     <h2>Module Lessons</h2>
@@ -228,7 +351,28 @@ else
                 lessonForm.Title,
                 lessonForm.IntroductoryText,
                 lessonForm.LinkedModuleObjective,
-                lessonForm.Resources.Select(ToCommand).ToArray())));
+                lessonForm.Resources.Select(ToCommand).ToArray(),
+                lessonForm.LessonType,
+                lessonForm.EstimatedMinutes,
+                lessonForm.SuggestedDays,
+                lessonForm.DifficultyLevel,
+                SplitLines(lessonForm.SubjectAreasText).ToArray(),
+                SplitLines(lessonForm.TagsText).ToArray(),
+                SplitLines(lessonForm.PrerequisitesText).ToArray(),
+                ParseLessonObjectives(lessonForm.LearningObjectivesText).ToArray(),
+                ParseStandards(lessonForm.StandardsAlignmentsText).ToArray(),
+                SplitLines(lessonForm.SuccessCriteriaText).ToArray(),
+                ParseLessonSteps(lessonForm.LessonStepsText).ToArray(),
+                ParseProblemSets(lessonForm.ProblemSetsText).ToArray(),
+                ParsePortfolioConnections(lessonForm.PortfolioConnectionsText).ToArray(),
+                ParseRubric(lessonForm.RubricText),
+                SplitLines(lessonForm.ReflectionPromptsText).ToArray(),
+                new LessonInstructorNotesCommand(
+                    lessonForm.InstructorOverview,
+                    SplitLines(lessonForm.LookForsText).ToArray(),
+                    SplitLines(lessonForm.CommonIssuesText).ToArray(),
+                    SplitLines(lessonForm.SuggestedFeedbackText).ToArray()),
+                lessonForm.LinkedAssignmentIds.ToArray())));
     }
 
     private async Task MoveLesson(Guid lessonId, int direction)
@@ -285,6 +429,26 @@ else
                 Title = lesson.Title,
                 IntroductoryText = lesson.IntroductoryText,
                 LinkedModuleObjective = lesson.LinkedModuleObjective,
+                LessonType = lesson.LessonType,
+                EstimatedMinutes = lesson.EstimatedMinutes,
+                SuggestedDays = lesson.SuggestedDays,
+                DifficultyLevel = lesson.DifficultyLevel,
+                SubjectAreasText = Lines(lesson.SubjectAreas),
+                TagsText = Lines(lesson.Tags),
+                PrerequisitesText = Lines(lesson.Prerequisites),
+                LearningObjectivesText = SerializeLessonObjectives(lesson.LearningObjectives),
+                StandardsAlignmentsText = SerializeStandards(lesson.StandardsAlignments),
+                SuccessCriteriaText = Lines(lesson.SuccessCriteria),
+                LessonStepsText = SerializeLessonSteps(lesson.LessonSteps),
+                ProblemSetsText = SerializeProblemSets(lesson.ProblemSets),
+                PortfolioConnectionsText = SerializePortfolioConnections(lesson.PortfolioConnections),
+                RubricText = SerializeRubric(lesson.Rubric),
+                ReflectionPromptsText = Lines(lesson.ReflectionPrompts),
+                InstructorOverview = lesson.InstructorNotes?.Overview ?? "",
+                LookForsText = Lines(lesson.InstructorNotes?.LookFors ?? []),
+                CommonIssuesText = Lines(lesson.InstructorNotes?.CommonIssues ?? []),
+                SuggestedFeedbackText = Lines(lesson.InstructorNotes?.SuggestedFeedback ?? []),
+                LinkedAssignmentIds = lesson.LinkedAssignmentIds.ToList(),
                 Resources = lesson.Resources
                     .Select(resource => new LessonResourceFormItem(
                         resource.Name,
@@ -292,7 +456,16 @@ else
                         resource.Url,
                         resource.FilePath,
                         resource.IsPhysicalResource,
-                        resource.SourceNote))
+                        resource.SourceNote,
+                        resource.Required,
+                        resource.EstimatedMinutes,
+                        resource.StudentInstructions,
+                        resource.NotesPrompt,
+                        resource.Citation?.Title ?? "",
+                        resource.Citation?.Publisher ?? "",
+                        resource.Citation?.AccessedAtUtc,
+                        resource.OfflineAvailable,
+                        resource.License))
                     .ToList()
             };
     }
@@ -387,11 +560,24 @@ else
             lessonForm.NewResourceUrl.Trim(),
             filePath,
             lessonForm.NewResourceIsPhysical || lessonForm.NewResourceType == LessonResourceType.PhysicalResource,
-            lessonForm.NewResourceSourceNote.Trim()));
+            lessonForm.NewResourceSourceNote.Trim(),
+            lessonForm.NewResourceRequired,
+            lessonForm.NewResourceEstimatedMinutes,
+            lessonForm.NewResourceStudentInstructions.Trim(),
+            lessonForm.NewResourceNotesPrompt.Trim(),
+            "",
+            "",
+            null,
+            false,
+            ""));
         lessonForm.NewResourceName = "";
         lessonForm.NewResourceUrl = "";
         lessonForm.NewResourceIsPhysical = false;
         lessonForm.NewResourceSourceNote = "";
+        lessonForm.NewResourceRequired = true;
+        lessonForm.NewResourceEstimatedMinutes = 0;
+        lessonForm.NewResourceStudentInstructions = "";
+        lessonForm.NewResourceNotesPrompt = "";
         lessonForm.NewResourceType = LessonResourceType.Reading;
         pendingResourceFile = null;
         await AutoSaveLesson();
@@ -416,6 +602,20 @@ else
             lessonForm.Resources.RemoveAt(index);
             await AutoSaveLesson();
         }
+    }
+
+    private async Task ToggleLinkedAssignment(Guid assignmentId)
+    {
+        if (lessonForm.LinkedAssignmentIds.Contains(assignmentId))
+        {
+            lessonForm.LinkedAssignmentIds.Remove(assignmentId);
+        }
+        else
+        {
+            lessonForm.LinkedAssignmentIds.Add(assignmentId);
+        }
+
+        await AutoSaveLesson();
     }
 
     private bool ValidateLesson()
@@ -466,7 +666,16 @@ else
             item.Url,
             item.FilePath,
             item.IsPhysicalResource,
-            item.SourceNote);
+            item.SourceNote,
+            item.Required,
+            item.EstimatedMinutes,
+            item.StudentInstructions,
+            item.NotesPrompt,
+            string.IsNullOrWhiteSpace(item.CitationTitle) && string.IsNullOrWhiteSpace(item.CitationPublisher) && !item.CitationAccessedAtUtc.HasValue
+                ? null
+                : new LessonResourceCitationCommand(item.CitationTitle, item.CitationPublisher, item.CitationAccessedAtUtc),
+            item.OfflineAvailable,
+            item.License);
     }
 
     private static string ResourceTypeLabel(LessonResourceType type)
@@ -475,8 +684,164 @@ else
         {
             LessonResourceType.TextbookChapter => "Textbook chapter",
             LessonResourceType.PhysicalResource => "Physical resource",
+            LessonResourceType.DataSource => "Data source",
             _ => type.ToString()
         };
+    }
+
+    private static IEnumerable<string> SplitLines(string value)
+    {
+        return (value ?? "")
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private static string Lines(IEnumerable<string> values)
+    {
+        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static IEnumerable<LessonLearningObjectiveCommand> ParseLessonObjectives(string value)
+    {
+        return SplitLines(value)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 3, StringSplitOptions.TrimEntries);
+                var bloom = parts.Length > 1 && Enum.TryParse<BloomLevel>(parts[1], true, out var parsedBloom)
+                    ? parsedBloom
+                    : BloomLevel.Apply;
+                return new LessonLearningObjectiveCommand(
+                    parts.Length > 0 ? parts[0] : "",
+                    parts.Length > 2 ? parts[2] : parts[0],
+                    bloom);
+            });
+    }
+
+    private static string SerializeLessonObjectives(IEnumerable<LessonLearningObjectiveView> objectives)
+    {
+        return Lines(objectives.Select(objective => $"{objective.ObjectiveId} | {objective.BloomLevel} | {objective.Text}"));
+    }
+
+    private static IEnumerable<StandardsAlignmentCommand> ParseStandards(string value)
+    {
+        return SplitLines(value)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 3, StringSplitOptions.TrimEntries);
+                return new StandardsAlignmentCommand(
+                    parts.Length > 0 ? parts[0] : "",
+                    parts.Length > 1 ? parts[1] : "",
+                    parts.Length > 2 ? parts[2] : "");
+            });
+    }
+
+    private static string SerializeStandards(IEnumerable<StandardsAlignmentView> standards)
+    {
+        return Lines(standards.Select(standard => $"{standard.Framework} | {standard.Code} | {standard.Description}"));
+    }
+
+    private static IEnumerable<LessonStepCommand> ParseLessonSteps(string value)
+    {
+        return SplitLines(value).Select((line, index) =>
+        {
+            var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
+            var type = parts.Length > 1 && Enum.TryParse<LessonStepType>(parts[1], true, out var parsedType)
+                ? parsedType
+                : LessonStepType.Practice;
+            var minutes = parts.Length > 3 && int.TryParse(parts[3], out var parsedMinutes)
+                ? parsedMinutes
+                : 0;
+            var required = parts.Length <= 4 || !bool.TryParse(parts[4], out var parsedRequired) || parsedRequired;
+            return new LessonStepCommand(
+                index + 1,
+                parts.Length > 0 ? parts[0] : $"Step {index + 1}",
+                type,
+                parts.Length > 2 ? parts[2] : line,
+                minutes,
+                required);
+        });
+    }
+
+    private static string SerializeLessonSteps(IEnumerable<LessonStepView> steps)
+    {
+        return Lines(steps.Select(step => $"{step.Title} | {step.StepType} | {step.Instructions} | {step.EstimatedMinutes} | {step.Required}"));
+    }
+
+    private static IEnumerable<LessonProblemSetCommand> ParseProblemSets(string value)
+    {
+        return SplitLines(value).Select((line, index) =>
+        {
+            var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
+            var minutes = parts.Length > 2 && int.TryParse(parts[2], out var parsedMinutes)
+                ? parsedMinutes
+                : 0;
+            var problemPrompt = parts.Length > 3 ? parts[3] : "";
+            var problem = string.IsNullOrWhiteSpace(problemPrompt)
+                ? Array.Empty<LessonProblemCommand>()
+                : [new LessonProblemCommand($"{parts[0]}-problem-1", problemPrompt, ProblemResponseType.WorkedSolution, parts.Length > 4 ? parts[4] : "", "", [], "")];
+            return new LessonProblemSetCommand(
+                parts.Length > 0 ? parts[0] : $"problem-set-{index + 1}",
+                parts.Length > 1 ? parts[1] : line,
+                "",
+                minutes,
+                problem);
+        });
+    }
+
+    private static string SerializeProblemSets(IEnumerable<LessonProblemSetView> problemSets)
+    {
+        return Lines(problemSets.Select(problemSet =>
+            $"{problemSet.ProblemSetId} | {problemSet.Title} | {problemSet.EstimatedMinutes} | {problemSet.Problems.FirstOrDefault()?.Prompt ?? ""} | {problemSet.Problems.FirstOrDefault()?.ExpectedAnswer ?? ""}"));
+    }
+
+    private static IEnumerable<LessonPortfolioConnectionCommand> ParsePortfolioConnections(string value)
+    {
+        return SplitLines(value)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
+                return new LessonPortfolioConnectionCommand(
+                    parts.Length > 0 ? parts[0] : "",
+                    parts.Length > 1 ? parts[1] : "",
+                    parts.Length > 2 ? parts[2] : "",
+                    parts.Length > 3 ? parts[3].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [],
+                    parts.Length > 4 ? parts[4] : "");
+            });
+    }
+
+    private static string SerializePortfolioConnections(IEnumerable<LessonPortfolioConnectionView> connections)
+    {
+        return Lines(connections.Select(connection => $"{connection.PortfolioSection} | {connection.ArtifactTitle} | {connection.ArtifactPurpose} | {string.Join("; ", connection.CrossCourseLinks)} | {connection.ReuseInstructions}"));
+    }
+
+    private static LessonRubricCommand? ParseRubric(string value)
+    {
+        var criteria = SplitLines(value)
+            .Select(line =>
+            {
+                var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
+                return new LessonRubricCriterionCommand(
+                    parts.Length > 0 ? parts[0] : "",
+                    parts.Length > 1 ? parts[1] : "",
+                    parts.Length > 2 ? parts[2] : "",
+                    parts.Length > 3 ? parts[3] : "",
+                    parts.Length > 4 ? parts[4] : "");
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Criterion))
+            .ToArray();
+        return criteria.Length == 0 ? null : new LessonRubricCommand("lesson-rubric", "4-point", criteria);
+    }
+
+    private static string SerializeRubric(LessonRubricView? rubric)
+    {
+        return rubric is null
+            ? ""
+            : Lines(rubric.Criteria.Select(criteria => $"{criteria.Criterion} | {criteria.Level4} | {criteria.Level3} | {criteria.Level2} | {criteria.Level1}"));
+    }
+
+    private static string EnumLabel(string value)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
     }
 
     private sealed record PageMessage(string Text, string CssClass);
@@ -486,13 +851,42 @@ else
         string Url,
         string FilePath,
         bool IsPhysicalResource,
-        string SourceNote);
+        string SourceNote,
+        bool Required,
+        int EstimatedMinutes,
+        string StudentInstructions,
+        string NotesPrompt,
+        string CitationTitle,
+        string CitationPublisher,
+        DateTimeOffset? CitationAccessedAtUtc,
+        bool OfflineAvailable,
+        string License);
 
     private sealed class LessonFormModel
     {
         public string Title { get; set; } = "";
         public string IntroductoryText { get; set; } = "";
         public string LinkedModuleObjective { get; set; } = "";
+        public LessonType LessonType { get; set; } = LessonType.SelfGuided;
+        public int EstimatedMinutes { get; set; }
+        public int SuggestedDays { get; set; }
+        public LessonDifficultyLevel DifficultyLevel { get; set; } = LessonDifficultyLevel.StandardHighSchool;
+        public string SubjectAreasText { get; set; } = "";
+        public string TagsText { get; set; } = "";
+        public string PrerequisitesText { get; set; } = "";
+        public string LearningObjectivesText { get; set; } = "";
+        public string StandardsAlignmentsText { get; set; } = "";
+        public string SuccessCriteriaText { get; set; } = "";
+        public string LessonStepsText { get; set; } = "";
+        public string ProblemSetsText { get; set; } = "";
+        public string PortfolioConnectionsText { get; set; } = "";
+        public string RubricText { get; set; } = "";
+        public string ReflectionPromptsText { get; set; } = "";
+        public string InstructorOverview { get; set; } = "";
+        public string LookForsText { get; set; } = "";
+        public string CommonIssuesText { get; set; } = "";
+        public string SuggestedFeedbackText { get; set; } = "";
+        public List<Guid> LinkedAssignmentIds { get; set; } = [];
         public List<LessonResourceFormItem> Resources { get; set; } = [];
         public bool ShowResourceForm { get; set; }
         public string NewResourceName { get; set; } = "";
@@ -500,5 +894,9 @@ else
         public string NewResourceUrl { get; set; } = "";
         public bool NewResourceIsPhysical { get; set; }
         public string NewResourceSourceNote { get; set; } = "";
+        public bool NewResourceRequired { get; set; } = true;
+        public int NewResourceEstimatedMinutes { get; set; }
+        public string NewResourceStudentInstructions { get; set; } = "";
+        public string NewResourceNotesPrompt { get; set; } = "";
     }
 }

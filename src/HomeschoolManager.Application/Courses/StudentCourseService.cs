@@ -207,6 +207,23 @@ public sealed class StudentCourseService
                     lesson.Title,
                     lesson.IntroductoryText,
                     lesson.LinkedModuleObjective,
+                    lesson.LessonType,
+                    lesson.EstimatedMinutes,
+                    lesson.SuggestedDays,
+                    lesson.DifficultyLevel,
+                    lesson.SubjectAreas,
+                    lesson.Tags,
+                    lesson.Prerequisites,
+                    lesson.LearningObjectives
+                        .Select(objective => new StudentLessonObjectiveView(objective.ObjectiveId, objective.Text, objective.BloomLevel))
+                        .ToArray(),
+                    lesson.StandardsAlignments
+                        .Select(item => new StudentStandardsAlignmentView(item.Framework, item.Code, item.Description))
+                        .ToArray(),
+                    lesson.SuccessCriteria,
+                    lesson.LessonSteps
+                        .Select(step => new StudentLessonStepView(step.StepOrder, step.Title, step.StepType, step.Instructions, step.EstimatedMinutes, step.Required))
+                        .ToArray(),
                     lesson.Resources
                         .Select(resource => new StudentLessonResourceView(
                             resource.Name,
@@ -214,7 +231,59 @@ public sealed class StudentCourseService
                             resource.Url,
                             Path.GetFileName(resource.FilePath),
                             resource.IsPhysicalResource,
-                            resource.SourceNote))
+                            resource.SourceNote,
+                            resource.Required,
+                            resource.EstimatedMinutes,
+                            resource.StudentInstructions,
+                            resource.NotesPrompt,
+                            resource.Citation is null
+                                ? null
+                                : new StudentLessonResourceCitationView(resource.Citation.Title, resource.Citation.Publisher, resource.Citation.AccessedAtUtc),
+                            resource.OfflineAvailable,
+                            resource.License))
+                        .ToArray(),
+                    lesson.ProblemSets
+                        .Select(problemSet => new StudentLessonProblemSetView(
+                            problemSet.ProblemSetId,
+                            problemSet.Title,
+                            problemSet.Instructions,
+                            problemSet.EstimatedMinutes,
+                            problemSet.Problems
+                                .Select(problem => new StudentLessonProblemView(
+                                    problem.ProblemId,
+                                    problem.Prompt,
+                                    problem.ResponseType,
+                                    problem.ExpectedAnswer,
+                                    problem.Solution,
+                                    problem.Skills,
+                                    problem.Difficulty))
+                                .ToArray()))
+                        .ToArray(),
+                    lesson.PortfolioConnections
+                        .Select(connection => new StudentLessonPortfolioConnectionView(
+                            connection.PortfolioSection,
+                            connection.ArtifactTitle,
+                            connection.ArtifactPurpose,
+                            connection.CrossCourseLinks,
+                            connection.ReuseInstructions))
+                        .ToArray(),
+                    lesson.Rubric is null
+                        ? null
+                        : new StudentLessonRubricView(
+                            lesson.Rubric.RubricId,
+                            lesson.Rubric.Scale,
+                            lesson.Rubric.Criteria
+                                .Select(criteria => new StudentLessonRubricCriterionView(
+                                    criteria.Criterion,
+                                    criteria.Level4,
+                                    criteria.Level3,
+                                    criteria.Level2,
+                                    criteria.Level1))
+                                .ToArray()),
+                    lesson.ReflectionPrompts,
+                    lesson.LinkedAssignmentIds
+                        .Select(assignmentId => module.Assignments.FirstOrDefault(assignment => assignment.Id == assignmentId)?.Title ?? "")
+                        .Where(title => !string.IsNullOrWhiteSpace(title))
                         .ToArray()))
                 .ToArray(),
             module.Assignments
@@ -226,6 +295,8 @@ public sealed class StudentCourseService
                     assignment.MethodProfile,
                     assignment.Instructions,
                     assignment.EstimatedEffort,
+                    assignment.EstimatedMinutesMin,
+                    assignment.EstimatedMinutesMax,
                     assignment.DueTimingLabel,
                     assignment.DueDate,
                     assignment.LinkedModuleObjectives,
@@ -235,7 +306,22 @@ public sealed class StudentCourseService
                         .ToArray(),
                     assignment.RequiredOutput,
                     assignment.IsPortfolioCandidate,
-                    assignment.Status))
+                    assignment.Status,
+                    assignment.AssignmentSummary,
+                    assignment.StudentFacingGoal,
+                    assignment.RequiredDeliverables,
+                    assignment.SubmissionFormats,
+                    assignment.PortfolioConnection,
+                    assignment.Rubric,
+                    assignment.AssessmentSkills,
+                    assignment.StudentChecklist,
+                    assignment.Resources,
+                    assignment.AssignmentSteps,
+                    assignment.RevisionPolicy,
+                    assignment.CompletionCriteria,
+                    assignment.ReflectionPrompts,
+                    assignment.EvidenceRequirements,
+                    assignment.Scoring))
                 .ToArray(),
             module.AssignmentEvidencePlaceholder));
     }

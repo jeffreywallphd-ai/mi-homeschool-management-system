@@ -5,6 +5,7 @@
 @using HomeschoolManager.Domain.Access
 @using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
+@using System.Text.RegularExpressions
 @inject CourseService CourseService
 @inject SessionState Session
 @inject NavigationManager NavigationManager
@@ -82,6 +83,12 @@ else
                         <option value="@status">@StatusLabel(status)</option>
                     }
                 </select>
+
+                <label class="form-label" for="assignment-summary">Summary</label>
+                <textarea id="assignment-summary" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.AssignmentSummary" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-goal">Student-facing goal</label>
+                <textarea id="assignment-goal" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.StudentFacingGoal" @bind:after="AutoSaveAssignment"></textarea>
             </section>
 
             <section class="form-section">
@@ -93,12 +100,44 @@ else
                 <label class="form-label" for="assignment-output">Required output or evidence <span class="required-marker">*</span></label>
                 <textarea id="assignment-output" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RequiredOutput" @bind:after="AutoSaveAssignment"></textarea>
                 @ValidationFor("assignment.RequiredOutput")
+
+                <label class="form-label" for="assignment-deliverables">Required deliverables</label>
+                <textarea id="assignment-deliverables" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RequiredDeliverablesText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-checklist">Student checklist</label>
+                <textarea id="assignment-checklist" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.StudentChecklistText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-reflection">Reflection prompts</label>
+                <textarea id="assignment-reflection" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ReflectionPromptsText" @bind:after="AutoSaveAssignment"></textarea>
+            </section>
+
+            <section class="form-section">
+                <h2>Workflow and Resources</h2>
+                <label class="form-label" for="assignment-steps">Assignment steps</label>
+                <textarea id="assignment-steps" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.AssignmentStepsText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-resources">Assignment resources</label>
+                <textarea id="assignment-resources" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ResourcesText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-skills">Assessment skills</label>
+                <textarea id="assignment-skills" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.AssessmentSkillsText" @bind:after="AutoSaveAssignment"></textarea>
             </section>
 
             <section class="form-section">
                 <h2>Timing and Planning</h2>
                 <label class="form-label" for="assignment-effort">Estimated effort</label>
                 <input id="assignment-effort" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.EstimatedEffort" @bind:after="AutoSaveAssignment" />
+
+                <div class="two-column-field-row">
+                    <div>
+                        <label class="form-label" for="assignment-effort-min">Minimum minutes</label>
+                        <input id="assignment-effort-min" class="form-control" type="number" min="0" step="1" disabled="@(!CanEdit)" @bind="assignmentForm.EstimatedMinutesMin" @bind:after="AutoSaveAssignment" />
+                    </div>
+                    <div>
+                        <label class="form-label" for="assignment-effort-max">Maximum minutes</label>
+                        <input id="assignment-effort-max" class="form-control" type="number" min="0" step="1" disabled="@(!CanEdit)" @bind="assignmentForm.EstimatedMinutesMax" @bind:after="AutoSaveAssignment" />
+                    </div>
+                </div>
 
                 <label class="form-label" for="assignment-due-label">Due timing label</label>
                 <input id="assignment-due-label" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.DueTimingLabel" @bind:after="AutoSaveAssignment" />
@@ -112,10 +151,57 @@ else
                 <label class="form-label" for="assignment-weight">Planned weight</label>
                 <input id="assignment-weight" class="form-control" type="number" min="0" step="0.1" disabled="@(!CanEdit)" @bind="assignmentForm.PlannedWeight" @bind:after="AutoSaveAssignment" />
 
+                <label class="form-label" for="assignment-grading-mode">Grading mode</label>
+                <select id="assignment-grading-mode" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.GradingMode" @bind:after="AutoSaveAssignment">
+                    @foreach (var mode in Enum.GetValues<AssignmentGradingMode>())
+                    {
+                        <option value="@mode">@EnumLabel(mode.ToString())</option>
+                    }
+                </select>
+
+                <div class="form-check mt-2">
+                    <input id="assignment-counts-grade" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.CountsTowardGrade" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-counts-grade">Counts toward grade</label>
+                </div>
+
+                <div class="form-check mt-2">
+                    <input id="assignment-partial-credit" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.AllowPartialCredit" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-partial-credit">Allow partial credit</label>
+                </div>
+
                 <div class="form-check mt-2">
                     <input id="assignment-portfolio" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.IsPortfolioCandidate" @bind:after="AutoSaveAssignment" />
                     <label class="form-check-label" for="assignment-portfolio">Portfolio-worthy evidence candidate</label>
                 </div>
+            </section>
+
+            <section class="form-section">
+                <h2>Portfolio and Completion</h2>
+                <label class="form-label" for="portfolio-section">Portfolio section</label>
+                <input id="portfolio-section" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.PortfolioSection" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="portfolio-title">Artifact title</label>
+                <input id="portfolio-title" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.ArtifactTitle" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="portfolio-purpose">Artifact purpose</label>
+                <textarea id="portfolio-purpose" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.ArtifactPurpose" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="portfolio-reuse">Reuse instructions</label>
+                <textarea id="portfolio-reuse" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.ReuseInstructions" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="portfolio-links">Cross-course links</label>
+                <textarea id="portfolio-links" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.CrossCourseLinksText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="completion-requirements">Completion requirements</label>
+                <textarea id="completion-requirements" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.CompletionRequirementsText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <div class="form-check mt-2">
+                    <input id="completion-parent-review" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RequiresParentReview" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="completion-parent-review">Requires parent review</label>
+                </div>
+
+                <label class="form-label" for="completion-mastery">Mastery threshold</label>
+                <input id="completion-mastery" class="form-control" type="number" min="0" step="0.1" disabled="@(!CanEdit)" @bind="assignmentForm.MasteryThreshold" @bind:after="AutoSaveAssignment" />
             </section>
         </main>
 
@@ -175,6 +261,76 @@ else
                 <h2>Parent Notes</h2>
                 <label class="visually-hidden" for="assignment-parent-notes">Parent notes</label>
                 <textarea id="assignment-parent-notes" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ParentNotes" @bind:after="AutoSaveAssignment"></textarea>
+            </section>
+
+            <section class="form-section">
+                <h2>Submission Formats</h2>
+                <ul class="itemized-editor-list stacked-editor-list">
+                    @foreach (var format in Enum.GetValues<AssignmentSubmissionFormat>())
+                    {
+                        <li>
+                            <label class="form-check-label">
+                                <input class="form-check-input" type="checkbox" disabled="@(!CanEdit)" checked="@assignmentForm.SubmissionFormats.Contains(format)" @onchange="async _ => await ToggleSubmissionFormat(format)" />
+                                @EnumLabel(format.ToString())
+                            </label>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section class="form-section">
+                <h2>Rubric</h2>
+                <label class="form-label" for="assignment-rubric-id">Rubric id</label>
+                <input id="assignment-rubric-id" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.RubricId" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-linked-rubric-id">Linked rubric id</label>
+                <input id="assignment-linked-rubric-id" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.LinkedRubricId" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-rubric-scale">Scale</label>
+                <input id="assignment-rubric-scale" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.RubricScale" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-rubric-criteria">Criteria</label>
+                <textarea id="assignment-rubric-criteria" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RubricCriteriaText" @bind:after="AutoSaveAssignment"></textarea>
+            </section>
+
+            <section class="form-section">
+                <h2>Revision and Evidence</h2>
+                <div class="form-check mt-2">
+                    <input id="assignment-revision" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.AllowRevision" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-revision">Allow revision</label>
+                </div>
+
+                <label class="form-label" for="assignment-revision-expectation">Revision expectation</label>
+                <textarea id="assignment-revision-expectation" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.RevisionExpectation" @bind:after="AutoSaveAssignment"></textarea>
+
+                <label class="form-label" for="assignment-revision-count">Minimum revisions</label>
+                <input id="assignment-revision-count" class="form-control" type="number" min="0" step="1" disabled="@(!CanEdit)" @bind="assignmentForm.MinimumRevisionCount" @bind:after="AutoSaveAssignment" />
+
+                <label class="form-label" for="assignment-evidence-type">Evidence type</label>
+                <select id="assignment-evidence-type" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.EvidenceType" @bind:after="AutoSaveAssignment">
+                    @foreach (var type in Enum.GetValues<AssignmentEvidenceType>())
+                    {
+                        <option value="@type">@EnumLabel(type.ToString())</option>
+                    }
+                </select>
+
+                <label class="form-label" for="assignment-file-types">Recommended file types</label>
+                <textarea id="assignment-file-types" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.RecommendedFileTypesText" @bind:after="AutoSaveAssignment"></textarea>
+
+                <div class="form-check mt-2">
+                    <input id="assignment-retain-records" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RetainForRecords" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-retain-records">Retain for records</label>
+                </div>
+
+                <div class="form-check mt-2">
+                    <input id="assignment-student-explanation" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RequiresStudentExplanation" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-student-explanation">Requires student explanation</label>
+                </div>
+
+                <div class="form-check mt-2">
+                    <input id="assignment-parent-evaluation" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RequiresParentEvaluation" @bind:after="AutoSaveAssignment" />
+                    <label class="form-check-label" for="assignment-parent-evaluation">Requires parent evaluation</label>
+                </div>
             </section>
         </aside>
     </div>
@@ -238,7 +394,41 @@ else
                 IsPortfolioCandidate = assignment.IsPortfolioCandidate,
                 PlannedPoints = assignment.PlannedPoints,
                 PlannedWeight = assignment.PlannedWeight,
-                Status = assignment.Status
+                Status = assignment.Status,
+                AssignmentSummary = assignment.AssignmentSummary,
+                StudentFacingGoal = assignment.StudentFacingGoal,
+                EstimatedMinutesMin = assignment.EstimatedMinutesMin,
+                EstimatedMinutesMax = assignment.EstimatedMinutesMax,
+                RequiredDeliverablesText = Lines(assignment.RequiredDeliverables),
+                SubmissionFormats = assignment.SubmissionFormats.ToList(),
+                PortfolioSection = assignment.PortfolioConnection?.PortfolioSection ?? "",
+                ArtifactTitle = assignment.PortfolioConnection?.ArtifactTitle ?? "",
+                ArtifactPurpose = assignment.PortfolioConnection?.ArtifactPurpose ?? "",
+                ReuseInstructions = assignment.PortfolioConnection?.ReuseInstructions ?? "",
+                CrossCourseLinksText = Lines(assignment.PortfolioConnection?.CrossCourseLinks ?? []),
+                RubricId = assignment.Rubric?.RubricId ?? "",
+                RubricScale = assignment.Rubric?.Scale ?? "",
+                RubricCriteriaText = SerializeRubric(assignment.Rubric),
+                LinkedRubricId = assignment.LinkedRubricId,
+                AssessmentSkillsText = Lines(assignment.AssessmentSkills),
+                StudentChecklistText = Lines(assignment.StudentChecklist),
+                ResourcesText = SerializeResources(assignment.Resources),
+                AssignmentStepsText = SerializeSteps(assignment.AssignmentSteps),
+                AllowRevision = assignment.RevisionPolicy?.AllowRevision ?? false,
+                RevisionExpectation = assignment.RevisionPolicy?.RevisionExpectation ?? "",
+                MinimumRevisionCount = assignment.RevisionPolicy?.MinimumRevisionCount ?? 0,
+                CompletionRequirementsText = Lines(assignment.CompletionCriteria?.MinimumRequirements ?? []),
+                RequiresParentReview = assignment.CompletionCriteria?.RequiresParentReview ?? false,
+                MasteryThreshold = assignment.CompletionCriteria?.MasteryThreshold,
+                ReflectionPromptsText = Lines(assignment.ReflectionPrompts),
+                RetainForRecords = assignment.EvidenceRequirements?.RetainForRecords ?? false,
+                EvidenceType = assignment.EvidenceRequirements?.EvidenceType ?? AssignmentEvidenceType.PortfolioArtifact,
+                RecommendedFileTypesText = Lines(assignment.EvidenceRequirements?.RecommendedFileTypes ?? []),
+                RequiresStudentExplanation = assignment.EvidenceRequirements?.RequiresStudentExplanation ?? false,
+                RequiresParentEvaluation = assignment.EvidenceRequirements?.RequiresParentEvaluation ?? false,
+                GradingMode = assignment.Scoring?.GradingMode ?? AssignmentGradingMode.Points,
+                CountsTowardGrade = assignment.Scoring?.CountsTowardGrade ?? true,
+                AllowPartialCredit = assignment.Scoring?.AllowPartialCredit ?? true
             };
     }
 
@@ -269,7 +459,25 @@ else
                 assignmentForm.IsPortfolioCandidate,
                 assignmentForm.PlannedPoints,
                 assignmentForm.PlannedWeight,
-                assignmentForm.Status)));
+                assignmentForm.Status,
+                assignmentForm.AssignmentSummary,
+                assignmentForm.StudentFacingGoal,
+                assignmentForm.EstimatedMinutesMin,
+                assignmentForm.EstimatedMinutesMax,
+                SplitLines(assignmentForm.RequiredDeliverablesText),
+                assignmentForm.SubmissionFormats,
+                BuildPortfolioCommand(),
+                BuildRubricCommand(),
+                assignmentForm.LinkedRubricId,
+                SplitLines(assignmentForm.AssessmentSkillsText),
+                SplitLines(assignmentForm.StudentChecklistText),
+                BuildResourceCommands(),
+                BuildStepCommands(),
+                BuildRevisionCommand(),
+                BuildCompletionCommand(),
+                SplitLines(assignmentForm.ReflectionPromptsText),
+                BuildEvidenceCommand(),
+                BuildScoringCommand())));
     }
 
     private async Task ApplyVariant(ChangeEventArgs eventArgs)
@@ -299,6 +507,40 @@ else
         assignmentForm.PlannedPoints = variant.PlannedPoints;
         assignmentForm.PlannedWeight = variant.PlannedWeight;
         assignmentForm.Status = variant.Status;
+        assignmentForm.AssignmentSummary = variant.AssignmentSummary;
+        assignmentForm.StudentFacingGoal = variant.StudentFacingGoal;
+        assignmentForm.EstimatedMinutesMin = variant.EstimatedMinutesMin;
+        assignmentForm.EstimatedMinutesMax = variant.EstimatedMinutesMax;
+        assignmentForm.RequiredDeliverablesText = Lines(variant.RequiredDeliverables);
+        assignmentForm.SubmissionFormats = variant.SubmissionFormats.ToList();
+        assignmentForm.PortfolioSection = variant.PortfolioConnection?.PortfolioSection ?? "";
+        assignmentForm.ArtifactTitle = variant.PortfolioConnection?.ArtifactTitle ?? "";
+        assignmentForm.ArtifactPurpose = variant.PortfolioConnection?.ArtifactPurpose ?? "";
+        assignmentForm.ReuseInstructions = variant.PortfolioConnection?.ReuseInstructions ?? "";
+        assignmentForm.CrossCourseLinksText = Lines(variant.PortfolioConnection?.CrossCourseLinks ?? []);
+        assignmentForm.RubricId = variant.Rubric?.RubricId ?? "";
+        assignmentForm.RubricScale = variant.Rubric?.Scale ?? "";
+        assignmentForm.RubricCriteriaText = SerializeRubric(variant.Rubric);
+        assignmentForm.LinkedRubricId = variant.LinkedRubricId;
+        assignmentForm.AssessmentSkillsText = Lines(variant.AssessmentSkills);
+        assignmentForm.StudentChecklistText = Lines(variant.StudentChecklist);
+        assignmentForm.ResourcesText = SerializeResources(variant.Resources);
+        assignmentForm.AssignmentStepsText = SerializeSteps(variant.AssignmentSteps);
+        assignmentForm.AllowRevision = variant.RevisionPolicy?.AllowRevision ?? false;
+        assignmentForm.RevisionExpectation = variant.RevisionPolicy?.RevisionExpectation ?? "";
+        assignmentForm.MinimumRevisionCount = variant.RevisionPolicy?.MinimumRevisionCount ?? 0;
+        assignmentForm.CompletionRequirementsText = Lines(variant.CompletionCriteria?.MinimumRequirements ?? []);
+        assignmentForm.RequiresParentReview = variant.CompletionCriteria?.RequiresParentReview ?? false;
+        assignmentForm.MasteryThreshold = variant.CompletionCriteria?.MasteryThreshold;
+        assignmentForm.ReflectionPromptsText = Lines(variant.ReflectionPrompts);
+        assignmentForm.RetainForRecords = variant.EvidenceRequirements?.RetainForRecords ?? false;
+        assignmentForm.EvidenceType = variant.EvidenceRequirements?.EvidenceType ?? AssignmentEvidenceType.PortfolioArtifact;
+        assignmentForm.RecommendedFileTypesText = Lines(variant.EvidenceRequirements?.RecommendedFileTypes ?? []);
+        assignmentForm.RequiresStudentExplanation = variant.EvidenceRequirements?.RequiresStudentExplanation ?? false;
+        assignmentForm.RequiresParentEvaluation = variant.EvidenceRequirements?.RequiresParentEvaluation ?? false;
+        assignmentForm.GradingMode = variant.Scoring?.GradingMode ?? AssignmentGradingMode.Points;
+        assignmentForm.CountsTowardGrade = variant.Scoring?.CountsTowardGrade ?? true;
+        assignmentForm.AllowPartialCredit = variant.Scoring?.AllowPartialCredit ?? true;
         await AutoSaveAssignment();
     }
 
@@ -325,6 +567,20 @@ else
         else
         {
             assignmentForm.LinkedLessonIds.Add(lessonId);
+        }
+
+        await AutoSaveAssignment();
+    }
+
+    private async Task ToggleSubmissionFormat(AssignmentSubmissionFormat format)
+    {
+        if (assignmentForm.SubmissionFormats.Contains(format))
+        {
+            assignmentForm.SubmissionFormats.Remove(format);
+        }
+        else
+        {
+            assignmentForm.SubmissionFormats.Add(format);
         }
 
         await AutoSaveAssignment();
@@ -391,6 +647,182 @@ else
         return Session.CurrentUser ?? UserContext.Student("Anonymous");
     }
 
+    private AssignmentPortfolioConnectionCommand? BuildPortfolioCommand()
+    {
+        if (!assignmentForm.IsPortfolioCandidate &&
+            string.IsNullOrWhiteSpace(assignmentForm.PortfolioSection) &&
+            string.IsNullOrWhiteSpace(assignmentForm.ArtifactTitle) &&
+            string.IsNullOrWhiteSpace(assignmentForm.ArtifactPurpose) &&
+            string.IsNullOrWhiteSpace(assignmentForm.ReuseInstructions) &&
+            string.IsNullOrWhiteSpace(assignmentForm.CrossCourseLinksText))
+        {
+            return null;
+        }
+
+        return new AssignmentPortfolioConnectionCommand(
+            assignmentForm.IsPortfolioCandidate,
+            assignmentForm.PortfolioSection,
+            assignmentForm.ArtifactTitle,
+            assignmentForm.ArtifactPurpose,
+            assignmentForm.ReuseInstructions,
+            SplitLines(assignmentForm.CrossCourseLinksText));
+    }
+
+    private LessonRubricCommand? BuildRubricCommand()
+    {
+        var criteria = ParseRubric(assignmentForm.RubricCriteriaText);
+        if (string.IsNullOrWhiteSpace(assignmentForm.RubricId) &&
+            string.IsNullOrWhiteSpace(assignmentForm.RubricScale) &&
+            criteria.Count == 0)
+        {
+            return null;
+        }
+
+        return new LessonRubricCommand(assignmentForm.RubricId, assignmentForm.RubricScale, criteria);
+    }
+
+    private IReadOnlyList<AssignmentResourceCommand> BuildResourceCommands()
+    {
+        return assignmentForm.ResourcesText
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select((line, index) =>
+            {
+                var parts = line.Split('|', StringSplitOptions.TrimEntries);
+                var type = parts.Length > 2 && Enum.TryParse<LessonResourceType>(parts[2], true, out var parsedType)
+                    ? parsedType
+                    : LessonResourceType.Website;
+                return new AssignmentResourceCommand(
+                    parts.ElementAtOrDefault(0) ?? "",
+                    type,
+                    parts.ElementAtOrDefault(1) ?? "",
+                    "",
+                    type == LessonResourceType.PhysicalResource,
+                    true,
+                    parts.ElementAtOrDefault(3) ?? "",
+                    parts.ElementAtOrDefault(4) ?? "",
+                    null);
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+            .ToArray();
+    }
+
+    private IReadOnlyList<AssignmentStepCommand> BuildStepCommands()
+    {
+        return assignmentForm.AssignmentStepsText
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select((line, index) =>
+            {
+                var parts = line.Split('|', StringSplitOptions.TrimEntries);
+                var minutes = int.TryParse(parts.ElementAtOrDefault(2), out var parsed) ? parsed : 0;
+                return new AssignmentStepCommand(index + 1, parts.ElementAtOrDefault(0) ?? "", parts.ElementAtOrDefault(1) ?? "", minutes);
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Title))
+            .ToArray();
+    }
+
+    private AssignmentRevisionPolicyCommand? BuildRevisionCommand()
+    {
+        if (!assignmentForm.AllowRevision &&
+            string.IsNullOrWhiteSpace(assignmentForm.RevisionExpectation) &&
+            assignmentForm.MinimumRevisionCount <= 0)
+        {
+            return null;
+        }
+
+        return new AssignmentRevisionPolicyCommand(
+            assignmentForm.AllowRevision,
+            assignmentForm.RevisionExpectation,
+            assignmentForm.MinimumRevisionCount);
+    }
+
+    private AssignmentCompletionCriteriaCommand? BuildCompletionCommand()
+    {
+        var requirements = SplitLines(assignmentForm.CompletionRequirementsText);
+        if (requirements.Count == 0 && !assignmentForm.RequiresParentReview && assignmentForm.MasteryThreshold is null)
+        {
+            return null;
+        }
+
+        return new AssignmentCompletionCriteriaCommand(requirements, assignmentForm.RequiresParentReview, assignmentForm.MasteryThreshold);
+    }
+
+    private AssignmentEvidenceRequirementsCommand? BuildEvidenceCommand()
+    {
+        var fileTypes = SplitLines(assignmentForm.RecommendedFileTypesText);
+        if (!assignmentForm.RetainForRecords &&
+            fileTypes.Count == 0 &&
+            !assignmentForm.RequiresStudentExplanation &&
+            !assignmentForm.RequiresParentEvaluation)
+        {
+            return null;
+        }
+
+        return new AssignmentEvidenceRequirementsCommand(
+            assignmentForm.RetainForRecords,
+            assignmentForm.EvidenceType,
+            fileTypes,
+            assignmentForm.RequiresStudentExplanation,
+            assignmentForm.RequiresParentEvaluation);
+    }
+
+    private AssignmentScoringCommand BuildScoringCommand()
+    {
+        return new AssignmentScoringCommand(
+            assignmentForm.PlannedPoints,
+            assignmentForm.PlannedWeight,
+            assignmentForm.GradingMode,
+            assignmentForm.CountsTowardGrade,
+            assignmentForm.AllowPartialCredit);
+    }
+
+    private static IReadOnlyList<string> SplitLines(string value)
+    {
+        return value
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+    }
+
+    private static string Lines(IEnumerable<string> values)
+    {
+        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static IReadOnlyList<LessonRubricCriterionCommand> ParseRubric(string value)
+    {
+        return value
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line =>
+            {
+                var parts = line.Split('|', StringSplitOptions.TrimEntries);
+                return new LessonRubricCriterionCommand(
+                    parts.ElementAtOrDefault(0) ?? "",
+                    parts.ElementAtOrDefault(1) ?? "",
+                    parts.ElementAtOrDefault(2) ?? "",
+                    parts.ElementAtOrDefault(3) ?? "",
+                    parts.ElementAtOrDefault(4) ?? "");
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Criterion))
+            .ToArray();
+    }
+
+    private static string SerializeRubric(LessonRubric? rubric)
+    {
+        return rubric is null
+            ? ""
+            : Lines(rubric.Criteria.Select(item => $"{item.Criterion} | {item.Level4} | {item.Level3} | {item.Level2} | {item.Level1}"));
+    }
+
+    private static string SerializeResources(IReadOnlyList<AssignmentResource> resources)
+    {
+        return Lines(resources.Select(item => $"{item.Name} | {item.Url} | {item.Type} | {item.StudentInstructions} | {item.SourceNote}"));
+    }
+
+    private static string SerializeSteps(IReadOnlyList<AssignmentStep> steps)
+    {
+        return Lines(steps.OrderBy(step => step.StepOrder).Select(item => $"{item.Title} | {item.Instructions} | {item.EstimatedMinutes}"));
+    }
+
     private static string AssignmentTypeLabel(AssignmentType type)
     {
         return type switch
@@ -415,6 +847,7 @@ else
             InstructionalMethodProfile.InquiryDiscussion => "Inquiry / discussion",
             InstructionalMethodProfile.IndependentStudy => "Independent study",
             InstructionalMethodProfile.MasteryPractice => "Mastery practice",
+            InstructionalMethodProfile.Digital => "Digital",
             _ => profile.ToString()
         };
     }
@@ -433,6 +866,11 @@ else
         };
     }
 
+    private static string EnumLabel(string value)
+    {
+        return Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+    }
+
     private sealed record PageMessage(string Text, string CssClass);
 
     private sealed class AssignmentFormModel
@@ -440,13 +878,47 @@ else
         public string Title { get; set; } = "";
         public AssignmentType Type { get; set; } = AssignmentType.PortfolioArtifact;
         public InstructionalMethodProfile MethodProfile { get; set; } = InstructionalMethodProfile.Hybrid;
+        public string AssignmentSummary { get; set; } = "";
+        public string StudentFacingGoal { get; set; } = "";
         public string Instructions { get; set; } = "";
         public string EstimatedEffort { get; set; } = "";
+        public int? EstimatedMinutesMin { get; set; }
+        public int? EstimatedMinutesMax { get; set; }
         public string DueTimingLabel { get; set; } = "";
         public DateOnly? DueDate { get; set; }
         public List<string> LinkedModuleObjectives { get; set; } = [];
         public List<Guid> LinkedLessonIds { get; set; } = [];
         public string RequiredOutput { get; set; } = "";
+        public string RequiredDeliverablesText { get; set; } = "";
+        public List<AssignmentSubmissionFormat> SubmissionFormats { get; set; } = [];
+        public string PortfolioSection { get; set; } = "";
+        public string ArtifactTitle { get; set; } = "";
+        public string ArtifactPurpose { get; set; } = "";
+        public string ReuseInstructions { get; set; } = "";
+        public string CrossCourseLinksText { get; set; } = "";
+        public string RubricId { get; set; } = "";
+        public string RubricScale { get; set; } = "";
+        public string RubricCriteriaText { get; set; } = "";
+        public string LinkedRubricId { get; set; } = "";
+        public string AssessmentSkillsText { get; set; } = "";
+        public string StudentChecklistText { get; set; } = "";
+        public string ResourcesText { get; set; } = "";
+        public string AssignmentStepsText { get; set; } = "";
+        public bool AllowRevision { get; set; }
+        public string RevisionExpectation { get; set; } = "";
+        public int MinimumRevisionCount { get; set; }
+        public string CompletionRequirementsText { get; set; } = "";
+        public bool RequiresParentReview { get; set; }
+        public decimal? MasteryThreshold { get; set; }
+        public string ReflectionPromptsText { get; set; } = "";
+        public bool RetainForRecords { get; set; }
+        public AssignmentEvidenceType EvidenceType { get; set; } = AssignmentEvidenceType.PortfolioArtifact;
+        public string RecommendedFileTypesText { get; set; } = "";
+        public bool RequiresStudentExplanation { get; set; }
+        public bool RequiresParentEvaluation { get; set; }
+        public AssignmentGradingMode GradingMode { get; set; } = AssignmentGradingMode.Points;
+        public bool CountsTowardGrade { get; set; } = true;
+        public bool AllowPartialCredit { get; set; } = true;
         public string ParentNotes { get; set; } = "";
         public bool IsPortfolioCandidate { get; set; }
         public decimal? PlannedPoints { get; set; }

@@ -84,7 +84,24 @@ public sealed record LessonView(
     string Title,
     string IntroductoryText,
     string LinkedModuleObjective,
-    IReadOnlyList<LessonResourceView> Resources);
+    LessonType LessonType,
+    int EstimatedMinutes,
+    int SuggestedDays,
+    LessonDifficultyLevel DifficultyLevel,
+    IReadOnlyList<string> SubjectAreas,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Prerequisites,
+    IReadOnlyList<LessonLearningObjectiveView> LearningObjectives,
+    IReadOnlyList<StandardsAlignmentView> StandardsAlignments,
+    IReadOnlyList<string> SuccessCriteria,
+    IReadOnlyList<LessonStepView> LessonSteps,
+    IReadOnlyList<LessonResourceView> Resources,
+    IReadOnlyList<LessonProblemSetView> ProblemSets,
+    IReadOnlyList<LessonPortfolioConnectionView> PortfolioConnections,
+    LessonRubricView? Rubric,
+    IReadOnlyList<string> ReflectionPrompts,
+    LessonInstructorNotesView? InstructorNotes,
+    IReadOnlyList<Guid> LinkedAssignmentIds);
 
 public sealed record LessonResourceView(
     Guid Id,
@@ -93,7 +110,69 @@ public sealed record LessonResourceView(
     string Url,
     string FilePath,
     bool IsPhysicalResource,
-    string SourceNote);
+    string SourceNote,
+    bool Required,
+    int EstimatedMinutes,
+    string StudentInstructions,
+    string NotesPrompt,
+    LessonResourceCitationView? Citation,
+    bool OfflineAvailable,
+    string License);
+
+public sealed record LessonResourceCitationView(string Title, string Publisher, DateTimeOffset? AccessedAtUtc);
+
+public sealed record LessonLearningObjectiveView(string ObjectiveId, string Text, BloomLevel BloomLevel);
+
+public sealed record StandardsAlignmentView(string Framework, string Code, string Description);
+
+public sealed record LessonStepView(
+    int StepOrder,
+    string Title,
+    LessonStepType StepType,
+    string Instructions,
+    int EstimatedMinutes,
+    bool Required);
+
+public sealed record LessonProblemSetView(
+    string ProblemSetId,
+    string Title,
+    string Instructions,
+    int EstimatedMinutes,
+    IReadOnlyList<LessonProblemView> Problems);
+
+public sealed record LessonProblemView(
+    string ProblemId,
+    string Prompt,
+    ProblemResponseType ResponseType,
+    string ExpectedAnswer,
+    string Solution,
+    IReadOnlyList<string> Skills,
+    string Difficulty);
+
+public sealed record LessonPortfolioConnectionView(
+    string PortfolioSection,
+    string ArtifactTitle,
+    string ArtifactPurpose,
+    IReadOnlyList<string> CrossCourseLinks,
+    string ReuseInstructions);
+
+public sealed record LessonRubricView(
+    string RubricId,
+    string Scale,
+    IReadOnlyList<LessonRubricCriterionView> Criteria);
+
+public sealed record LessonRubricCriterionView(
+    string Criterion,
+    string Level4,
+    string Level3,
+    string Level2,
+    string Level1);
+
+public sealed record LessonInstructorNotesView(
+    string Overview,
+    IReadOnlyList<string> LookFors,
+    IReadOnlyList<string> CommonIssues,
+    IReadOnlyList<string> SuggestedFeedback);
 
 public sealed record AssignmentView(
     Guid Id,
@@ -114,7 +193,25 @@ public sealed record AssignmentView(
     bool IsPortfolioCandidate,
     decimal? PlannedPoints,
     decimal? PlannedWeight,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary,
+    string StudentFacingGoal,
+    int? EstimatedMinutesMin,
+    int? EstimatedMinutesMax,
+    IReadOnlyList<string> RequiredDeliverables,
+    IReadOnlyList<AssignmentSubmissionFormat> SubmissionFormats,
+    AssignmentPortfolioConnection? PortfolioConnection,
+    LessonRubric? Rubric,
+    string LinkedRubricId,
+    IReadOnlyList<string> AssessmentSkills,
+    IReadOnlyList<string> StudentChecklist,
+    IReadOnlyList<AssignmentResource> Resources,
+    IReadOnlyList<AssignmentStep> AssignmentSteps,
+    AssignmentRevisionPolicy? RevisionPolicy,
+    AssignmentCompletionCriteria? CompletionCriteria,
+    IReadOnlyList<string> ReflectionPrompts,
+    AssignmentEvidenceRequirements? EvidenceRequirements,
+    AssignmentScoring? Scoring);
 
 public sealed record AssignmentVariantView(
     string VariantId,
@@ -132,7 +229,25 @@ public sealed record AssignmentVariantView(
     bool IsPortfolioCandidate,
     decimal? PlannedPoints,
     decimal? PlannedWeight,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    string AssignmentSummary,
+    string StudentFacingGoal,
+    int? EstimatedMinutesMin,
+    int? EstimatedMinutesMax,
+    IReadOnlyList<string> RequiredDeliverables,
+    IReadOnlyList<AssignmentSubmissionFormat> SubmissionFormats,
+    AssignmentPortfolioConnection? PortfolioConnection,
+    LessonRubric? Rubric,
+    string LinkedRubricId,
+    IReadOnlyList<string> AssessmentSkills,
+    IReadOnlyList<string> StudentChecklist,
+    IReadOnlyList<AssignmentResource> Resources,
+    IReadOnlyList<AssignmentStep> AssignmentSteps,
+    AssignmentRevisionPolicy? RevisionPolicy,
+    AssignmentCompletionCriteria? CompletionCriteria,
+    IReadOnlyList<string> ReflectionPrompts,
+    AssignmentEvidenceRequirements? EvidenceRequirements,
+    AssignmentScoring? Scoring);
 
 public sealed record CoverageSummaryItem(
     Guid RequirementAreaId,
@@ -155,6 +270,31 @@ public sealed record CoursePackDownloadFile(
     string ContentType,
     byte[] Content,
     bool IsArchive);
+
+public sealed record CourseImportResult(Guid CourseId, string CourseTitle);
+
+public sealed record CoursePlanBundleImportResult(int CourseCount, int ModuleCount, int LessonCount, int AssignmentCount);
+
+public sealed record LessonPackDownloadFile(
+    string FileName,
+    string ContentType,
+    byte[] Content);
+
+public sealed record LessonPackImportResult(int LessonCount);
+
+public sealed record AssignmentPackDownloadFile(
+    string FileName,
+    string ContentType,
+    byte[] Content);
+
+public sealed record AssignmentPackImportResult(int AssignmentCount);
+
+public sealed record ModulePackDownloadFile(
+    string FileName,
+    string ContentType,
+    byte[] Content);
+
+public sealed record ModulePackImportResult(Guid ModuleId, string ModuleTitle);
 
 public sealed record CoursePackDetail(
     string Id,

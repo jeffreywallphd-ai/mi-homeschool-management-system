@@ -10,6 +10,7 @@ using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using HomeschoolManager.Infrastructure.Configuration;
+using System.IO.Compression;
 using System.Text.Json;
 
 var tests = new List<(string Name, Func<Task> Test)>
@@ -160,7 +161,120 @@ var tests = new List<(string Name, Func<Task> Test)>
         var firstModule = firstCourse.GetProperty("modules")[0];
         AssertTrue(firstModule.GetProperty("lessons").GetArrayLength() > 0, "Download should include lessons.");
         AssertTrue(firstModule.GetProperty("assignments").GetArrayLength() > 0, "Download should include assignments.");
+        var firstVariant = firstModule.GetProperty("assignments")[0].GetProperty("variants")[0];
+        AssertTrue(firstVariant.TryGetProperty("assignmentSummary", out _), "Course pack assignment variants should include assignment summary.");
+        AssertTrue(firstVariant.TryGetProperty("requiredDeliverables", out _), "Course pack assignment variants should include deliverables.");
+        AssertTrue(firstVariant.TryGetProperty("assignmentSteps", out _), "Course pack assignment variants should include assignment steps.");
+        AssertTrue(firstVariant.TryGetProperty("scoring", out _), "Course pack assignment variants should include scoring.");
     }),
+    ("Single coursepack template downloads as a one-course shell", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var service = new CourseService(repository);
+        var result = service.DownloadCoursePackTemplate();
+        AssertTrue(result.Succeeded, "Coursepack template download should succeed.");
+        if (result.Value is null)
+        {
+            throw new InvalidOperationException("Coursepack template did not return a file.");
+        }
+
+        AssertTrue(result.Value.FileName.EndsWith(".coursepack", StringComparison.Ordinal), "Template should use .coursepack.");
+        AssertEqual("application/json", result.Value.ContentType, "Template should be JSON.");
+
+        using var document = JsonDocument.Parse(result.Value.Content);
+        var root = document.RootElement;
+        AssertEqual("homeschool-manager.coursepack", root.GetProperty("format").GetString() ?? "", "Unexpected coursepack template format.");
+        AssertEqual(2, root.GetProperty("formatVersion").GetInt32(), "Single-course coursepack should use version 2.");
+        AssertTrue(root.GetProperty("isTemplate").GetBoolean(), "Template should identify itself as a template.");
+        AssertTrue(root.TryGetProperty("sourceIdentity", out var templateIdentity), "Template should include source identity metadata.");
+        AssertEqual("template.coursepack-template", templateIdentity.GetProperty("sourceNamespace").GetString() ?? "", "Template source namespace should be explicit.");
+        var course = root.GetProperty("course");
+        AssertTrue(course.TryGetProperty("description", out _), "Coursepack should include course detail description.");
+        AssertTrue(course.TryGetProperty("curriculumPlan", out _), "Coursepack should include curriculum plan.");
+        AssertTrue(course.TryGetProperty("moduleReferences", out var moduleReferences), "Coursepack should include module references.");
+        AssertTrue(moduleReferences.GetArrayLength() > 0, "Coursepack template should include a sample module reference.");
+        AssertFalse(course.TryGetProperty("modules", out _), "Single-course coursepack should not embed module bodies.");
+    }),
+    ("Default course plan downloads as structured zip bundle", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var service = new CourseService(repository);
+        var result = await service.DownloadCoursePlanBundleAsync(DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertTrue(result.Succeeded, "Course plan bundle download should succeed.");
+        if (result.Value is null)
+        {
+            throw new InvalidOperationException("Course plan bundle did not return a file.");
+        }
+
+        AssertTrue(result.Value.FileName.EndsWith(".zip", StringComparison.Ordinal), "Bundle should use .zip so standard zip programs recognize it.");
+        AssertTrue(result.Value.IsArchive, "Course plan bundle should be a zip archive.");
+        using var stream = new MemoryStream(result.Value.Content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        AssertTrue(archive.Entries.Any(entry => entry.FullName == "courseplan.courseplanpack"), "Bundle should include a courseplanpack manifest.");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/course.coursepack", StringComparison.OrdinalIgnoreCase)), "Bundle should include course folders with coursepacks.");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/module.modulepack", StringComparison.OrdinalIgnoreCase)), "Bundle should include modulepacks.");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/lessons.lessonpack", StringComparison.OrdinalIgnoreCase)), "Bundle should include lessonpacks.");
+        AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/assignments.assignmentpack", StringComparison.OrdinalIgnoreCase)), "Bundle should include assignmentpacks.");
+
+        var manifest = archive.Entries.First(entry => entry.FullName == "courseplan.courseplanpack");
+        using var manifestDocument = JsonDocument.Parse(manifest.Open());
+        AssertTrue(manifestDocument.RootElement.TryGetProperty("sourceIdentity", out var planIdentity), "Course plan manifest should include source identity.");
+        AssertEqual("builtin.mi-general-high-school-core-v4", planIdentity.GetProperty("sourceNamespace").GetString() ?? "", "Default plan source namespace should be stable.");
+
+        var firstCourse = archive.Entries.First(entry => entry.FullName.EndsWith("/course.coursepack", StringComparison.OrdinalIgnoreCase));
+        using var courseDocument = JsonDocument.Parse(firstCourse.Open());
+        AssertEqual(2, courseDocument.RootElement.GetProperty("formatVersion").GetInt32(), "Bundled coursepacks should use single-course format.");
+        AssertTrue(courseDocument.RootElement.TryGetProperty("sourceIdentity", out var courseIdentity), "Bundled coursepacks should include source identity.");
+        AssertEqual("builtin.mi-general-high-school-core-v4", courseIdentity.GetProperty("sourceNamespace").GetString() ?? "", "Bundled course source namespace should match the plan.");
+        AssertTrue(courseDocument.RootElement.GetProperty("course").TryGetProperty("moduleReferences", out _), "Bundled coursepack should reference modules.");
+        AssertFalse(courseDocument.RootElement.GetProperty("course").TryGetProperty("modules", out _), "Bundled coursepack should not embed module bodies.");
+    }),
+    ("Course plan bundle imports courses modules lessons and assignments", (Func<Task>)(async () =>
+    {
+        var sourceRepository = await CreateRepositoryAsync();
+        var sourceService = new CourseService(sourceRepository);
+        var bundle = await sourceService.DownloadCoursePlanBundleAsync(DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertTrue(bundle.Succeeded, "Course plan bundle download should succeed.");
+        if (bundle.Value is null)
+        {
+            throw new InvalidOperationException("Course plan bundle did not return content.");
+        }
+
+        var repository = await CreateRepositoryAsync();
+        var setup = new SetupService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        await CreateSetupAsync(repository);
+        var studentId = (await setup.ListStudentsAsync()).Single().Id;
+
+        var service = new CourseService(repository);
+        var import = await service.ImportCoursePlanBundleAsync(parent, studentId, bundle.Value.Content);
+        AssertTrue(import.Succeeded, $"Course plan bundle import should succeed. {string.Join(" | ", import.Errors)}");
+        AssertTrue(import.Value?.CourseCount > 0, "Bundle import should add courses.");
+        AssertTrue(import.Value?.ModuleCount > 0, "Bundle import should add modules.");
+        AssertTrue(import.Value?.LessonCount > 0, "Bundle import should add lessons.");
+        AssertTrue(import.Value?.AssignmentCount > 0, "Bundle import should add assignments.");
+        var courses = await service.ListCoursesAsync(studentId);
+        AssertTrue(courses.Count > 0, "Imported courses should be visible.");
+        var detail = await service.GetCourseDetailAsync(courses[0].Id);
+        AssertTrue(detail?.Modules.Count > 0, "Imported course should have modules.");
+        AssertTrue(detail?.Modules.SelectMany(module => module.Lessons).Any() ?? false, "Imported modules should have lessons.");
+        AssertTrue(detail?.Modules.SelectMany(module => module.Assignments).Any() ?? false, "Imported modules should have assignments.");
+        var storedCourses = await repository.GetCoursesAsync();
+        AssertTrue(storedCourses.All(course => course.SourcePackId == "builtin.mi-general-high-school-core-v4"), "Imported courses should store the pack namespace as the source pack key.");
+
+        var courseCount = courses.Count;
+        var moduleCount = detail?.Modules.Count ?? 0;
+        var lessonCount = detail?.Modules.SelectMany(module => module.Lessons).Count() ?? 0;
+        var assignmentCount = detail?.Modules.SelectMany(module => module.Assignments).Count() ?? 0;
+        var secondImport = await service.ImportCoursePlanBundleAsync(parent, studentId, bundle.Value.Content);
+        AssertTrue(secondImport.Succeeded, $"Second course plan bundle import should update existing pack content. {string.Join(" | ", secondImport.Errors)}");
+        var coursesAfterSecondImport = await service.ListCoursesAsync(studentId);
+        var detailAfterSecondImport = await service.GetCourseDetailAsync(courses[0].Id);
+        AssertEqual(courseCount, coursesAfterSecondImport.Count, "Re-importing a newer version of the same plan should not duplicate courses.");
+        AssertEqual(moduleCount, detailAfterSecondImport?.Modules.Count ?? 0, "Re-importing a newer version should not duplicate modules.");
+        AssertEqual(lessonCount, detailAfterSecondImport?.Modules.SelectMany(module => module.Lessons).Count() ?? 0, "Re-importing a newer version should not duplicate lessons.");
+        AssertEqual(assignmentCount, detailAfterSecondImport?.Modules.SelectMany(module => module.Assignments).Count() ?? 0, "Re-importing a newer version should not duplicate assignments.");
+    })),
     ("Downloaded coursepack installs into system before course import", async () =>
     {
         var sourceRepository = await CreateRepositoryAsync();
@@ -506,6 +620,145 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(deleteResult.Succeeded, "Parent should delete module after confirmation.");
         AssertFalse((await service.ListModulesAsync(courseId)).Any(module => module.Id == first.Value), "Deleted module should be removed.");
     })),
+    ("Module packs download templates and import module shells without lesson or assignment bodies", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                Resources("OpenStax Cells"),
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await service.CreateLessonAsync(parent, new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+        var assignment = await service.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell structure reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain the function of cell structures.",
+                "45 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "Written reflection.",
+                "",
+                true,
+                20,
+                null,
+                AssignmentStatus.Planned));
+        AssertTrue(assignment.Succeeded, "Assignment create failed.");
+
+        var template = service.DownloadModulePackTemplate();
+        AssertTrue(template.Succeeded, "Module pack template should download.");
+        AssertTrue(template.Value?.FileName.EndsWith(".modulepack", StringComparison.Ordinal) ?? false, "Template should use .modulepack.");
+        using (var templateDocument = JsonDocument.Parse(template.Value!.Content))
+        {
+            var root = templateDocument.RootElement;
+            AssertEqual("homeschool-manager.modulepack", root.GetProperty("format").GetString() ?? "", "Template should use modulepack format.");
+            var templateModule = root.GetProperty("module");
+            AssertTrue(templateModule.TryGetProperty("lessonSequence", out _), "Template should include lesson sequence references.");
+            AssertTrue(templateModule.TryGetProperty("assignmentSequence", out _), "Template should include assignment sequence references.");
+        }
+
+        var download = await service.DownloadModulePackAsync(course.Value, module.Value);
+        AssertTrue(download.Succeeded, "Module pack download should succeed.");
+        AssertTrue(download.Value?.FileName.EndsWith(".modulepack", StringComparison.Ordinal) ?? false, "Download should use .modulepack.");
+        using (var downloadDocument = JsonDocument.Parse(download.Value!.Content))
+        {
+            var downloadedModule = downloadDocument.RootElement.GetProperty("module");
+            AssertEqual("Cells", downloadedModule.GetProperty("title").GetString() ?? "", "Downloaded module should include module title.");
+            AssertEqual(1, downloadedModule.GetProperty("lessonSequence").GetArrayLength(), "Downloaded module should include lightweight lesson sequencing.");
+            AssertEqual(1, downloadedModule.GetProperty("assignmentSequence").GetArrayLength(), "Downloaded module should include lightweight assignment sequencing.");
+            AssertFalse(downloadedModule.TryGetProperty("lessons", out _), "Module pack should not embed lesson details.");
+            AssertFalse(downloadedModule.TryGetProperty("assignments", out _), "Module pack should not embed assignment details.");
+        }
+
+        var importJson = """
+            {
+              "format": "homeschool-manager.modulepack",
+              "formatVersion": 1,
+              "downloadedAtUtc": "2026-06-07T00:00:00+00:00",
+              "packageMode": "json",
+              "archiveNote": "No attached files.",
+              "name": "Cells Module Shell",
+              "description": "A module shell without lesson or assignment bodies.",
+              "module": {
+                "sourceModuleId": "cells-module-shell",
+                "sequenceOrder": 1,
+                "title": "Imported Cells",
+                "description": "Imported module description.",
+                "termName": "",
+                "estimatedLength": "3 weeks",
+                "instructions": "Work through installed lessons and assignments after importing them separately.",
+                "learningObjectives": [
+                  {
+                    "text": "Explain how cell parts work together.",
+                    "linkedCourseObjective": ""
+                  }
+                ],
+                "resources": [
+                  {
+                    "name": "Module overview resource",
+                    "link": "https://example.com/module",
+                    "filePath": "",
+                    "isPhysicalResource": false
+                  }
+                ],
+                "assignmentEvidencePlaceholder": "Import matching lessonpack and assignmentpack files next.",
+                "status": "Planned",
+                "lessonSequence": [
+                  {
+                    "sourceId": "cells-lesson-1",
+                    "title": "Cell structure",
+                    "sequenceOrder": 1
+                  }
+                ],
+                "assignmentSequence": [
+                  {
+                    "sourceId": "cells-assignment-1",
+                    "title": "Cell reflection",
+                    "sequenceOrder": 1
+                  }
+                ]
+              }
+            }
+            """;
+
+        var denied = await service.ImportModulePackAsync(student, course.Value, System.Text.Encoding.UTF8.GetBytes(importJson));
+        AssertFalse(denied.Succeeded, "Student should not import module packs.");
+
+        var import = await service.ImportModulePackAsync(parent, course.Value, System.Text.Encoding.UTF8.GetBytes(importJson));
+        AssertTrue(import.Succeeded, "Module pack import should succeed.");
+        var imported = await service.GetModuleDetailAsync(course.Value, import.Value?.ModuleId ?? Guid.Empty);
+        if (imported is null)
+        {
+            throw new InvalidOperationException("Imported module was not found.");
+        }
+
+        AssertEqual("Imported Cells", imported.Title, "Imported module title should persist.");
+        AssertEqual(0, imported.Lessons.Count, "Module pack import should not create lesson bodies.");
+        AssertEqual(0, imported.Assignments.Count, "Module pack import should not create assignment bodies.");
+    }),
     ("Parent can create update and reorder lessons while student cannot mutate them", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -560,6 +813,262 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(delete.Succeeded, "Lesson delete failed.");
         AssertFalse((await service.ListLessonsAsync(course.Value, module.Value)).Any(lesson => lesson.Id == secondLesson.Value), "Deleted lesson should be removed.");
     }),
+    ("Lesson packs download templates and import one or more lessons into a module", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                [],
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var linkedAssignment = await service.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell Evidence Assignment",
+                AssignmentType.PortfolioArtifact,
+                InstructionalMethodProfile.Hybrid,
+                "Create evidence showing how cell structures support cell function.",
+                "45 minutes",
+                "After the organelles lesson",
+                null,
+                ["Explain cell structure."],
+                [],
+                "Annotated diagram or written explanation.",
+                "",
+                true,
+                20,
+                null,
+                AssignmentStatus.Planned));
+        AssertTrue(linkedAssignment.Succeeded, "Linked assignment create failed.");
+
+        var template = service.DownloadLessonPackTemplate();
+        AssertTrue(template.Succeeded, "Lesson pack template should download.");
+        AssertTrue(template.Value?.FileName.EndsWith(".lessonpack", StringComparison.Ordinal) ?? false, "Template should use .lessonpack.");
+        using (var templateDocument = JsonDocument.Parse(template.Value!.Content))
+        {
+            var root = templateDocument.RootElement;
+            AssertEqual("homeschool-manager.lessonpack", root.GetProperty("format").GetString() ?? "", "Template should use lessonpack format.");
+            AssertTrue(root.GetProperty("lessons").GetArrayLength() >= 1, "Template should include at least one sample lesson.");
+            var lesson = root.GetProperty("lessons")[0];
+            AssertTrue(lesson.TryGetProperty("lessonType", out _), "Template should include lesson type.");
+            AssertTrue(lesson.TryGetProperty("learningObjectives", out _), "Template should include lesson objectives.");
+            AssertTrue(lesson.TryGetProperty("successCriteria", out _), "Template should include success criteria.");
+            AssertTrue(lesson.TryGetProperty("lessonSteps", out _), "Template should include lesson steps.");
+            AssertTrue(lesson.TryGetProperty("problemSets", out _), "Template should include problem sets.");
+            AssertTrue(lesson.TryGetProperty("portfolioConnections", out _), "Template should include portfolio connections.");
+            AssertTrue(lesson.TryGetProperty("rubric", out _), "Template should include rubric.");
+            AssertTrue(lesson.TryGetProperty("instructorNotes", out _), "Template should include instructor notes.");
+            var resource = lesson.GetProperty("resources")[0];
+            AssertTrue(resource.TryGetProperty("filePath", out _), "Template should include the full resource filePath field.");
+            AssertTrue(resource.TryGetProperty("isPhysicalResource", out _), "Template should include the full resource physical-resource field.");
+            AssertTrue(resource.TryGetProperty("studentInstructions", out _), "Template should include resource student instructions.");
+        }
+
+        var lessonPackJson = """
+            {
+              "format": "homeschool-manager.lessonpack",
+              "formatVersion": 1,
+              "downloadedAtUtc": "2026-06-07T00:00:00+00:00",
+              "packageMode": "json",
+              "archiveNote": "No attached files.",
+              "name": "Cells Mini Lesson Pack",
+              "description": "Two cell lessons.",
+              "lessons": [
+                {
+                  "sourceLessonId": "cells-pack-lesson-1",
+                  "sequenceOrder": 1,
+                  "title": "Cell Organelles",
+                  "introductoryText": "Learn how major organelles help a cell perform life functions.",
+                  "linkedModuleObjective": "Explain cell structure.",
+                  "lessonType": "SelfGuided",
+                  "estimatedMinutes": 90,
+                  "suggestedDays": 2,
+                  "difficultyLevel": "StandardHighSchool",
+                  "subjectAreas": [ "Science" ],
+                  "tags": [ "cells", "organelles" ],
+                  "prerequisites": [ "Basic microscope vocabulary" ],
+                  "learningObjectives": [
+                    {
+                      "objectiveId": "cell-organelle-1",
+                      "text": "Explain how major organelles support cell function.",
+                      "bloomLevel": "Understand"
+                    }
+                  ],
+                  "standardsAlignments": [
+                    {
+                      "framework": "Parent-defined",
+                      "code": "BIO-CELL-01",
+                      "description": "Explains cell organelles and their functions."
+                    }
+                  ],
+                  "successCriteria": [
+                    "I can identify major organelles.",
+                    "I can explain each organelle's job."
+                  ],
+                  "lessonSteps": [
+                    {
+                      "stepOrder": 1,
+                      "title": "Read and annotate",
+                      "stepType": "Planning",
+                      "instructions": "Read the section and annotate organelle functions.",
+                      "estimatedMinutes": 30,
+                      "required": true
+                    },
+                    {
+                      "stepOrder": 2,
+                      "title": "Research vocabulary",
+                      "stepType": "Research",
+                      "instructions": "Find one reliable explanation of a cell organelle.",
+                      "estimatedMinutes": 15,
+                      "required": true
+                    }
+                  ],
+                  "resources": [
+                    {
+                      "name": "OpenStax Biology 2e - Eukaryotic Cells",
+                      "type": "DataSource",
+                      "url": "https://openstax.org/books/biology-2e/pages/4-4-eukaryotic-cells",
+                      "filePath": "",
+                      "isPhysicalResource": false,
+                      "sourceNote": "Open textbook section.",
+                      "required": true,
+                      "estimatedMinutes": 25,
+                      "studentInstructions": "Identify three organelles and explain their jobs.",
+                      "notesPrompt": "Which organelle seems most important for energy?",
+                      "citation": {
+                        "title": "Eukaryotic Cells",
+                        "publisher": "OpenStax",
+                        "accessedAtUtc": "2026-06-07T00:00:00+00:00"
+                      },
+                      "offlineAvailable": false,
+                      "license": "Check OpenStax license terms."
+                    }
+                  ],
+                  "problemSets": [
+                    {
+                      "problemSetId": "cells-ps-1",
+                      "title": "Cell Function Practice",
+                      "instructions": "Answer in complete sentences.",
+                      "estimatedMinutes": 20,
+                      "problems": [
+                        {
+                          "problemId": "cells-ps-1-1",
+                          "prompt": "Which organelle releases usable energy for the cell?",
+                          "responseType": "GraphAndWrittenAnalysis",
+                          "expectedAnswer": "Mitochondrion",
+                          "solution": "Mitochondria release usable energy through cellular respiration.",
+                          "skills": [ "cell vocabulary" ],
+                          "difficulty": "Medium"
+                        }
+                      ]
+                    }
+                  ],
+                  "portfolioConnections": [
+                    {
+                      "portfolioSection": "Biology Portfolio",
+                      "artifactTitle": "Cell Function Diagram",
+                      "artifactPurpose": "Shows understanding of organelles and function.",
+                      "crossCourseLinks": [ "Scientific Communication" ],
+                      "reuseInstructions": "Revise when studying body systems."
+                    }
+                  ],
+                  "rubric": {
+                    "rubricId": "cell-function-rubric",
+                    "scale": "4-point",
+                    "criteria": [
+                      {
+                        "criterion": "Accuracy",
+                        "level4": "All organelles are accurate and explained.",
+                        "level3": "Most organelles are accurate.",
+                        "level2": "Some organelles are confused.",
+                        "level1": "Major organelles are missing."
+                      }
+                    ]
+                  },
+                  "reflectionPrompts": [ "Which cell structure was most surprising?" ],
+                  "instructorNotes": {
+                    "overview": "Look for accurate function explanations.",
+                    "lookFors": [ "Student explains structure and function." ],
+                    "commonIssues": [ "Confusing nucleus and nucleolus." ],
+                    "suggestedFeedback": [ "Ask for one analogy per organelle." ]
+                  },
+                  "linkedAssignmentSourceIds": [],
+                  "linkedAssignmentTitles": [ "Cell Evidence Assignment" ]
+                },
+                {
+                  "sourceLessonId": "cells-pack-lesson-2",
+                  "sequenceOrder": 2,
+                  "title": "Cell Membranes",
+                  "introductoryText": "Study how cell membranes regulate movement into and out of cells.",
+                  "linkedModuleObjective": "Explain cell structure.",
+                  "resources": [
+                    {
+                      "name": "Physical biology textbook",
+                      "type": "PhysicalResource",
+                      "url": "",
+                      "filePath": "",
+                      "isPhysicalResource": true,
+                      "sourceNote": "Parent-selected chapter."
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var denied = await service.ImportLessonPackAsync(student, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(lessonPackJson));
+        AssertFalse(denied.Succeeded, "Student should not import lesson packs.");
+
+        var import = await service.ImportLessonPackAsync(parent, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(lessonPackJson));
+        AssertTrue(import.Succeeded, "Lesson pack import should succeed.");
+        AssertEqual(2, import.Value?.LessonCount ?? 0, "Lesson pack should import both lessons.");
+        var lessons = await service.ListLessonsAsync(course.Value, module.Value);
+        AssertEqual(2, lessons.Count, "Module should contain imported lessons.");
+        AssertEqual("Cell Organelles", lessons[0].Title, "First imported lesson should keep pack order.");
+        AssertTrue(lessons[0].LessonType == LessonType.SelfGuided, "Lesson type should import.");
+        AssertEqual(90, lessons[0].EstimatedMinutes, "Estimated minutes should import.");
+        AssertTrue(lessons[0].LearningObjectives.Any(objective => objective.Text.Contains("organelles", StringComparison.OrdinalIgnoreCase)), "Lesson objectives should import.");
+        AssertTrue(lessons[0].SuccessCriteria.Count > 0, "Success criteria should import.");
+        AssertTrue(lessons[0].LessonSteps.Count > 0, "Lesson steps should import.");
+        AssertTrue(lessons[0].LessonSteps[0].StepType == LessonStepType.Planning, "Planning lesson steps should import.");
+        AssertTrue(lessons[0].LessonSteps[1].StepType == LessonStepType.Research, "Research lesson steps should import.");
+        AssertTrue(lessons[0].ProblemSets.Count > 0, "Problem sets should import.");
+        AssertTrue(lessons[0].ProblemSets[0].Problems[0].ResponseType == ProblemResponseType.GraphAndWrittenAnalysis, "Graph and written analysis problem responses should import.");
+        AssertTrue(lessons[0].PortfolioConnections.Count > 0, "Portfolio connections should import.");
+        AssertTrue(lessons[0].Rubric?.Criteria.Count > 0, "Rubric should import.");
+        AssertTrue(lessons[0].InstructorNotes?.LookFors.Count > 0, "Instructor notes should import.");
+        AssertTrue(lessons[0].LinkedAssignmentIds.Contains(linkedAssignment.Value), "Lesson should link to matching module assignment.");
+        AssertEqual("Identify three organelles and explain their jobs.", lessons[0].Resources[0].StudentInstructions, "Resource student instructions should import.");
+        AssertTrue(lessons[0].Resources[0].Type == LessonResourceType.DataSource, "Data source resources should import.");
+        AssertTrue(lessons[1].Resources[0].IsPhysicalResource, "Physical-resource marker should import.");
+
+        var download = await service.DownloadModuleLessonPackAsync(course.Value, module.Value);
+        AssertTrue(download.Succeeded, "Module lesson pack download should succeed.");
+        AssertTrue(download.Value?.FileName.EndsWith(".lessonpack", StringComparison.Ordinal) ?? false, "Download should use .lessonpack.");
+        using var downloadDocument = JsonDocument.Parse(download.Value!.Content);
+        AssertEqual(2, downloadDocument.RootElement.GetProperty("lessons").GetArrayLength(), "Downloaded module lesson pack should include current module lessons.");
+
+        var duplicateImport = await service.ImportLessonPackAsync(parent, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(lessonPackJson));
+        AssertTrue(duplicateImport.Succeeded, "Importing the same lesson pack again should append safely.");
+        AssertEqual(4, (await service.ListLessonsAsync(course.Value, module.Value)).Count, "Repeated lesson pack import should append lessons.");
+    })),
     ("Parent can create update and reorder assignments while student cannot mutate them", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -693,6 +1202,237 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(delete.Succeeded, "Assignment delete failed.");
         AssertFalse((await service.ListAssignmentsAsync(course.Value, module.Value)).Any(assignment => assignment.Id == second.Value), "Deleted assignment should be removed.");
     }),
+    ("Assignment packs download templates and import one or more assignments into a module", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var student = UserContext.Student("Student");
+        var course = await service.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await service.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                [],
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await service.CreateLessonAsync(
+            parent,
+            new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+
+        var template = service.DownloadAssignmentPackTemplate();
+        AssertTrue(template.Succeeded, "Assignment pack template should download.");
+        AssertTrue(template.Value?.FileName.EndsWith(".assignmentpack", StringComparison.Ordinal) ?? false, "Template should use .assignmentpack.");
+        using (var templateDocument = JsonDocument.Parse(template.Value!.Content))
+        {
+            var root = templateDocument.RootElement;
+            AssertEqual("homeschool-manager.assignmentpack", root.GetProperty("format").GetString() ?? "", "Template should use assignmentpack format.");
+            AssertTrue(root.GetProperty("assignments").GetArrayLength() >= 1, "Template should include at least one sample assignment.");
+            var assignment = root.GetProperty("assignments")[0];
+            AssertTrue(assignment.TryGetProperty("linkedLessonSourceIds", out _), "Template should include lesson source-id links.");
+            AssertTrue(assignment.TryGetProperty("linkedLessonTitles", out _), "Template should include lesson title links.");
+            AssertTrue(assignment.TryGetProperty("requiredOutput", out _), "Template should include required output.");
+            AssertTrue(assignment.TryGetProperty("plannedPoints", out _), "Template should include planned points.");
+            AssertTrue(assignment.TryGetProperty("assignmentSummary", out _), "Template should include assignment summary.");
+            AssertTrue(assignment.TryGetProperty("requiredDeliverables", out _), "Template should include required deliverables.");
+            AssertTrue(assignment.TryGetProperty("submissionFormats", out _), "Template should include submission formats.");
+            AssertTrue(assignment.TryGetProperty("portfolioConnection", out _), "Template should include portfolio connection.");
+            AssertTrue(assignment.TryGetProperty("rubric", out _), "Template should include rubric.");
+            AssertTrue(assignment.TryGetProperty("assignmentSteps", out _), "Template should include assignment steps.");
+            AssertTrue(assignment.TryGetProperty("completionCriteria", out _), "Template should include completion criteria.");
+            AssertTrue(assignment.TryGetProperty("evidenceRequirements", out _), "Template should include evidence requirements.");
+            AssertTrue(assignment.TryGetProperty("scoring", out _), "Template should include scoring.");
+        }
+
+        var assignmentPackJson = """
+            {
+              "format": "homeschool-manager.assignmentpack",
+              "formatVersion": 1,
+              "downloadedAtUtc": "2026-06-07T00:00:00+00:00",
+              "packageMode": "json",
+              "archiveNote": "No attached files.",
+              "name": "Cells Assignment Pack",
+              "description": "Two cell assignments.",
+              "assignments": [
+                {
+                  "sourceAssignmentId": "cells-pack-assignment-1",
+                  "sequenceOrder": 1,
+                  "title": "Cell Structure Reflection",
+                  "type": "Reflection",
+                  "methodProfile": "Hybrid",
+                  "instructions": "Explain the function of each cell structure using the lesson resource.",
+                  "estimatedEffort": "45 minutes",
+                  "dueTimingLabel": "After lesson 1",
+                  "dueDate": null,
+                  "linkedModuleObjectives": [ "Explain cell structure." ],
+                  "linkedLessonSourceIds": [],
+                  "linkedLessonTitles": [ "Cell structure" ],
+                  "requiredOutput": "One-page written reflection.",
+                  "parentNotes": "Check for structure/function connections.",
+                  "isPortfolioCandidate": true,
+                  "plannedPoints": 20,
+                  "plannedWeight": null,
+                  "status": "Planned",
+                  "assignmentSummary": "Write a short reflection connecting cell structures to cell functions.",
+                  "studentFacingGoal": "Explain how cell parts work together in a way a reader can understand.",
+                  "estimatedMinutesMin": 35,
+                  "estimatedMinutesMax": 50,
+                  "requiredDeliverables": [ "One-page reflection", "At least three cell structures", "Clear structure/function explanation" ],
+                  "submissionFormats": [ "WrittenAnalysis", "SpreadsheetOptional", "GraphOptional", "PortfolioEntry" ],
+                  "portfolioConnection": {
+                    "isPortfolioCandidate": true,
+                    "portfolioSection": "Biology Portfolio",
+                    "artifactTitle": "Cell Structure Reflection",
+                    "artifactPurpose": "Demonstrates understanding of cell structures and functions.",
+                    "reuseInstructions": "Revise after studying body systems.",
+                    "crossCourseLinks": [ "Scientific Communication" ]
+                  },
+                  "rubric": {
+                    "rubricId": "cell-reflection-rubric",
+                    "scale": "4-point",
+                    "criteria": [
+                      {
+                        "criterion": "Explanation",
+                        "level4": "Clearly explains how structures support cell functions.",
+                        "level3": "Explains most structure/function links.",
+                        "level2": "Includes partial or vague explanations.",
+                        "level1": "Does not explain structure/function links."
+                      }
+                    ]
+                  },
+                  "linkedRubricId": "cell-reflection-rubric",
+                  "assessmentSkills": [ "cell vocabulary", "scientific explanation" ],
+                  "studentChecklist": [ "I named at least three structures.", "I explained each structure's function." ],
+                  "resources": [
+                    {
+                      "name": "OpenStax Cells Review",
+                      "type": "Article",
+                      "url": "https://openstax.org/books/biology-2e/pages/4-introduction",
+                      "filePath": "",
+                      "isPhysicalResource": false,
+                      "required": true,
+                      "studentInstructions": "Use this as a reference while writing.",
+                      "sourceNote": "Open textbook chapter introduction."
+                    }
+                  ],
+                  "assignmentSteps": [
+                    {
+                      "stepOrder": 1,
+                      "title": "Review lesson notes",
+                      "instructions": "Review the related lesson and choose three structures.",
+                      "estimatedMinutes": 10
+                    },
+                    {
+                      "stepOrder": 2,
+                      "title": "Write reflection",
+                      "instructions": "Explain each structure/function link.",
+                      "estimatedMinutes": 30
+                    }
+                  ],
+                  "revisionPolicy": {
+                    "allowRevision": true,
+                    "revisionExpectation": "Revise after parent feedback if the explanation is unclear.",
+                    "minimumRevisionCount": 1
+                  },
+                  "completionCriteria": {
+                    "minimumRequirements": [ "All three structures are included.", "Reflection can be understood without verbal explanation." ],
+                    "requiresParentReview": true,
+                    "masteryThreshold": 3
+                  },
+                  "reflectionPrompts": [ "Which structure was easiest to explain?", "What did you revise?" ],
+                  "evidenceRequirements": {
+                    "retainForRecords": true,
+                    "evidenceType": "PortfolioArtifact",
+                    "recommendedFileTypes": [ "pdf", "docx" ],
+                    "requiresStudentExplanation": true,
+                    "requiresParentEvaluation": true
+                  },
+                  "scoring": {
+                    "plannedPoints": 20,
+                    "plannedWeight": null,
+                    "gradingMode": "Rubric",
+                    "countsTowardGrade": true,
+                    "allowPartialCredit": true
+                  }
+                },
+                {
+                  "sourceAssignmentId": "cells-pack-assignment-2",
+                  "sequenceOrder": 2,
+                  "title": "Cell Diagram",
+                  "type": "PortfolioArtifact",
+                  "methodProfile": "Digital",
+                  "instructions": "Create and label a cell diagram, then explain three structures.",
+                  "estimatedEffort": "60 minutes",
+                  "dueTimingLabel": "After lesson 1",
+                  "dueDate": null,
+                  "linkedModuleObjectives": [ "Explain cell structure." ],
+                  "linkedLessonSourceIds": [ "missing-source-id" ],
+                  "linkedLessonTitles": [],
+                  "requiredOutput": "Labeled diagram with short explanations.",
+                  "parentNotes": "",
+                  "isPortfolioCandidate": true,
+                  "plannedPoints": 30,
+                  "plannedWeight": null,
+                  "status": "Assigned"
+                }
+              ]
+            }
+            """;
+
+        var denied = await service.ImportAssignmentPackAsync(student, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(assignmentPackJson));
+        AssertFalse(denied.Succeeded, "Student should not import assignment packs.");
+
+        var import = await service.ImportAssignmentPackAsync(parent, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(assignmentPackJson));
+        AssertTrue(import.Succeeded, "Assignment pack import should succeed.");
+        AssertEqual(2, import.Value?.AssignmentCount ?? 0, "Assignment pack should import both assignments.");
+        var assignments = await service.ListAssignmentsAsync(course.Value, module.Value);
+        AssertEqual(2, assignments.Count, "Module should contain imported assignments.");
+        AssertEqual("Cell Structure Reflection", assignments[0].Title, "First imported assignment should keep pack order.");
+        AssertTrue(assignments[0].LinkedLessonIds.Contains(lesson.Value), "Lesson title links should reconnect to local lesson ids.");
+        AssertEqual("Write a short reflection connecting cell structures to cell functions.", assignments[0].AssignmentSummary, "Assignment summary should import.");
+        AssertEqual(35, assignments[0].EstimatedMinutesMin ?? 0, "Minimum estimated minutes should import.");
+        AssertEqual(50, assignments[0].EstimatedMinutesMax ?? 0, "Maximum estimated minutes should import.");
+        AssertTrue(assignments[0].RequiredDeliverables.Count >= 3, "Required deliverables should import.");
+        AssertTrue(assignments[0].SubmissionFormats.Contains(AssignmentSubmissionFormat.WrittenAnalysis), "Written analysis submission format should import.");
+        AssertTrue(assignments[0].SubmissionFormats.Contains(AssignmentSubmissionFormat.SpreadsheetOptional), "Optional spreadsheet submission format should import.");
+        AssertTrue(assignments[0].SubmissionFormats.Contains(AssignmentSubmissionFormat.GraphOptional), "Optional graph submission format should import.");
+        AssertTrue(assignments[0].PortfolioConnection?.CrossCourseLinks.Count > 0, "Portfolio connection should import.");
+        AssertTrue(assignments[0].Rubric?.Criteria.Count > 0, "Assignment rubric should import.");
+        AssertEqual("cell-reflection-rubric", assignments[0].LinkedRubricId, "Linked rubric id should import.");
+        AssertTrue(assignments[0].AssessmentSkills.Contains("cell vocabulary"), "Assessment skills should import.");
+        AssertTrue(assignments[0].StudentChecklist.Count > 0, "Student checklist should import.");
+        AssertTrue(assignments[0].Resources.Count > 0, "Assignment resources should import.");
+        AssertTrue(assignments[0].AssignmentSteps.Count > 0, "Assignment steps should import.");
+        AssertTrue(assignments[0].RevisionPolicy?.AllowRevision ?? false, "Revision policy should import.");
+        AssertTrue(assignments[0].CompletionCriteria?.RequiresParentReview ?? false, "Completion criteria should import.");
+        AssertTrue(assignments[0].ReflectionPrompts.Count > 0, "Reflection prompts should import.");
+        AssertTrue(assignments[0].EvidenceRequirements?.RetainForRecords ?? false, "Evidence requirements should import.");
+        AssertTrue(assignments[0].Scoring?.GradingMode == AssignmentGradingMode.Rubric, "Scoring should import.");
+        AssertEqual(0, assignments[1].LinkedLessonIds.Count, "Missing lesson links should not block assignment import.");
+        AssertTrue(assignments[1].MethodProfile == InstructionalMethodProfile.Digital, "Digital method profile should import.");
+
+        var download = await service.DownloadModuleAssignmentPackAsync(course.Value, module.Value);
+        AssertTrue(download.Succeeded, "Module assignment pack download should succeed.");
+        AssertTrue(download.Value?.FileName.EndsWith(".assignmentpack", StringComparison.Ordinal) ?? false, "Download should use .assignmentpack.");
+        using var downloadDocument = JsonDocument.Parse(download.Value!.Content);
+        AssertEqual(2, downloadDocument.RootElement.GetProperty("assignments").GetArrayLength(), "Downloaded module assignment pack should include current module assignments.");
+        AssertTrue(downloadDocument.RootElement.GetProperty("assignments")[0].TryGetProperty("assignmentSteps", out _), "Downloaded assignment pack should include assignment steps.");
+        AssertTrue(downloadDocument.RootElement.GetProperty("assignments")[0].TryGetProperty("linkedLessonTitles", out _), "Downloaded assignment pack should retain portable lesson links.");
+
+        var duplicateImport = await service.ImportAssignmentPackAsync(parent, course.Value, module.Value, System.Text.Encoding.UTF8.GetBytes(assignmentPackJson));
+        AssertTrue(duplicateImport.Succeeded, "Importing the same assignment pack again should append safely.");
+        AssertEqual(4, (await service.ListAssignmentsAsync(course.Value, module.Value)).Count, "Repeated assignment pack import should append assignments.");
+    })),
     ("Module autosave preserves existing lessons", async () =>
     {
         var repository = await CreateRepositoryAsync();

@@ -32,15 +32,27 @@ Purpose: UI workflow and form-boundary guidance.
 - Course detail uses autosave for field changes; requirement mapping remains an explicit add/update action.
 - Course detail autosave feedback belongs in the page header bar above the main content.
 - Course detail stays course/syllabus-focused; module details live on separate course module pages with course-scoped module subnavigation in the left nav.
+- Course detail includes a Modules section below mappings for modulepack import, modulepack download/template download, module creation, module list navigation, reorder, and delete.
 - Course module pages show the modules list first in the left column.
 - Course module subnavigation includes a "Course Modules" heading and a parent/admin "+ New Module" link.
 - Module delete actions require a modal confirmation and exact `Delete` text.
 - Module objectives use itemized Add/Hide controls; module objective links to course objectives are optional.
 - Lesson details live on a separate page from module editing and manage lesson resources with itemized Add/Hide controls.
+- Lesson edit pages expose lesson metadata, objectives, workflow steps, resources, practice/problem sets, portfolio connections, rubric criteria, reflection prompts, parent notes, and linked assignment controls.
+- Course module lesson sections expose `.lessonpack` import, current-module lesson download, and template download controls.
+- Lesson pack import controls show progress and plain-language success or failure messages.
 - Assignments are managed from the module page list and edited on a dedicated assignment page.
+- Course module assignment sections expose `.assignmentpack` import, current-module assignment download, and template download controls.
+- Assignment pack import controls show progress and plain-language success or failure messages.
 - Assignment edit pages use itemized objective and lesson selections, not raw mapping text.
+- Assignment edit pages expose summary, goal, deliverables, submission formats, resources, steps, portfolio, rubric, revision, completion, evidence, scoring, and parent-note controls.
 - Student module pages show assignments in the main learning flow after lessons, with evidence notes only as support content.
-- Course pack install actions show inline progress and plain-language success or failure messages in the Course packs card.
+- Student module pages show student-facing assignment details: goal, deliverables, steps, resources, checklist, completion criteria, portfolio notes, rubric summaries, reflection prompts, and related lessons.
+- Student module pages show student-facing lesson details: objectives, success criteria, workflow, resources, practice prompts, portfolio connections, rubric summaries, reflection prompts, and related assignments.
+- Student module pages do not show lesson answer keys, worked solutions, or parent/instructor notes.
+- The Courses page support card is the Course plan card; it imports and downloads course plan `.zip` files.
+- The Courses page provides single-course `.coursepack` import and coursepack template download above the course list.
+- Course plan bundle and coursepack import actions show progress and plain-language success or failure messages.
 - Page columns should fill available width and have generous horizontal spacing.
 - Course detail text areas allow at least four visible lines before scrolling.
 - Preset dropdown `Other` choices clear the associated text area so parent text starts clean.

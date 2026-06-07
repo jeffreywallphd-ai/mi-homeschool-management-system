@@ -509,6 +509,8 @@ public static class DefaultCoursePacks
     {
         return [
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "hybrid",
                 AssignmentType.PortfolioArtifact,
                 InstructionalMethodProfile.Hybrid,
@@ -524,6 +526,8 @@ public static class DefaultCoursePacks
                 20,
                 null),
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "explicit-guided-practice",
                 AssignmentType.ProblemSet,
                 InstructionalMethodProfile.ExplicitGuidedPractice,
@@ -539,6 +543,8 @@ public static class DefaultCoursePacks
                 15,
                 null),
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "project-applied",
                 AssignmentType.Project,
                 InstructionalMethodProfile.ProjectBasedApplied,
@@ -554,6 +560,8 @@ public static class DefaultCoursePacks
                 25,
                 null),
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "inquiry-discussion",
                 AssignmentType.Discussion,
                 InstructionalMethodProfile.InquiryDiscussion,
@@ -569,6 +577,8 @@ public static class DefaultCoursePacks
                 15,
                 null),
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "independent-study",
                 AssignmentType.ReadingResponse,
                 InstructionalMethodProfile.IndependentStudy,
@@ -584,6 +594,8 @@ public static class DefaultCoursePacks
                 15,
                 null),
             AssignmentVariant(
+                courseTitle,
+                topicText,
                 "mastery-practice",
                 AssignmentType.QuizOrTestPrep,
                 InstructionalMethodProfile.MasteryPractice,
@@ -602,6 +614,8 @@ public static class DefaultCoursePacks
     }
 
     private static CourseTemplateAssignmentVariantDefinition AssignmentVariant(
+        string courseTitle,
+        string topicText,
         string variantId,
         AssignmentType type,
         InstructionalMethodProfile methodProfile,
@@ -632,7 +646,106 @@ public static class DefaultCoursePacks
             isPortfolioCandidate,
             plannedPoints,
             plannedWeight,
-            AssignmentStatus.Planned);
+            AssignmentStatus.Planned,
+            $"{title} for {courseTitle}.",
+            $"Use the {topicText} lessons to produce clear evidence that you can meet the linked module objectives.",
+            60,
+            isPortfolioCandidate ? 180 : 120,
+            [
+                requiredOutput,
+                "Evidence from at least one related lesson resource.",
+                "Brief explanation of how the work addresses the linked objectives."
+            ],
+            SubmissionFormatsFor(type, isPortfolioCandidate),
+            new AssignmentPortfolioConnection(
+                isPortfolioCandidate,
+                isPortfolioCandidate ? "Course Portfolio" : "",
+                isPortfolioCandidate ? title : "",
+                isPortfolioCandidate ? $"Shows applied learning from the {topicText} module." : "",
+                isPortfolioCandidate ? "Revise after parent feedback before saving in the course portfolio." : "",
+                [courseTitle]),
+            new LessonRubric(
+                $"{variantId}-rubric",
+                "4-point",
+                [
+                    new LessonRubricCriterion(
+                        "Objective alignment",
+                        "Work clearly and accurately addresses the linked objectives.",
+                        "Work addresses the linked objectives with minor gaps.",
+                        "Work partially addresses the linked objectives.",
+                        "Work does not clearly address the linked objectives."),
+                    new LessonRubricCriterion(
+                        "Evidence and explanation",
+                        "Evidence is specific, accurate, and explained in context.",
+                        "Evidence is mostly accurate and explained.",
+                        "Evidence is present but thin or weakly explained.",
+                        "Evidence is missing or unclear.")
+                ]),
+            "",
+            SkillsFor(type),
+            [
+                "I completed every required part.",
+                "I used evidence from the related lesson material.",
+                "I checked that my work answers the objective."
+            ],
+            [],
+            [
+                new AssignmentStep(1, "Review lessons", "Review the related lesson materials and notes.", 30),
+                new AssignmentStep(2, "Create the assignment evidence", instructions, isPortfolioCandidate ? 120 : 75),
+                new AssignmentStep(3, "Check and reflect", "Check the required deliverables and write any requested reflection.", 30)
+            ],
+            new AssignmentRevisionPolicy(isPortfolioCandidate, isPortfolioCandidate ? "Revise after parent feedback before saving to the course portfolio." : "", isPortfolioCandidate ? 1 : 0),
+            new AssignmentCompletionCriteria(
+                [
+                    "All required deliverables are included.",
+                    "The work can be understood without verbal explanation.",
+                    "The linked objectives are addressed."
+                ],
+                true,
+                3),
+            [
+                "Which part of this assignment best shows what you learned?",
+                "What would you revise before saving this as final evidence?"
+            ],
+            new AssignmentEvidenceRequirements(
+                isPortfolioCandidate,
+                isPortfolioCandidate ? AssignmentEvidenceType.PortfolioArtifact : AssignmentEvidenceType.PracticeWork,
+                isPortfolioCandidate ? ["pdf", "docx", "png"] : ["pdf", "docx"],
+                true,
+                true),
+            new AssignmentScoring(plannedPoints, plannedWeight, AssignmentGradingMode.Rubric, true, true));
+    }
+
+    private static IReadOnlyList<AssignmentSubmissionFormat> SubmissionFormatsFor(AssignmentType type, bool isPortfolioCandidate)
+    {
+        var formats = new List<AssignmentSubmissionFormat>();
+        if (isPortfolioCandidate)
+        {
+            formats.Add(AssignmentSubmissionFormat.PortfolioEntry);
+        }
+
+        formats.Add(type switch
+        {
+            AssignmentType.ProblemSet or AssignmentType.QuizOrTestPrep => AssignmentSubmissionFormat.WorkedSolutions,
+            AssignmentType.Project or AssignmentType.PracticalDemonstration => AssignmentSubmissionFormat.PracticalDemonstration,
+            AssignmentType.Discussion or AssignmentType.ReadingResponse => AssignmentSubmissionFormat.WrittenResponse,
+            AssignmentType.PortfolioArtifact => AssignmentSubmissionFormat.PortfolioEntry,
+            _ => AssignmentSubmissionFormat.WrittenResponse
+        });
+
+        return formats.Distinct().ToArray();
+    }
+
+    private static IReadOnlyList<string> SkillsFor(AssignmentType type)
+    {
+        return type switch
+        {
+            AssignmentType.ProblemSet or AssignmentType.QuizOrTestPrep => ["accuracy", "correction", "mastery demonstration"],
+            AssignmentType.Project or AssignmentType.PracticalDemonstration => ["application", "evidence creation", "revision"],
+            AssignmentType.Discussion => ["question development", "evidence-based reasoning", "oral explanation"],
+            AssignmentType.ReadingResponse => ["reading comprehension", "synthesis", "written explanation"],
+            _ => ["objective alignment", "evidence quality", "reflection"]
+        };
     }
 
     private static int? TermNumberFor(int index, int moduleCount, CourseDuration duration)

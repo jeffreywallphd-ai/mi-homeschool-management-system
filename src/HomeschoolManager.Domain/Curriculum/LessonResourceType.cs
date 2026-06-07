@@ -8,5 +8,6 @@ public enum LessonResourceType
     Video = 3,
     Website = 4,
     File = 5,
-    PhysicalResource = 6
+    PhysicalResource = 6,
+    DataSource = 7
 }
