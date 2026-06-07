@@ -1,10 +1,13 @@
 using HomeschoolManager.Domain.Curriculum;
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HomeschoolManager.Application.Courses;
 
 public static class DefaultCoursePacks
 {
-    public const string MichiganCollegeReadyPackId = "mi-college-recognizable-core-v1";
+    public const string MichiganCollegeReadyPackId = "mi-general-high-school-core-v4";
     private const string DefaultInstructionalMethods =
         "Hybrid instructional plan combining explicit instruction, guided practice, discussion, independent reading or problem work, applied projects, and parent feedback. Lessons begin with clear goals, move through modeled examples, and end with student practice or reflection.";
     private const string DefaultAssessmentMethods =
@@ -12,9 +15,149 @@ public static class DefaultCoursePacks
     private const string DefaultGradingBasis =
         "Hybrid grading basis using a mastery-aligned letter grade from parent-reviewed evidence. Suggested weighting: 40% assignments/practice, 30% projects or performance evidence, 20% quizzes/tests or demonstrations, and 10% participation/reflection.";
 
-    public static IReadOnlyList<CoursePackDefinition> All { get; } =
-    [
-        new CoursePackDefinition(
+    public static IReadOnlyList<CoursePackDefinition> All { get; } = [LoadDefaultCoursePack()];
+
+    private static CoursePackDefinition LoadDefaultCoursePack()
+    {
+        var assembly = typeof(DefaultCoursePacks).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(name => name.EndsWith("mi-general-high-school-core-final.coursepack", StringComparison.Ordinal));
+        if (resourceName is null)
+        {
+            return LegacyDefaultCoursePack();
+        }
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+        {
+            return LegacyDefaultCoursePack();
+        }
+
+        using var document = JsonDocument.Parse(stream);
+        var root = document.RootElement;
+        var pack = root.GetProperty("Pack");
+        var courses = pack.GetProperty("Courses")
+            .EnumerateArray()
+            .Select(ReadFlatCourseTemplate)
+            .ToArray();
+
+        return new CoursePackDefinition(
+            pack.GetProperty("Id").GetString() ?? MichiganCollegeReadyPackId,
+            pack.GetProperty("Name").GetString() ?? "Michigan General High School Core Starter",
+            pack.GetProperty("Description").GetString() ?? "",
+            pack.GetProperty("RequirementJurisdiction").GetString() ?? "Michigan",
+            courses);
+    }
+
+    private static CourseTemplateDefinition ReadFlatCourseTemplate(JsonElement courseElement)
+    {
+        var defaultOption = NormalizeOption(JsonSerializer.Deserialize<CourseTemplateOptionDefinition>(courseElement.GetRawText(), CoursePackJsonOptions)
+            ?? throw new InvalidOperationException("Default course pack course could not be read."));
+        IReadOnlyList<CourseTemplateOptionDefinition> options = courseElement.TryGetProperty("Options", out var optionsElement) && optionsElement.ValueKind == JsonValueKind.Array
+            ? optionsElement.Deserialize<IReadOnlyList<CourseTemplateOptionDefinition>>(CoursePackJsonOptions)?.Select(NormalizeOption).ToArray() ?? [defaultOption]
+            : [defaultOption];
+        if (options.Count == 0)
+        {
+            options = [defaultOption];
+        }
+
+        var templateId = defaultOption.OptionId;
+        return new CourseTemplateDefinition(
+            templateId,
+            defaultOption.Title,
+            defaultOption.SubjectAreas,
+            defaultOption.Duration,
+            defaultOption.PlannedCreditValue,
+            defaultOption.Description,
+            defaultOption.CurriculumPlan,
+            defaultOption.RequirementMappings,
+            defaultOption.Modules,
+            defaultOption.OptionId,
+            options);
+    }
+
+    private static CourseTemplateOptionDefinition NormalizeOption(CourseTemplateOptionDefinition option)
+    {
+        var mappings = NormalizeRequirementMappings(option).ToArray();
+        var subjectAreas = NormalizeSubjectAreas(option).ToArray();
+        return option with
+        {
+            SubjectAreas = subjectAreas,
+            CurriculumPlan = option.CurriculumPlan with { MajorResources = "" },
+            RequirementMappings = mappings
+        };
+    }
+
+    private static IReadOnlyList<string> NormalizeSubjectAreas(CourseTemplateOptionDefinition option)
+    {
+        var subjects = option.SubjectAreas.ToList();
+        if ((option.OptionId.Contains("capstone", StringComparison.OrdinalIgnoreCase) ||
+            option.Title.Contains("Capstone", StringComparison.OrdinalIgnoreCase)) &&
+            !subjects.Any(subject => string.Equals(subject, "Elective", StringComparison.OrdinalIgnoreCase)))
+        {
+            subjects.Add("Elective");
+        }
+
+        return subjects.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyList<CourseTemplateRequirementMapping> NormalizeRequirementMappings(CourseTemplateOptionDefinition option)
+    {
+        var mappings = option.RequirementMappings
+            .Select(mapping => string.Equals(mapping.RequirementAreaName, "Economics / personal finance readiness", StringComparison.OrdinalIgnoreCase)
+                ? mapping with { RequirementAreaView = "MMC Reference", RequirementAreaName = "Personal Finance" }
+                : mapping)
+            .Select(mapping => string.Equals(mapping.RequirementAreaName, "Social Studies", StringComparison.OrdinalIgnoreCase)
+                ? mapping with { RequirementAreaView = "Statutory", RequirementAreaName = "Civics" }
+                : mapping)
+            .Where(mapping => !string.Equals(mapping.RequirementAreaName, "Constitution and civil government", StringComparison.OrdinalIgnoreCase))
+            .Where(mapping => !string.Equals(mapping.RequirementAreaName, "U.S. and Michigan history/civil government context", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(mapping => $"{mapping.RequirementAreaView}:{mapping.RequirementAreaName}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        if (option.SubjectAreas.Any(subject => string.Equals(subject, "Civics", StringComparison.OrdinalIgnoreCase)) ||
+            option.Title.Contains("Government", StringComparison.OrdinalIgnoreCase) ||
+            option.Title.Contains("U.S. History", StringComparison.OrdinalIgnoreCase))
+        {
+            AddMappingIfMissing(mappings, "MDE Summary", "U.S. Constitution", CoverageLevel.Primary);
+            AddMappingIfMissing(mappings, "MDE Summary", "Michigan Constitution", CoverageLevel.Primary);
+        }
+
+        return mappings;
+    }
+
+    private static void AddMappingIfMissing(
+        List<CourseTemplateRequirementMapping> mappings,
+        string view,
+        string name,
+        CoverageLevel coverageLevel)
+    {
+        if (mappings.Any(mapping =>
+            string.Equals(mapping.RequirementAreaView, view, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(mapping.RequirementAreaName, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        mappings.Add(new CourseTemplateRequirementMapping(view, name, coverageLevel, "Mapped by revised default coursepack."));
+    }
+
+    private static readonly JsonSerializerOptions CoursePackJsonOptions = CreateCoursePackJsonOptions();
+
+    private static JsonSerializerOptions CreateCoursePackJsonOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    private static CoursePackDefinition LegacyDefaultCoursePack()
+    {
+        return new CoursePackDefinition(
             MichiganCollegeReadyPackId,
             "Michigan college-recognizable high school core",
             "A transcript-friendly planning starter based on common Michigan Merit Curriculum credit categories and Michigan homeschool subject areas.",
@@ -115,8 +258,8 @@ public static class DefaultCoursePacks
                         ElectiveOption("college-readiness", "College and Career Readiness", "An elective course covering planning, applications, study systems, communication, financial preparation, and transition skills."),
                         ElectiveOption("work-based-learning", "Work-Based Learning", "An elective course documenting supervised work, employability skills, applied learning, reflection, and parent-evaluated evidence.")
                     ])
-            ])
-    ];
+            ]);
+    }
 
     private static CourseTemplateDefinition FullYear(string id, string title, IReadOnlyList<string> subjects, decimal credits, string description, IReadOnlyList<CourseTemplateRequirementMapping> mappings)
     {

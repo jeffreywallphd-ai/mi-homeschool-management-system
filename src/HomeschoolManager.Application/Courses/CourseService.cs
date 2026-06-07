@@ -27,16 +27,21 @@ public sealed class CourseService
         this.repository = repository;
     }
 
-    public async Task<IReadOnlyList<CourseListItem>> ListCoursesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CourseListItem>> ListCoursesAsync(
+        Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
         await RefreshMichiganRequirementSeedAsync(cancellationToken);
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
 
         var courses = await repository.GetCoursesAsync(cancellationToken);
         return courses
+            .Where(course => studentId is null || course.StudentId == studentId.Value)
+            .Where(course => !course.IsArchived)
             .OrderBy(course => course.Title)
             .Select(course => new CourseListItem(
                 course.Id,
+                course.StudentId,
                 course.Title,
                 course.Description.Description,
                 course.SubjectAreas,
@@ -59,7 +64,9 @@ public sealed class CourseService
 
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
-        return ToDetail(course, areas, schoolYear);
+        var student = await repository.GetStudentAsync(course.StudentId, cancellationToken);
+        var availablePacks = await GetAvailableCoursePacksAsync(cancellationToken);
+        return ToDetail(course, areas, schoolYear, availablePacks, student);
     }
 
     public async Task<OperationResult<Guid>> CreateCourseAsync(
@@ -73,11 +80,12 @@ public sealed class CourseService
             return OperationResult<Guid>.Failure(authorized.Errors.ToArray());
         }
 
-        var student = await repository.GetStudentAsync(cancellationToken);
-        if (student is null)
+        var studentResult = await ResolveStudentAsync(command.StudentId, cancellationToken);
+        if (!studentResult.Succeeded || studentResult.Value is null)
         {
-            return OperationResult<Guid>.Failure("Create a student before adding courses.");
+            return OperationResult<Guid>.Failure(studentResult.Errors.ToArray());
         }
+        var student = studentResult.Value;
 
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         if (schoolYear is null)
@@ -155,21 +163,81 @@ public sealed class CourseService
         }
     }
 
-    public IReadOnlyList<CoursePackSummary> ListCoursePacks()
+    public async Task<OperationResult<CourseListActionResult>> DeleteCoursesAsync(
+        UserContext user,
+        CourseListActionCommand command,
+        CancellationToken cancellationToken = default)
     {
-        return DefaultCoursePacks.All
-            .Select(pack => new CoursePackSummary(
-                pack.Id,
-                pack.Name,
-                pack.Description,
-                pack.Courses.Count,
-                pack.Courses.Sum(course => course.DefaultOption.PlannedCreditValue)))
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<CourseListActionResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var courses = await ResolveCourseListActionTargetsAsync(command, cancellationToken);
+        var failures = new List<CourseListActionFailure>();
+        var successCount = 0;
+        foreach (var course in courses)
+        {
+            if (HasStudentWork(course))
+            {
+                failures.Add(new CourseListActionFailure(
+                    course.Id,
+                    course.Title,
+                    "This course has student work attached. Archive the course instead so the work and course record are kept together."));
+                continue;
+            }
+
+            await repository.DeleteCourseAsync(course.Id, cancellationToken);
+            successCount++;
+        }
+
+        return OperationResult<CourseListActionResult>.Success(new CourseListActionResult(successCount, failures));
+    }
+
+    public async Task<OperationResult<CourseListActionResult>> ArchiveCoursesAsync(
+        UserContext user,
+        CourseListActionCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<CourseListActionResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var courses = await ResolveCourseListActionTargetsAsync(command, cancellationToken);
+        var failures = new List<CourseListActionFailure>();
+        var successCount = 0;
+        var archivedAtUtc = DateTimeOffset.UtcNow;
+        foreach (var course in courses)
+        {
+            try
+            {
+                await repository.SaveCourseAsync(course.Archive(archivedAtUtc), cancellationToken);
+                successCount++;
+            }
+            catch (DomainException ex)
+            {
+                failures.Add(new CourseListActionFailure(course.Id, course.Title, ex.Message));
+            }
+        }
+
+        return OperationResult<CourseListActionResult>.Success(new CourseListActionResult(successCount, failures));
+    }
+
+    public async Task<IReadOnlyList<CoursePackSummary>> ListCoursePacksAsync(CancellationToken cancellationToken = default)
+    {
+        var packs = await GetAvailableCoursePacksAsync(cancellationToken);
+        return packs
+            .Select(ToCoursePackSummary)
             .ToArray();
     }
 
-    public CoursePackDetail? GetCoursePackDetail(string packId)
+    public async Task<CoursePackDetail?> GetCoursePackDetailAsync(string packId, CancellationToken cancellationToken = default)
     {
-        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == packId);
+        var pack = (await GetAvailableCoursePacksAsync(cancellationToken))
+            .FirstOrDefault(item => string.Equals(item.Id, packId, StringComparison.OrdinalIgnoreCase));
         if (pack is null)
         {
             return null;
@@ -196,31 +264,32 @@ public sealed class CourseService
                     option.Description.Description)).ToArray())).ToArray());
     }
 
-    public OperationResult<CoursePackExportFile> ExportCoursePack(string packId)
+    public async Task<OperationResult<CoursePackDownloadFile>> DownloadCoursePackAsync(string packId, CancellationToken cancellationToken = default)
     {
-        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == packId);
+        var pack = (await GetAvailableCoursePacksAsync(cancellationToken))
+            .FirstOrDefault(item => string.Equals(item.Id, packId, StringComparison.OrdinalIgnoreCase));
         if (pack is null)
         {
-            return OperationResult<CoursePackExportFile>.Failure("Course pack was not found.");
+            return OperationResult<CoursePackDownloadFile>.Failure("Course pack was not found.");
         }
 
-        var export = new CoursePackJsonEnvelope(
+        var download = new CoursePackJsonEnvelope(
             "homeschool-manager.coursepack",
             1,
             DateTimeOffset.UtcNow,
             "json",
-            "Future exports with attached lesson or assignment files should use a zip archive containing this JSON plus files.",
+            "Future downloads with attached lesson or assignment files should use a zip archive containing this JSON plus files.",
             pack);
-        var json = JsonSerializer.Serialize(export, CoursePackJsonOptions);
+        var json = JsonSerializer.Serialize(download, CoursePackJsonOptions);
         var fileName = $"{SafeFileName(pack.Id)}.coursepack";
-        return OperationResult<CoursePackExportFile>.Success(new CoursePackExportFile(
+        return OperationResult<CoursePackDownloadFile>.Success(new CoursePackDownloadFile(
             fileName,
             "application/json",
             Encoding.UTF8.GetBytes(json),
             false));
     }
 
-    private static CoursePackExportFile ExportCoursePackArchivePlaceholder(CoursePackDefinition pack)
+    private static CoursePackDownloadFile DownloadCoursePackArchivePlaceholder(CoursePackDefinition pack)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -232,11 +301,60 @@ public sealed class CourseService
                 1,
                 DateTimeOffset.UtcNow,
                 "zip",
-                "Archive export is reserved for course packs with attached lesson or assignment files.",
+                "Archive download is reserved for course packs with attached lesson or assignment files.",
                 pack), CoursePackJsonOptions));
         }
 
-        return new CoursePackExportFile($"{SafeFileName(pack.Id)}.coursepack.zip", "application/zip", stream.ToArray(), true);
+        return new CoursePackDownloadFile($"{SafeFileName(pack.Id)}.coursepack.zip", "application/zip", stream.ToArray(), true);
+    }
+
+    private async Task<IReadOnlyList<CoursePackDefinition>> GetAvailableCoursePacksAsync(CancellationToken cancellationToken)
+    {
+        var installed = await repository.GetInstalledCoursePacksAsync(cancellationToken);
+        var builtInIds = DefaultCoursePacks.All
+            .Select(pack => pack.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return DefaultCoursePacks.All
+            .Concat(installed.Where(pack => !builtInIds.Contains(pack.Id)))
+            .OrderBy(pack => pack.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static CoursePackSummary ToCoursePackSummary(CoursePackDefinition pack)
+    {
+        return new CoursePackSummary(
+            pack.Id,
+            pack.Name,
+            pack.Description,
+            pack.Courses.Count,
+            pack.Courses.Sum(course => course.DefaultOption.PlannedCreditValue));
+    }
+
+    public async Task<OperationResult<CoursePackSummary>> InstallCoursePackFileAsync(
+        UserContext user,
+        byte[] content,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<CoursePackSummary>.Failure(authorized.Errors.ToArray());
+        }
+
+        var parseResult = ParseCoursePackFile(content);
+        if (!parseResult.Succeeded || parseResult.Value is null)
+        {
+            return OperationResult<CoursePackSummary>.Failure(parseResult.Errors.ToArray());
+        }
+
+        if (DefaultCoursePacks.All.Any(pack => string.Equals(pack.Id, parseResult.Value.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            return OperationResult<CoursePackSummary>.Failure("That course pack is already built into the system.");
+        }
+
+        await repository.SaveInstalledCoursePackAsync(parseResult.Value, cancellationToken);
+        return OperationResult<CoursePackSummary>.Success(ToCoursePackSummary(parseResult.Value));
     }
 
     public async Task<OperationResult<int>> ImportCoursePackAsync(
@@ -250,17 +368,29 @@ public sealed class CourseService
             return OperationResult<int>.Failure(authorized.Errors.ToArray());
         }
 
-        var pack = DefaultCoursePacks.All.FirstOrDefault(item => item.Id == command.PackId);
+        var pack = (await GetAvailableCoursePacksAsync(cancellationToken))
+            .FirstOrDefault(item => string.Equals(item.Id, command.PackId, StringComparison.OrdinalIgnoreCase));
         if (pack is null)
         {
             return OperationResult<int>.Failure("Course pack was not found.");
         }
 
-        var student = await repository.GetStudentAsync(cancellationToken);
-        if (student is null)
+        return await ImportCoursePackDefinitionAsync(pack, command.StudentId, command.TemplateIds, command.Selections, cancellationToken);
+    }
+
+    private async Task<OperationResult<int>> ImportCoursePackDefinitionAsync(
+        CoursePackDefinition pack,
+        Guid? studentId,
+        IReadOnlyList<string> templateIds,
+        IReadOnlyList<CoursePackSelectionCommand> selections,
+        CancellationToken cancellationToken)
+    {
+        var studentResult = await ResolveStudentAsync(studentId, cancellationToken);
+        if (!studentResult.Succeeded || studentResult.Value is null)
         {
-            return OperationResult<int>.Failure("Create a student before importing a course pack.");
+            return OperationResult<int>.Failure(studentResult.Errors.ToArray());
         }
+        var student = studentResult.Value;
 
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         if (schoolYear is null)
@@ -270,7 +400,9 @@ public sealed class CourseService
 
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var existingTemplateIds = courses
-            .Where(course => string.Equals(course.SourcePackId, pack.Id, StringComparison.OrdinalIgnoreCase))
+            .Where(course => course.StudentId == student.Id &&
+                !course.IsArchived &&
+                string.Equals(course.SourcePackId, pack.Id, StringComparison.OrdinalIgnoreCase))
             .Select(course => course.SourceTemplateId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -284,7 +416,7 @@ public sealed class CourseService
         }
 
         var importedCount = 0;
-        var selectionByTemplateId = command.Selections
+        var selectionByTemplateId = selections
             .Where(selection => !string.IsNullOrWhiteSpace(selection.TemplateId))
             .GroupBy(selection => selection.TemplateId.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
@@ -292,7 +424,7 @@ public sealed class CourseService
                 group => group.Last().OptionId.Trim(),
                 StringComparer.OrdinalIgnoreCase);
 
-        var selectedTemplateIds = command.TemplateIds
+        var selectedTemplateIds = templateIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -423,7 +555,8 @@ public sealed class CourseService
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
-        return course?.Modules.Select(module => ToModuleView(module, schoolYear, course)).ToArray() ?? [];
+        var availablePacks = await GetAvailableCoursePacksAsync(cancellationToken);
+        return course?.Modules.Select(module => ToModuleView(module, schoolYear, course, availablePacks)).ToArray() ?? [];
     }
 
     public async Task<LearningModuleView?> GetModuleDetailAsync(
@@ -434,9 +567,10 @@ public sealed class CourseService
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        var availablePacks = await GetAvailableCoursePacksAsync(cancellationToken);
         return course?.Modules
             .Where(module => module.Id == moduleId)
-            .Select(module => ToModuleView(module, schoolYear, course))
+            .Select(module => ToModuleView(module, schoolYear, course, availablePacks))
             .FirstOrDefault();
     }
 
@@ -1019,12 +1153,17 @@ public sealed class CourseService
         }
     }
 
-    public async Task<IReadOnlyList<CoverageSummaryItem>> GetCoverageSummaryAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CoverageSummaryItem>> GetCoverageSummaryAsync(
+        Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
         await RefreshMichiganRequirementSeedAsync(cancellationToken);
         await BackfillImportedCoursePackDetailsAsync(cancellationToken);
 
-        var courses = await repository.GetCoursesAsync(cancellationToken);
+        var courses = (await repository.GetCoursesAsync(cancellationToken))
+            .Where(course => studentId is null || course.StudentId == studentId.Value)
+            .Where(course => !course.IsArchived)
+            .ToArray();
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
 
@@ -1057,7 +1196,9 @@ public sealed class CourseService
     private static CourseDetail ToDetail(
         Course course,
         IReadOnlyList<RequirementArea> areas,
-        SchoolYear? schoolYear)
+        SchoolYear? schoolYear,
+        IReadOnlyList<CoursePackDefinition> availablePacks,
+        Student? student = null)
     {
         var mappingViews = course.RequirementMappings
             .Select(mapping =>
@@ -1076,6 +1217,8 @@ public sealed class CourseService
 
         return new CourseDetail(
             course.Id,
+            course.StudentId,
+            student is null ? "" : $"{student.FirstName} {student.LastName}",
             course.Title,
             course.SubjectAreas,
             course.Duration,
@@ -1092,8 +1235,54 @@ public sealed class CourseService
             course.CurriculumPlan.PlannedSequence,
             course.CurriculumPlan.ParentNotes,
             BuildTermViews(schoolYear),
-            course.Modules.Select(module => ToModuleView(module, schoolYear, course)).ToArray(),
+            course.Modules.Select(module => ToModuleView(module, schoolYear, course, availablePacks)).ToArray(),
             mappingViews);
+    }
+
+    private async Task<OperationResult<Student>> ResolveStudentAsync(
+        Guid? studentId,
+        CancellationToken cancellationToken)
+    {
+        var student = studentId.HasValue
+            ? await repository.GetStudentAsync(studentId.Value, cancellationToken)
+            : await repository.GetStudentAsync(cancellationToken);
+
+        if (student is null && studentId.HasValue)
+        {
+            return OperationResult<Student>.Failure("Choose a student before working with courses.");
+        }
+
+        if (student is null)
+        {
+            return OperationResult<Student>.Failure("Create a student before working with courses.");
+        }
+
+        return OperationResult<Student>.Success(student);
+    }
+
+    private async Task<IReadOnlyList<Course>> ResolveCourseListActionTargetsAsync(
+        CourseListActionCommand command,
+        CancellationToken cancellationToken)
+    {
+        var courses = await repository.GetCoursesAsync(cancellationToken);
+        var activeStudentCourses = courses
+            .Where(course => course.StudentId == command.StudentId && !course.IsArchived)
+            .ToArray();
+
+        if (command.ApplyToEntireCourseList)
+        {
+            return activeStudentCourses;
+        }
+
+        var selectedIds = command.CourseIds.ToHashSet();
+        return activeStudentCourses
+            .Where(course => selectedIds.Contains(course.Id))
+            .ToArray();
+    }
+
+    private static bool HasStudentWork(Course course)
+    {
+        return false;
     }
 
     private async Task<LearningModule?> GetModuleAsync(
@@ -1119,7 +1308,8 @@ public sealed class CourseService
     private static LearningModuleView ToModuleView(
         LearningModule module,
         SchoolYear? schoolYear = null,
-        Course? course = null)
+        Course? course = null,
+        IReadOnlyList<CoursePackDefinition>? availablePacks = null)
     {
         var termName = schoolYear?.Terms.FirstOrDefault(term => term.Id == module.TermId)?.Name ?? "";
         return new LearningModuleView(
@@ -1146,7 +1336,7 @@ public sealed class CourseService
             module.Status,
             module.Lessons.Select(ToLessonView).ToArray(),
             module.Assignments.Select(ToAssignmentView).ToArray(),
-            AssignmentVariantsFor(course, module));
+            AssignmentVariantsFor(course, module, availablePacks ?? DefaultCoursePacks.All));
     }
 
     private static LessonView ToLessonView(Lesson lesson)
@@ -1197,14 +1387,15 @@ public sealed class CourseService
 
     private static IReadOnlyList<AssignmentVariantView> AssignmentVariantsFor(
         Course? course,
-        LearningModule module)
+        LearningModule module,
+        IReadOnlyList<CoursePackDefinition> availablePacks)
     {
         if (course is null)
         {
             return [];
         }
 
-        var option = FindSourceOption(course);
+        var option = FindSourceOption(course, availablePacks);
         var templateModule = option?.Modules.FirstOrDefault(item =>
             string.Equals(item.ModuleId, module.SourceModuleId, StringComparison.OrdinalIgnoreCase));
         if (templateModule is null)
@@ -1358,25 +1549,32 @@ public sealed class CourseService
         IReadOnlyList<RequirementArea> areas)
     {
         return option.RequirementMappings
-            .Select(mapping =>
-            {
-                var area = areas.FirstOrDefault(item =>
-                    string.Equals(item.View, mapping.RequirementAreaView, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(item.Name, mapping.RequirementAreaName, StringComparison.OrdinalIgnoreCase));
-
-                if (area is null)
-                {
-                    throw new DomainException($"Requirement area '{mapping.RequirementAreaName}' was not found.");
-                }
-
-                return new RequirementMapping(
-                    Guid.NewGuid(),
-                    courseId,
-                    area.Id,
-                    mapping.CoverageLevel,
-                    mapping.Notes);
-            })
+            .Select(mapping => TryBuildMapping(courseId, mapping, areas))
+            .Where(mapping => mapping is not null)
+            .Select(mapping => mapping!)
             .ToArray();
+    }
+
+    private static RequirementMapping? TryBuildMapping(
+        Guid courseId,
+        CourseTemplateRequirementMapping mapping,
+        IReadOnlyList<RequirementArea> areas)
+    {
+        var area = areas.FirstOrDefault(item =>
+            string.Equals(item.View, mapping.RequirementAreaView, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.Name, mapping.RequirementAreaName, StringComparison.OrdinalIgnoreCase));
+
+        if (area is null)
+        {
+            return null;
+        }
+
+        return new RequirementMapping(
+            Guid.NewGuid(),
+            courseId,
+            area.Id,
+            mapping.CoverageLevel,
+            mapping.Notes);
     }
 
     private static CourseTemplateOptionDefinition? ResolveSelectedOption(
@@ -1401,9 +1599,10 @@ public sealed class CourseService
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var areas = await repository.GetRequirementAreasAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
+        var availablePacks = await GetAvailableCoursePacksAsync(cancellationToken);
         foreach (var course in courses)
         {
-            var option = FindSourceOption(course);
+            var option = FindSourceOption(course, availablePacks);
             if (option is null)
             {
                 continue;
@@ -1790,14 +1989,16 @@ public sealed class CourseService
         return area is null ? 99 : SourceOrder(area.View);
     }
 
-    private static CourseTemplateOptionDefinition? FindSourceOption(Course course)
+    private static CourseTemplateOptionDefinition? FindSourceOption(
+        Course course,
+        IReadOnlyList<CoursePackDefinition> availablePacks)
     {
         if (string.IsNullOrWhiteSpace(course.SourcePackId) || string.IsNullOrWhiteSpace(course.SourceTemplateId))
         {
             return null;
         }
 
-        var pack = DefaultCoursePacks.All.FirstOrDefault(item =>
+        var pack = availablePacks.FirstOrDefault(item =>
             string.Equals(item.Id, course.SourcePackId, StringComparison.OrdinalIgnoreCase));
         var template = pack?.Courses.FirstOrDefault(item =>
             string.Equals(item.TemplateId, course.SourceTemplateId, StringComparison.OrdinalIgnoreCase));
@@ -1940,11 +2141,97 @@ public sealed class CourseService
         await MichiganRequirementSeedRefresh.EnsureCurrentAsync(repository, cancellationToken);
     }
 
+    private static OperationResult<CoursePackDefinition> ParseCoursePackFile(byte[] content)
+    {
+        if (content.Length == 0)
+        {
+            return OperationResult<CoursePackDefinition>.Failure("Choose a .coursepack file before installing.");
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<CoursePackJsonEnvelope>(content, CoursePackJsonOptions);
+            if (envelope is null)
+            {
+                return OperationResult<CoursePackDefinition>.Failure("The course pack file could not be read.");
+            }
+
+            if (!string.Equals(envelope.Format, "homeschool-manager.coursepack", StringComparison.Ordinal))
+            {
+                return OperationResult<CoursePackDefinition>.Failure("The file is not a recognized course pack.");
+            }
+
+            if (envelope.FormatVersion != 1)
+            {
+                return OperationResult<CoursePackDefinition>.Failure("This course pack format version is not supported.");
+            }
+
+            if (!string.Equals(envelope.PackageMode, "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationResult<CoursePackDefinition>.Failure("Zipped course pack installs are reserved for a later attachment workflow.");
+            }
+
+            var validationErrors = ValidateCoursePack(envelope.Pack);
+            return validationErrors.Count > 0
+                ? OperationResult<CoursePackDefinition>.Failure(validationErrors.ToArray())
+                : OperationResult<CoursePackDefinition>.Success(envelope.Pack);
+        }
+        catch (JsonException)
+        {
+            return OperationResult<CoursePackDefinition>.Failure("The course pack file must contain valid JSON.");
+        }
+    }
+
+    private static IReadOnlyList<string> ValidateCoursePack(CoursePackDefinition pack)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(pack.Id))
+        {
+            errors.Add("Course pack id is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(pack.Name))
+        {
+            errors.Add("Course pack name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(pack.RequirementJurisdiction))
+        {
+            errors.Add("Course pack requirement jurisdiction is required.");
+        }
+
+        if (pack.Courses.Count == 0)
+        {
+            errors.Add("Course pack must include at least one course.");
+        }
+
+        foreach (var template in pack.Courses)
+        {
+            if (string.IsNullOrWhiteSpace(template.TemplateId))
+            {
+                errors.Add("Every course template must include a stable template id.");
+            }
+
+            if (template.Options.Count == 0)
+            {
+                errors.Add($"Course template '{template.TemplateId}' must include at least one option.");
+            }
+
+            if (template.Options.Count > 0 && ResolveSelectedOption(template, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)) is null)
+            {
+                errors.Add($"Course template '{template.TemplateId}' has an invalid default option.");
+            }
+        }
+
+        return errors;
+    }
+
     private static JsonSerializerOptions CreateCoursePackJsonOptions()
     {
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
             WriteIndented = true
         };
         options.Converters.Add(new JsonStringEnumConverter());
@@ -1961,7 +2248,7 @@ public sealed class CourseService
     private sealed record CoursePackJsonEnvelope(
         string Format,
         int FormatVersion,
-        DateTimeOffset ExportedAtUtc,
+        DateTimeOffset DownloadedAtUtc,
         string PackageMode,
         string ArchiveNote,
         CoursePackDefinition Pack);

@@ -18,6 +18,8 @@ public sealed record Course
     public CurriculumPlan CurriculumPlan { get; init; }
     public IReadOnlyList<RequirementMapping> RequirementMappings { get; init; }
     public IReadOnlyList<LearningModule> Modules { get; init; }
+    public bool IsArchived { get; init; }
+    public DateTimeOffset? ArchivedAtUtc { get; init; }
 
     public Course(
         Guid id,
@@ -32,7 +34,9 @@ public sealed record Course
         CourseDescription? description,
         CurriculumPlan? curriculumPlan,
         IReadOnlyList<RequirementMapping>? requirementMappings,
-        IReadOnlyList<LearningModule>? modules = null)
+        IReadOnlyList<LearningModule>? modules = null,
+        bool isArchived = false,
+        DateTimeOffset? archivedAtUtc = null)
     {
         if (studentId == Guid.Empty)
         {
@@ -78,6 +82,8 @@ public sealed record Course
         CurriculumPlan = curriculumPlan ?? CurriculumPlan.Empty;
         RequirementMappings = requirementMappings ?? [];
         Modules = NormalizeModules(ModulesForCourse(modules ?? [], Id));
+        IsArchived = isArchived;
+        ArchivedAtUtc = isArchived ? archivedAtUtc ?? DateTimeOffset.UtcNow : null;
     }
 
     public Course WithDescription(CourseDescription description)
@@ -112,6 +118,11 @@ public sealed record Course
     public Course WithModules(IReadOnlyList<LearningModule> modules)
     {
         return this with { Modules = NormalizeModules(ModulesForCourse(modules, Id)) };
+    }
+
+    public Course Archive(DateTimeOffset archivedAtUtc)
+    {
+        return this with { IsArchived = true, ArchivedAtUtc = archivedAtUtc };
     }
 
     private static IReadOnlyList<LearningModule> ModulesForCourse(

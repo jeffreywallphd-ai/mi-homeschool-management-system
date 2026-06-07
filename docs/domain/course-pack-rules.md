@@ -61,11 +61,13 @@ Instructional methods, assessment methods, and grading basis may include a hybri
 
 - Parent/admin authorization is required.
 - Student sessions must not import packs.
-- Imported courses become ordinary editable course records.
+- Importing creates ordinary editable course records in the student's course list from an available course pack.
+- Importing is always scoped to the selected student; the same pack template may be imported independently for different students.
 - The UI should support full-pack import and selected-course import.
 - For templates with choices, the UI should use dropdowns and import the currently selected option.
 - Re-importing the same pack skips courses already imported from the same template id.
-- Missing requirement areas fail with visible errors instead of silently dropping mappings.
+- Requirement mappings that match the current jurisdiction seed should import.
+- Requirement mappings that do not match the current jurisdiction seed should not block import; leave those mappings off so the parent can review and correct coverage after import.
 - Importing a built-in pack may refresh its target requirement seed before mapping so local data with older seed contents can be repaired safely.
 - Built-in pack reads/imports should remove stale imported-course mappings to requirement rows no longer present in the current seed and add missing current pack mappings.
 - Pack data must not bypass domain course validation.
@@ -78,24 +80,30 @@ Instructional methods, assessment methods, and grading basis may include a hybri
 
 Importing a pack means creating editable courses from a pack that is already available in the app.
 
-Installing a pack is reserved for a later feature where the parent adds a pack created outside the built-in library.
+Installing a pack means adding a `.coursepack` file to the system's available course pack library. Installing must not create student courses.
 
-## Export Rules
+Installed packs should appear alongside built-in packs in the Course packs selector. The parent/admin must still choose Import full pack or Import selected to copy courses from an installed pack into the student's course list.
 
-An exported course pack should use a `.coursepack` extension and contain JSON using a versioned envelope around the course pack contract.
+Installed packs are household/system-level templates. Imported courses are student-owned records.
+
+Installing a pack with the same id as a built-in pack should be rejected so built-in packs are not shadowed by uploaded files.
+
+## Download Rules
+
+A downloaded course pack should use a `.coursepack` extension and contain JSON using a versioned envelope around the course pack contract.
 
 The JSON envelope should include:
 
 - Format identifier.
 - Format version.
-- Export timestamp.
+- Download timestamp.
 - Package mode.
 - Archive note.
 - Pack payload.
 
-Current built-in pack export may write a single JSON `.coursepack` file because built-in lesson and assignment resources are links or physical-resource references, not attached files.
+Current built-in pack download may write a single JSON `.coursepack` file because built-in lesson and assignment resources are links or physical-resource references, not attached files.
 
-Future exports that include attached lesson files, assignment files, or other course-pack files should use a zip archive containing the `.coursepack` JSON plus the referenced files. The JSON contract should remain the manifest inside that archive.
+Future downloads that include attached lesson files, assignment files, or other course-pack files should use a zip archive containing the `.coursepack` JSON plus the referenced files. The JSON contract should remain the manifest inside that archive.
 
 ## Default Pack Rule
 

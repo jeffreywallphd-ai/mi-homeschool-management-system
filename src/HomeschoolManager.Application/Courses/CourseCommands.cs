@@ -7,7 +7,8 @@ public sealed record CreateCourseCommand(
     string Description,
     IReadOnlyList<string> SubjectAreas,
     CourseDuration Duration,
-    decimal PlannedCreditValue);
+    decimal PlannedCreditValue,
+    Guid? StudentId = null);
 
 public sealed record UpdateCourseCommand(
     Guid CourseId,
@@ -144,13 +145,16 @@ public sealed record DeleteAssignmentCommand(Guid CourseId, Guid ModuleId, Guid 
 
 public sealed record CoursePackSelectionCommand(string TemplateId, string OptionId);
 
+public sealed record CourseListActionCommand(Guid StudentId, IReadOnlyList<Guid> CourseIds, bool ApplyToEntireCourseList);
+
 public sealed record ImportCoursePackCommand(
     string PackId,
     IReadOnlyList<string> TemplateIds,
-    IReadOnlyList<CoursePackSelectionCommand> Selections)
+    IReadOnlyList<CoursePackSelectionCommand> Selections,
+    Guid? StudentId = null)
 {
     public ImportCoursePackCommand(string packId, IReadOnlyList<string> templateIds)
-        : this(packId, templateIds, [])
+        : this(packId, templateIds, [], null)
     {
     }
 }

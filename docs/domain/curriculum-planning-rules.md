@@ -14,6 +14,12 @@ Planning is course-first. A parent creates courses, then optionally adds curricu
 
 Subject-first and requirement-first views may exist as filters or reports, but they must not replace the course as the primary high-school planning unit.
 
+Courses are student-owned records. Admin course lists, course creation, course-pack import, and coverage summaries must be scoped to the selected student when multiple homeschooled children are configured.
+
+Courses may be archived. Archived courses remain retained records with modules, lessons, assignments, mappings, and future student work, but they are removed from active course lists and active coverage summaries.
+
+Course deletion is for active planning records that do not have student work attached. If student work exists, deletion should fail for that course and direct the parent to archive it instead. Bulk delete actions may continue deleting other eligible courses.
+
 Learning modules are course-owned instructional units inside a course. They organize the course into teachable topic arcs while the course remains the transcript-facing record. Lessons inside modules provide the concrete instructional steps and resources.
 
 ## Course Requirements

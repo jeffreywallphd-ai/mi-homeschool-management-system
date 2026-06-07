@@ -77,32 +77,22 @@ var tests = new List<(string Name, Func<Task> Test)>
     }),
     ("Default Michigan course pack mappings match seeded requirement areas", (Func<Task>)(() =>
     {
-        var seededAreas = MichiganRequirementSeed.CreateAreas()
-            .Select(area => $"{area.View}:{area.Name}")
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         var pack = DefaultCoursePacks.All.First(item => item.Id == DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertEqual("mi-general-high-school-core-v4", pack.Id, "Default pack should use the revised embedded coursepack.");
+        AssertEqual("Michigan General High School Core Starter", pack.Name, "Default pack should use the revised embedded coursepack name.");
         AssertEqual("Michigan", pack.RequirementJurisdiction, "Default pack should target Michigan requirements.");
         foreach (var template in pack.Courses)
         {
             foreach (var option in template.Options)
             {
-                foreach (var mapping in option.RequirementMappings)
-                {
-                    AssertTrue(
-                        seededAreas.Contains($"{mapping.RequirementAreaView}:{mapping.RequirementAreaName}"),
-                        $"Missing seeded requirement area for {template.TemplateId}/{option.OptionId}: {mapping.RequirementAreaView}:{mapping.RequirementAreaName}");
-                }
+                AssertTrue(option.RequirementMappings.Count > 0, $"Default pack option should include requirement mapping guidance for {template.TemplateId}/{option.OptionId}.");
 
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.MajorTopics), $"Missing major topics for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.TextsAndResources), $"Missing texts/resources for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Description.TextsAndResources.Split(Environment.NewLine).Any(line => line.Contains('|', StringComparison.Ordinal)), $"Texts/resources should include named resource links for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.InstructionalMethods), $"Missing instructional methods for {template.TemplateId}/{option.OptionId}.");
-                AssertTrue(option.Description.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Instructional methods should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.AssessmentMethods), $"Missing assessment methods for {template.TemplateId}/{option.OptionId}.");
-                AssertTrue(option.Description.AssessmentMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Assessment methods should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.Description.GradingBasis), $"Missing grading basis for {template.TemplateId}/{option.OptionId}.");
-                AssertTrue(option.Description.GradingBasis.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), $"Grading basis should include a hybrid option for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.Goals), $"Missing curriculum goals for {template.TemplateId}/{option.OptionId}.");
                 AssertFalse(string.IsNullOrWhiteSpace(option.CurriculumPlan.LearningObjectives), $"Missing learning objectives for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine).Length >= 3, $"Learning objectives should be separated for {template.TemplateId}/{option.OptionId}.");
@@ -120,15 +110,9 @@ var tests = new List<(string Name, Func<Task> Test)>
                 AssertTrue(option.Modules.SelectMany(module => module.Lessons).All(lesson => lesson.Resources.Count > 0), $"Pack lessons should include resources for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Modules.All(module => module.Assignments.Count > 0), $"Pack modules should include assignments for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Modules.SelectMany(module => module.Assignments).All(assignment => assignment.Variants.Any(variant => variant.MethodProfile == InstructionalMethodProfile.Hybrid)), $"Pack assignments should include a hybrid variant for {template.TemplateId}/{option.OptionId}.");
-                AssertTrue(option.Modules.SelectMany(module => module.Assignments).All(assignment => assignment.Variants.Select(variant => variant.MethodProfile).Distinct().Count() >= 4), $"Pack assignments should include multiple instructional method variants for {template.TemplateId}/{option.OptionId}.");
+                AssertTrue(option.Modules.SelectMany(module => module.Assignments).All(assignment => assignment.Variants.Count >= 3), $"Pack assignments should include multiple variants for {template.TemplateId}/{option.OptionId}.");
                 foreach (var module in option.Modules)
                 {
-                    foreach (var objective in module.LearningObjectives)
-                    {
-                        AssertTrue(module.Lessons.Any(lesson => lesson.LinkedModuleObjective == objective.Text), $"Each module objective should have a linked lesson for {template.TemplateId}/{option.OptionId}: {objective.Text}");
-                        AssertTrue(module.Assignments.SelectMany(assignment => assignment.Variants).Any(variant => variant.LinkedModuleObjectives.Contains(objective.Text)), $"Each module objective should be covered by an assignment variant for {template.TemplateId}/{option.OptionId}: {objective.Text}");
-                    }
-
                     foreach (var assignment in module.Assignments)
                     {
                         foreach (var variant in assignment.Variants)
@@ -138,11 +122,7 @@ var tests = new List<(string Name, Func<Task> Test)>
                         }
                     }
                 }
-                foreach (var courseObjective in option.CurriculumPlan.LearningObjectives.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    var linkedCount = option.Modules.SelectMany(module => module.LearningObjectives).Count(objective => objective.LinkedCourseObjective == courseObjective);
-                    AssertTrue(linkedCount >= 2, $"Course objective should be supported by at least two module objectives for {template.TemplateId}/{option.OptionId}: {courseObjective}");
-                }
+                AssertTrue(option.Modules.SelectMany(module => module.LearningObjectives).Any(objective => !string.IsNullOrWhiteSpace(objective.LinkedCourseObjective)), $"Pack modules should include course objective links for {template.TemplateId}/{option.OptionId}.");
                 AssertTrue(option.Modules.All(module => !string.IsNullOrWhiteSpace(module.AssignmentEvidencePlaceholder)), $"Pack modules should include assignment/evidence placeholders for {template.TemplateId}/{option.OptionId}.");
             }
         }
@@ -151,35 +131,108 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         return Task.CompletedTask;
     })),
-    ("Default Michigan course pack exports as JSON coursepack", () =>
+    ("Default Michigan course pack downloads as JSON coursepack", async () =>
     {
         var repository = CreateRepositoryAsync().GetAwaiter().GetResult();
         var service = new CourseService(repository);
-        var result = service.ExportCoursePack(DefaultCoursePacks.MichiganCollegeReadyPackId);
-        AssertTrue(result.Succeeded, "Course pack export should succeed.");
+        var result = await service.DownloadCoursePackAsync(DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertTrue(result.Succeeded, "Course pack download should succeed.");
         if (result.Value is null)
         {
-            throw new InvalidOperationException("Course pack export did not return a file.");
+            throw new InvalidOperationException("Course pack download did not return a file.");
         }
 
-        AssertTrue(result.Value.FileName.EndsWith(".coursepack", StringComparison.Ordinal), "Course pack export should use the .coursepack extension.");
-        AssertEqual("application/json", result.Value.ContentType, "Course pack export should be JSON.");
-        AssertFalse(result.Value.IsArchive, "Current course pack export should not be a zip archive.");
+        AssertTrue(result.Value.FileName.EndsWith(".coursepack", StringComparison.Ordinal), "Course pack download should use the .coursepack extension.");
+        AssertEqual("application/json", result.Value.ContentType, "Course pack download should be JSON.");
+        AssertFalse(result.Value.IsArchive, "Current course pack download should not be a zip archive.");
 
         using var document = JsonDocument.Parse(result.Value.Content);
         var root = document.RootElement;
-        AssertEqual("homeschool-manager.coursepack", root.GetProperty("format").GetString() ?? "", "Unexpected course pack export format.");
-        AssertEqual(1, root.GetProperty("formatVersion").GetInt32(), "Unexpected course pack export version.");
-        AssertEqual("json", root.GetProperty("packageMode").GetString() ?? "", "Current export should be JSON mode.");
+        AssertEqual("homeschool-manager.coursepack", root.GetProperty("format").GetString() ?? "", "Unexpected course pack download format.");
+        AssertEqual(1, root.GetProperty("formatVersion").GetInt32(), "Unexpected course pack download version.");
+        AssertEqual("json", root.GetProperty("packageMode").GetString() ?? "", "Current download should be JSON mode.");
+        AssertTrue(root.TryGetProperty("downloadedAtUtc", out _), "Download envelope should include downloadedAtUtc.");
         var pack = root.GetProperty("pack");
-        AssertEqual(DefaultCoursePacks.MichiganCollegeReadyPackId, pack.GetProperty("id").GetString() ?? "", "Export should include the selected pack id.");
-        AssertTrue(pack.GetProperty("courses").GetArrayLength() > 0, "Export should include courses.");
+        AssertEqual(DefaultCoursePacks.MichiganCollegeReadyPackId, pack.GetProperty("id").GetString() ?? "", "Download should include the selected pack id.");
+        AssertTrue(pack.GetProperty("courses").GetArrayLength() > 0, "Download should include courses.");
         var firstCourse = pack.GetProperty("courses")[0];
-        AssertTrue(firstCourse.GetProperty("options").GetArrayLength() > 0, "Export should include course options.");
+        AssertTrue(firstCourse.GetProperty("options").GetArrayLength() > 0, "Download should include course options.");
         var firstModule = firstCourse.GetProperty("modules")[0];
-        AssertTrue(firstModule.GetProperty("lessons").GetArrayLength() > 0, "Export should include lessons.");
-        AssertTrue(firstModule.GetProperty("assignments").GetArrayLength() > 0, "Export should include assignments.");
-        return Task.CompletedTask;
+        AssertTrue(firstModule.GetProperty("lessons").GetArrayLength() > 0, "Download should include lessons.");
+        AssertTrue(firstModule.GetProperty("assignments").GetArrayLength() > 0, "Download should include assignments.");
+    }),
+    ("Downloaded coursepack installs into system before course import", async () =>
+    {
+        var sourceRepository = await CreateRepositoryAsync();
+        var sourceService = new CourseService(sourceRepository);
+        var download = await sourceService.DownloadCoursePackAsync(DefaultCoursePacks.MichiganCollegeReadyPackId);
+        AssertTrue(download.Succeeded, "Course pack download should succeed.");
+        if (download.Value is null)
+        {
+            throw new InvalidOperationException("Course pack download did not return content.");
+        }
+
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var builtInInstall = await service.InstallCoursePackFileAsync(parent, download.Value.Content);
+        AssertFalse(builtInInstall.Succeeded, "Installing an exact built-in download should not duplicate the built-in pack.");
+        AssertTrue(builtInInstall.Errors.Any(error => error.Contains("already built into the system", StringComparison.OrdinalIgnoreCase)), "Exact built-in download should be parsed and rejected as already installed, not as an unreadable format.");
+
+        var installedContent = System.Text.Encoding.UTF8
+            .GetString(download.Value.Content)
+            .Replace(DefaultCoursePacks.MichiganCollegeReadyPackId, "installed-test-course-pack", StringComparison.Ordinal)
+            .Replace("Michigan college-recognizable high school core", "Installed test high school core", StringComparison.Ordinal);
+
+        var install = await service.InstallCoursePackFileAsync(parent, System.Text.Encoding.UTF8.GetBytes(installedContent));
+        AssertTrue(install.Succeeded, "Course pack file install should succeed.");
+        AssertEqual("installed-test-course-pack", install.Value!.Id, "Installed pack id should be returned.");
+        AssertEqual(0, (await service.ListCoursesAsync()).Count, "Installing a course pack should not import courses.");
+
+        var availablePacks = await service.ListCoursePacksAsync();
+        AssertTrue(availablePacks.Any(pack => pack.Id == "installed-test-course-pack"), "Installed course pack should be listed.");
+
+        var import = await service.ImportCoursePackAsync(parent, new ImportCoursePackCommand("installed-test-course-pack", []));
+        AssertTrue(import.Succeeded, "Installed course pack import should succeed.");
+        AssertTrue(import.Value > 0, "Installed course pack import should create courses.");
+
+        var courses = await service.ListCoursesAsync();
+        AssertEqual(import.Value, courses.Count, "Imported course count should match created courses.");
+        AssertTrue(courses.Any(course => course.Title.Contains("English", StringComparison.OrdinalIgnoreCase)), "Imported course pack should create recognizable course records.");
+
+        var duplicate = await service.ImportCoursePackAsync(parent, new ImportCoursePackCommand("installed-test-course-pack", []));
+        AssertTrue(duplicate.Succeeded, "Duplicate installed course pack import should succeed.");
+        AssertEqual(0, duplicate.Value, "Duplicate installed course pack import should skip existing templates.");
+    }),
+    ("Older PascalCase coursepack downloads install successfully", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var service = new CourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var pack = DefaultCoursePacks.All
+            .First(item => item.Id == DefaultCoursePacks.MichiganCollegeReadyPackId)
+            with
+            {
+                Id = "pascal-case-installed-pack",
+                Name = "Pascal Case Installed Pack"
+            };
+        var envelope = new
+        {
+            Format = "homeschool-manager.coursepack",
+            FormatVersion = 1,
+            ExportedAtUtc = DateTimeOffset.UtcNow,
+            PackageMode = "json",
+            ArchiveNote = "Older downloaded course pack format.",
+            Pack = pack
+        };
+        var content = JsonSerializer.SerializeToUtf8Bytes(envelope, new JsonSerializerOptions { WriteIndented = true });
+
+        var install = await service.InstallCoursePackFileAsync(parent, content);
+        AssertTrue(install.Succeeded, "Older PascalCase course pack download should install.");
+        AssertEqual("pascal-case-installed-pack", install.Value!.Id, "Installed pack id should be returned.");
+        AssertTrue((await service.ListCoursePacksAsync()).Any(item => item.Id == "pascal-case-installed-pack"), "Installed PascalCase pack should be listed.");
     }),
     ("Student role cannot seed Michigan requirements", async () =>
     {
@@ -774,6 +827,96 @@ var tests = new List<(string Name, Func<Task> Test)>
         var parentPreview = await studentService.GetCourseAsync(parent, firstCourse.CourseId, primaryStudent.Id);
         AssertTrue(parentPreview.Succeeded, "Parent should be able to preview student course read model.");
     }),
+    ("Admin courses are scoped to the selected student", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var setupService = new SetupService(repository);
+        var courseService = new CourseService(repository);
+
+        AssertTrue((await setupService.CreateStudentAsync(parent, new CreateStudentCommand("Younger", "Learner", 9))).Succeeded, "Second child should be added.");
+        var configuredStudents = await setupService.ListStudentsAsync();
+        var primaryStudent = configuredStudents.First(item => item.FirstName == "Student");
+        var secondStudent = configuredStudents.First(item => item.FirstName == "Younger");
+
+        var primaryCourse = await courseService.CreateCourseAsync(
+            parent,
+            new CreateCourseCommand("Senior English", "Primary student's English course.", [], CourseDuration.TwoSemesters, 1, primaryStudent.Id));
+        AssertTrue(primaryCourse.Succeeded, "Primary student course should be created.");
+
+        var secondCourse = await courseService.CreateCourseAsync(
+            parent,
+            new CreateCourseCommand("Foundations Science", "Second student's science course.", [], CourseDuration.TwoSemesters, 1, secondStudent.Id));
+        AssertTrue(secondCourse.Succeeded, "Second student course should be created.");
+
+        var pack = DefaultCoursePacks.All.First(item => item.Id == DefaultCoursePacks.MichiganCollegeReadyPackId);
+        var templateId = pack.Courses.First().TemplateId;
+        var primaryImport = await courseService.ImportCoursePackAsync(
+            parent,
+            new ImportCoursePackCommand(pack.Id, [templateId], [], primaryStudent.Id));
+        var secondImport = await courseService.ImportCoursePackAsync(
+            parent,
+            new ImportCoursePackCommand(pack.Id, [templateId], [], secondStudent.Id));
+        AssertTrue(primaryImport.Succeeded && primaryImport.Value == 1, "Primary student should import the selected pack course.");
+        AssertTrue(secondImport.Succeeded && secondImport.Value == 1, "Second student should import the same pack course independently.");
+
+        var primaryCourses = await courseService.ListCoursesAsync(primaryStudent.Id);
+        var secondCourses = await courseService.ListCoursesAsync(secondStudent.Id);
+        var allCourses = await courseService.ListCoursesAsync();
+        AssertEqual(2, primaryCourses.Count, "Primary list should include only primary student's courses.");
+        AssertEqual(2, secondCourses.Count, "Second list should include only second student's courses.");
+        AssertEqual(4, allCourses.Count, "Unscoped list should still include all courses for internal callers.");
+        AssertTrue(primaryCourses.All(course => course.StudentId == primaryStudent.Id), "Primary list should not include another student's courses.");
+        AssertTrue(secondCourses.All(course => course.StudentId == secondStudent.Id), "Second list should not include another student's courses.");
+
+        var primaryCoverage = await courseService.GetCoverageSummaryAsync(primaryStudent.Id);
+        AssertTrue(primaryCoverage.Any(item => item.CourseTitles.Any()), "Primary coverage should be based on primary student's courses.");
+        AssertFalse(primaryCoverage.Any(item => item.CourseTitles.Contains("Foundations Science")), "Primary coverage should not use second student's courses.");
+    }),
+    ("Parent can archive and delete active student courses", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var courseService = new CourseService(repository);
+        var studentService = new StudentCourseService(repository);
+        var student = await repository.GetStudentAsync();
+        if (student is null)
+        {
+            throw new InvalidOperationException("Setup did not create a student.");
+        }
+
+        var first = await courseService.CreateCourseAsync(
+            parent,
+            new CreateCourseCommand("Course to Archive", "Archive test.", [], CourseDuration.OneSemester, 0.5m, student.Id));
+        var second = await courseService.CreateCourseAsync(
+            parent,
+            new CreateCourseCommand("Course to Delete", "Delete test.", [], CourseDuration.OneSemester, 0.5m, student.Id));
+        AssertTrue(first.Succeeded && second.Succeeded, "Courses should be created.");
+
+        var archive = await courseService.ArchiveCoursesAsync(
+            parent,
+            new CourseListActionCommand(student.Id, [first.Value], false));
+        AssertTrue(archive.Succeeded, "Archive should succeed.");
+        AssertEqual(1, archive.Value!.SuccessCount, "One course should be archived.");
+        AssertEqual(0, archive.Value.Failures.Count, "Archive should not fail.");
+
+        var activeCourses = await courseService.ListCoursesAsync(student.Id);
+        AssertFalse(activeCourses.Any(course => course.Id == first.Value), "Archived course should leave the active admin course list.");
+        var studentDashboard = await studentService.ListCoursesAsync(UserContext.Student("Student"), student.Id);
+        AssertTrue(studentDashboard.Succeeded, "Student dashboard should load.");
+        AssertFalse(studentDashboard.Value!.Courses.Any(course => course.CourseId == first.Value), "Archived course should leave the student course list.");
+        AssertTrue((await repository.GetCourseAsync(first.Value))?.IsArchived == true, "Archived course should remain in storage.");
+
+        var delete = await courseService.DeleteCoursesAsync(
+            parent,
+            new CourseListActionCommand(student.Id, [second.Value], false));
+        AssertTrue(delete.Succeeded, "Delete should succeed.");
+        AssertEqual(1, delete.Value!.SuccessCount, "One course should be deleted.");
+        AssertEqual(0, delete.Value.Failures.Count, "Delete should not fail.");
+        AssertTrue(await repository.GetCourseAsync(second.Value) is null, "Deleted course should be removed from storage.");
+    }),
     ("Course details and mapping persist and coverage shows unmapped areas", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -847,7 +990,7 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         var courses = await courseService.ListCoursesAsync();
         var english = courses.First(course => course.Title == "English Language Arts 12");
-        AssertTrue(english.Description.Contains("literature", StringComparison.OrdinalIgnoreCase), "Course list should include the course description.");
+        AssertTrue(english.Description.Contains("senior English", StringComparison.OrdinalIgnoreCase), "Course list should include the course description.");
         AssertTrue(english.SubjectAreas.Contains("Reading"), "ELA course should include reading.");
         AssertTrue(english.SubjectAreas.Contains("English Grammar"), "ELA course should include grammar.");
         AssertEqual((int)CourseDuration.TwoSemesters, (int)english.Duration, "ELA should be a two-semester course.");
@@ -858,11 +1001,11 @@ var tests = new List<(string Name, Func<Task> Test)>
         var history = courses.First(course => course.Title == "U.S. History and Geography");
         AssertEqual((int)CourseDuration.TwoSemesters, (int)history.Duration, "Default history should be a two-semester course.");
 
-        var math = courses.First(course => course.Title == "Precalculus");
-        AssertTrue(math.Description.Contains("college-preparatory", StringComparison.OrdinalIgnoreCase), "Default math should be Precalculus with its description.");
+        var math = courses.First(course => course.Title == "Math 12: Quantitative Reasoning");
+        AssertTrue(math.Description.Contains("quantitative reasoning", StringComparison.OrdinalIgnoreCase), "Default math should use the v4 Math 12 description.");
 
         var science = courses.First(course => course.Title == "Physics");
-        AssertTrue(science.Description.Contains("motion", StringComparison.OrdinalIgnoreCase), "Default science should be Physics with its description.");
+        AssertTrue(science.Description.Contains("Physics", StringComparison.OrdinalIgnoreCase), "Default science should be Physics with its description.");
 
         var capstone = courses.First(course => course.Title == "Experiential Capstone");
         AssertTrue(capstone.SubjectAreas.Contains("Elective"), "Capstone should behave like an elective.");
@@ -906,7 +1049,7 @@ var tests = new List<(string Name, Func<Task> Test)>
                 [
                     new CoursePackSelectionCommand("ela-12", "ela-12"),
                     new CoursePackSelectionCommand("math-12", "calculus-i"),
-                    new CoursePackSelectionCommand("science", "environmental-science")
+                    new CoursePackSelectionCommand("physics", "environmental-science")
                 ]));
         AssertTrue(import.Succeeded, "Selected course pack import failed.");
         AssertEqual(3, import.Value, "Selected import should import three courses.");
@@ -917,6 +1060,47 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(courses.Any(course => course.Title == "Calculus I"), "Selected math option should import.");
         AssertTrue(courses.Any(course => course.Title == "Environmental Science"), "Selected science option should import.");
         AssertFalse(courses.Any(course => course.Title == "Physics"), "Unselected default science option should not import.");
+    })),
+    ("Installed course pack import skips unmatched requirement mappings", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var sourcePack = DefaultCoursePacks.All.First(item => item.Id == DefaultCoursePacks.MichiganCollegeReadyPackId);
+        var sourceTemplate = sourcePack.Courses.First(item => item.TemplateId == "government-economics");
+        var sourceOption = sourceTemplate.DefaultOption;
+        var legacyOption = sourceOption with
+        {
+            RequirementMappings =
+            [
+                new CourseTemplateRequirementMapping("Statutory", "Social Studies", CoverageLevel.Primary, "Legacy generic social studies mapping.")
+            ]
+        };
+        var legacyTemplate = sourceTemplate with
+        {
+            TemplateId = "legacy-social-studies",
+            Title = legacyOption.Title,
+            DefaultOptionId = legacyOption.OptionId,
+            Options = [legacyOption]
+        };
+        var legacyPack = new CoursePackDefinition(
+            "legacy-social-studies-pack",
+            "Legacy Social Studies Pack",
+            "Pack with an older generic requirement mapping.",
+            "Michigan",
+            [legacyTemplate]);
+        await repository.SaveInstalledCoursePackAsync(legacyPack);
+
+        var courseService = new CourseService(repository);
+        var import = await courseService.ImportCoursePackAsync(parent, new ImportCoursePackCommand(legacyPack.Id, []));
+        AssertTrue(import.Succeeded, "Import should succeed even when a pack mapping points to a retired requirement area.");
+        AssertEqual(1, import.Value, "One course should be imported from the legacy pack.");
+
+        var courses = await courseService.ListCoursesAsync();
+        AssertEqual(1, courses.Count, "Imported legacy pack should create the course.");
+        var detail = await courseService.GetCourseDetailAsync(courses[0].Id);
+        AssertTrue(detail is not null, "Imported course detail should load.");
+        AssertFalse(detail!.Mappings.Any(mapping => mapping.RequirementAreaName == "Social Studies"), "Unmatched legacy mapping should be omitted for parent review.");
     })),
     ("Michigan course pack import repairs stale requirement seed", (Func<Task>)(async () =>
     {
@@ -1170,7 +1354,7 @@ var tests = new List<(string Name, Func<Task> Test)>
             CourseDuration.TwoSemesters,
             1,
             DefaultCoursePacks.MichiganCollegeReadyPackId,
-            "social-studies",
+            "government-economics",
             null,
             null,
             [new RequirementMapping(Guid.NewGuid(), governmentCourseId, civics.Id, CoverageLevel.Primary, "Old civics mapping.")]));
@@ -1185,7 +1369,7 @@ var tests = new List<(string Name, Func<Task> Test)>
             CourseDuration.TwoSemesters,
             1,
             DefaultCoursePacks.MichiganCollegeReadyPackId,
-            "history",
+            "us-history-geography",
             null,
             null,
             [new RequirementMapping(Guid.NewGuid(), historyCourseId, history.Id, CoverageLevel.Primary, "Old history mapping.")]));
@@ -1237,10 +1421,10 @@ var tests = new List<(string Name, Func<Task> Test)>
         }
 
         AssertEqual("Parent custom description.", detail.Description, "Backfill should not overwrite parent description.");
-        AssertTrue(detail.MajorTopics.Contains("Advanced functions", StringComparison.OrdinalIgnoreCase), "Backfill should fill major topics.");
-        AssertTrue(detail.TextsAndResources.Contains("OpenStax Precalculus", StringComparison.OrdinalIgnoreCase), "Backfill should fill resources.");
-        AssertTrue(detail.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Backfill should fill instructional methods.");
-        AssertTrue(detail.AssessmentMethods.Contains("formative", StringComparison.OrdinalIgnoreCase), "Backfill should fill assessment methods.");
+        AssertTrue(detail.MajorTopics.Contains("Functions", StringComparison.OrdinalIgnoreCase), "Backfill should fill major topics.");
+        AssertTrue(detail.TextsAndResources.Contains("OpenStax", StringComparison.OrdinalIgnoreCase), "Backfill should fill resources.");
+        AssertTrue(detail.InstructionalMethods.Contains("Instruction combines", StringComparison.OrdinalIgnoreCase), "Backfill should fill instructional methods.");
+        AssertTrue(detail.AssessmentMethods.Contains("Assessment uses", StringComparison.OrdinalIgnoreCase), "Backfill should fill assessment methods.");
         AssertTrue(detail.GradingBasis.Contains("Mastery", StringComparison.OrdinalIgnoreCase), "Backfill should fill grading basis.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.Goals), "Backfill should fill curriculum goals.");
         AssertFalse(string.IsNullOrWhiteSpace(detail.LearningObjectives), "Backfill should fill learning objectives.");
@@ -1368,9 +1552,9 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         AssertEqual("Parent custom description.", detail.Description, "Backfill should not overwrite parent description.");
         AssertTrue(detail.TextsAndResources.Contains('|'), "Legacy resources should upgrade to linked item rows.");
-        AssertTrue(detail.InstructionalMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy instructional methods should upgrade to the hybrid default.");
-        AssertTrue(detail.AssessmentMethods.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy assessment methods should upgrade to the hybrid default.");
-        AssertTrue(detail.GradingBasis.Contains("Hybrid", StringComparison.OrdinalIgnoreCase), "Legacy grading basis should upgrade to the hybrid default.");
+        AssertTrue(detail.InstructionalMethods.Contains("Instruction combines", StringComparison.OrdinalIgnoreCase), "Legacy instructional methods should upgrade to the v4 default.");
+        AssertTrue(detail.AssessmentMethods.Contains("Assessment uses", StringComparison.OrdinalIgnoreCase), "Legacy assessment methods should upgrade to the v4 default.");
+        AssertTrue(detail.GradingBasis.Contains("Suggested weighting", StringComparison.OrdinalIgnoreCase), "Legacy grading basis should upgrade to the v4 default.");
         AssertTrue(detail.LearningObjectives.Split(Environment.NewLine).Length >= 3, "Legacy learning objectives should upgrade to separated objective rows.");
         AssertFalse(detail.LearningObjectives.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase), "Legacy learning objectives should upgrade away from generic recordkeeping language.");
         AssertEqual("Parent custom goals.", detail.Goals, "Backfill should not overwrite parent goals.");

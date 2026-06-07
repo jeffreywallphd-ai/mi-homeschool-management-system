@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Household;
@@ -173,6 +174,39 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             {
                 document.Courses.RemoveAll(existing => existing.Id == course.Id);
                 document.Courses.Add(course);
+            },
+            cancellationToken);
+    }
+
+    public async Task DeleteCourseAsync(Guid courseId, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.Courses.RemoveAll(existing => existing.Id == courseId);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CoursePackDefinition>> GetInstalledCoursePacksAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.InstalledCoursePacks
+            .OrderBy(pack => pack.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public async Task SaveInstalledCoursePackAsync(CoursePackDefinition coursePack, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.InstalledCoursePacks.RemoveAll(existing =>
+                    string.Equals(existing.Id, coursePack.Id, StringComparison.OrdinalIgnoreCase));
+                document.InstalledCoursePacks.Add(coursePack);
+                document.InstalledCoursePacks = document.InstalledCoursePacks
+                    .OrderBy(pack => pack.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             },
             cancellationToken);
     }

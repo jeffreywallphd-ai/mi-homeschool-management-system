@@ -4,12 +4,19 @@ namespace HomeschoolManager.Application.Courses;
 
 public sealed record CourseListItem(
     Guid Id,
+    Guid StudentId,
     string Title,
     string Description,
     IReadOnlyList<string> SubjectAreas,
     CourseDuration Duration,
     decimal PlannedCreditValue,
     int MappingCount);
+
+public sealed record CourseListActionResult(
+    int SuccessCount,
+    IReadOnlyList<CourseListActionFailure> Failures);
+
+public sealed record CourseListActionFailure(Guid CourseId, string CourseTitle, string Message);
 
 public sealed record CourseRequirementMappingView(
     Guid RequirementAreaId,
@@ -20,6 +27,8 @@ public sealed record CourseRequirementMappingView(
 
 public sealed record CourseDetail(
     Guid Id,
+    Guid StudentId,
+    string StudentName,
     string Title,
     IReadOnlyList<string> SubjectAreas,
     CourseDuration Duration,
@@ -141,7 +150,7 @@ public sealed record CoursePackSummary(
     int CourseCount,
     decimal TotalPlannedCredits);
 
-public sealed record CoursePackExportFile(
+public sealed record CoursePackDownloadFile(
     string FileName,
     string ContentType,
     byte[] Content,

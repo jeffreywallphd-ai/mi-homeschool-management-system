@@ -37,6 +37,7 @@ public sealed class StudentCourseService
         var courses = await repository.GetCoursesAsync(cancellationToken);
         var cards = courses
             .Where(course => course.StudentId == student.Id)
+            .Where(course => !course.IsArchived)
             .OrderBy(course => course.Title)
             .Select(course => new StudentCourseCard(
                 student.Id,
@@ -71,7 +72,7 @@ public sealed class StudentCourseService
         }
 
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
-        if (course is null)
+        if (course is null || course.IsArchived)
         {
             return OperationResult<StudentCoursePage>.Failure("Course was not found.");
         }
@@ -110,7 +111,7 @@ public sealed class StudentCourseService
         }
 
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
-        if (course is null)
+        if (course is null || course.IsArchived)
         {
             return OperationResult<StudentCourseSyllabus>.Failure("Course was not found.");
         }
@@ -155,7 +156,7 @@ public sealed class StudentCourseService
         }
 
         var course = await repository.GetCourseAsync(courseId, cancellationToken);
-        if (course is null)
+        if (course is null || course.IsArchived)
         {
             return OperationResult<StudentModulePage>.Failure("Course was not found.");
         }

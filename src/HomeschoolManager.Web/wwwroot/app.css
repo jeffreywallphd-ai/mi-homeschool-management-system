@@ -74,6 +74,15 @@ a, .btn-link {
     padding: 0.5rem 0.75rem;
 }
 
+.page-header-student-selector {
+    min-width: 14rem;
+}
+
+.page-header-student-selector .form-label {
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+
 .content-workbench {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
@@ -108,8 +117,29 @@ a, .btn-link {
     margin-bottom: 0;
 }
 
+.course-list-heading-row {
+    align-items: flex-start;
+}
+
+.course-list-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.select-cell {
+    width: 1%;
+    white-space: nowrap;
+}
+
 .course-pack-actions {
     margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.course-pack-actions p {
+    flex: 1 1 16rem;
 }
 
 .new-course-button {

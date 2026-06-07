@@ -2,6 +2,7 @@ using HomeschoolManager.Domain.Household;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
+using HomeschoolManager.Application.Courses;
 
 namespace HomeschoolManager.Infrastructure.Persistence;
 
@@ -24,4 +25,6 @@ public sealed class AppDataDocument
     public List<RequirementArea> RequirementAreas { get; set; } = [];
 
     public List<Course> Courses { get; set; } = [];
+
+    public List<CoursePackDefinition> InstalledCoursePacks { get; set; } = [];
 }

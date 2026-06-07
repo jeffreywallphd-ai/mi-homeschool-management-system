@@ -22,7 +22,7 @@ else
     <div class="page-header-bar">
         <div>
             <h1>@detail.Title</h1>
-            <p>@DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
+            <p>@CourseOwnerText(detail), @DurationText(detail.Duration), @detail.PlannedCreditValue planned credit(s)</p>
         </div>
         @if (messages.Count > 0)
         {
@@ -381,6 +381,13 @@ else
     private static string DurationText(CourseDuration duration)
     {
         return duration == CourseDuration.OneSemester ? "one semester" : "two semesters";
+    }
+
+    private static string CourseOwnerText(HomeschoolManager.Application.Courses.CourseDetail course)
+    {
+        return string.IsNullOrWhiteSpace(course.StudentName)
+            ? "Selected student"
+            : course.StudentName;
     }
 
     private async Task ChangeInstructionalMethod(ChangeEventArgs eventArgs)

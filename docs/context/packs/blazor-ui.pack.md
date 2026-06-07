@@ -20,6 +20,12 @@ Purpose: UI workflow and form-boundary guidance.
 - Optional helper tables in support panels may be collapsed by default when they are not the main task.
 - Course coverage support summaries belong with related support tools when the main workflow is course list/editing.
 - Course rows are clickable navigation targets with hover affordance; avoid separate Open columns.
+- Admin course pages include a header-level student selector when multiple students may exist.
+- Course list, create, import, and coverage views must reflect the selected student instead of all household courses.
+- Course list archive/delete actions appear beside the Course List heading only when active courses exist.
+- Course list archive/delete actions support selected courses or the full active list and require confirmation.
+- Archive hides courses from active admin and student lists while retaining course details and future student work.
+- Delete removes eligible courses; courses with student work must fail with a plain message directing the parent to archive.
 - Course forms do not expose subject-area text fields; coverage is managed through requirement mappings.
 - Course credit displays should include at least one decimal place and preserve more precise values when present.
 - Course detail uses two columns: identity/description/resources/assessment on the left, plan/mapping/current mappings on the right.
@@ -34,6 +40,7 @@ Purpose: UI workflow and form-boundary guidance.
 - Assignments are managed from the module page list and edited on a dedicated assignment page.
 - Assignment edit pages use itemized objective and lesson selections, not raw mapping text.
 - Student module pages show assignments in the main learning flow after lessons, with evidence notes only as support content.
+- Course pack install actions show inline progress and plain-language success or failure messages in the Course packs card.
 - Page columns should fill available width and have generous horizontal spacing.
 - Course detail text areas allow at least four visible lines before scrolling.
 - Preset dropdown `Other` choices clear the associated text area so parent text starts clean.

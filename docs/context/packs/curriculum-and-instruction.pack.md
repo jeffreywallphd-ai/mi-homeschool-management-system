@@ -13,12 +13,18 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 ## Must Preserve
 
 - Planning is course-first.
-- Course packs import as editable parent-owned course records.
-- Course pack export writes a JSON `.coursepack` file with a versioned envelope around the pack contract.
-- Future course-pack exports with attached files should use a zip archive containing the `.coursepack` JSON and referenced files.
-- Built-in pack import differs from future installed packs; installing adds external packs.
+- Courses imported from packs become editable parent-owned course records.
+- Courses are student-owned; admin course lists, creation, import, and coverage summaries are scoped to the selected student.
+- Archived courses are retained records but are hidden from active course lists and coverage summaries.
+- Delete must not remove courses with student work; archive those courses instead.
+- Course pack download writes a JSON `.coursepack` file with a versioned envelope around the pack contract.
+- Future course-pack downloads with attached files should use a zip archive containing the `.coursepack` JSON and referenced files.
+- Installing a `.coursepack` adds it to the system pack library; it does not create student courses.
+- Importing copies courses from an available pack into the student's course list.
+- The same course-pack template may be imported for different students without being treated as a duplicate.
 - Pack templates can expose dropdown choices with stable default options.
 - Pack mappings must match the target jurisdiction seed vocabulary exactly.
+- Unmatched pack mappings should not block import; leave them for parent review after import.
 - Courses can carry internal subject labels, but visible coverage uses requirement mappings.
 - Pack subject labels are preserved as internal categorization data.
 - Courses designate one-semester or two-semester duration.
