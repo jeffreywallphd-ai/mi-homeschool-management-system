@@ -203,6 +203,7 @@ public sealed class StudentCourseService
             module.Lessons
                 .OrderBy(lesson => lesson.SequenceOrder)
                 .Select(lesson => new StudentLessonView(
+                    lesson.Id,
                     lesson.SequenceOrder,
                     lesson.Title,
                     lesson.IntroductoryText,
@@ -300,6 +301,7 @@ public sealed class StudentCourseService
                     assignment.DueTimingLabel,
                     assignment.DueDate,
                     assignment.LinkedModuleObjectives,
+                    assignment.LinkedLessonIds,
                     assignment.LinkedLessonIds
                         .Select(lessonId => module.Lessons.FirstOrDefault(lesson => lesson.Id == lessonId)?.Title ?? "")
                         .Where(title => !string.IsNullOrWhiteSpace(title))

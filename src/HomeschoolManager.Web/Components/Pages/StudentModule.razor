@@ -7,6 +7,7 @@
 @inject StudentCourseService StudentCourses
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>@(module is null ? "Course Module" : module.Title)</PageTitle>
 
@@ -94,185 +95,187 @@ else
             </section>
 
             <section class="form-section">
-                <h2>Lessons</h2>
+                <h2 id="student-lesson-heading">@LessonSectionHeading</h2>
                 @if (module.Lessons.Count == 0)
                 {
                     <p>No lessons have been added yet.</p>
                 }
-                else
+                else if (CurrentLesson is { } lesson)
                 {
-                    <ol class="student-lesson-list">
-                        @foreach (var lesson in module.Lessons)
+                    <div class="student-lesson-panel">
+                        <p>@lesson.IntroductoryText</p>
+                        <dl class="student-detail-facts">
+                            <div>
+                                <dt>Type</dt>
+                                <dd>@EnumLabel(lesson.LessonType.ToString())</dd>
+                            </div>
+                            <div>
+                                <dt>Difficulty</dt>
+                                <dd>@EnumLabel(lesson.DifficultyLevel.ToString())</dd>
+                            </div>
+                            @if (lesson.EstimatedMinutes > 0)
+                            {
+                                <div>
+                                    <dt>Estimated time</dt>
+                                    <dd>@lesson.EstimatedMinutes minutes</dd>
+                                </div>
+                            }
+                            @if (lesson.SuggestedDays > 0)
+                            {
+                                <div>
+                                    <dt>Suggested pace</dt>
+                                    <dd>@lesson.SuggestedDays day(s)</dd>
+                                </div>
+                            }
+                        </dl>
+                        @if (!string.IsNullOrWhiteSpace(lesson.LinkedModuleObjective))
                         {
-                            <li>
-                                <h3>@lesson.Title</h3>
-                                <p>@lesson.IntroductoryText</p>
-                                <dl class="student-detail-facts">
-                                    <div>
-                                        <dt>Type</dt>
-                                        <dd>@EnumLabel(lesson.LessonType.ToString())</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Difficulty</dt>
-                                        <dd>@EnumLabel(lesson.DifficultyLevel.ToString())</dd>
-                                    </div>
-                                    @if (lesson.EstimatedMinutes > 0)
-                                    {
-                                        <div>
-                                            <dt>Estimated time</dt>
-                                            <dd>@lesson.EstimatedMinutes minutes</dd>
-                                        </div>
-                                    }
-                                    @if (lesson.SuggestedDays > 0)
-                                    {
-                                        <div>
-                                            <dt>Suggested pace</dt>
-                                            <dd>@lesson.SuggestedDays day(s)</dd>
-                                        </div>
-                                    }
-                                </dl>
-                                @if (!string.IsNullOrWhiteSpace(lesson.LinkedModuleObjective))
+                            <small>Objective: @lesson.LinkedModuleObjective</small>
+                        }
+                        @if (lesson.LearningObjectives.Count > 0)
+                        {
+                            <h4>Lesson Objectives</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var objective in lesson.LearningObjectives)
                                 {
-                                    <small>Objective: @lesson.LinkedModuleObjective</small>
+                                    <li>@objective.Text <small>@EnumLabel(objective.BloomLevel.ToString())</small></li>
                                 }
-                                @if (lesson.LearningObjectives.Count > 0)
+                            </ul>
+                        }
+                        @if (lesson.SuccessCriteria.Count > 0)
+                        {
+                            <h4>Success Criteria</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var criterion in lesson.SuccessCriteria)
                                 {
-                                    <h4>Lesson Objectives</h4>
-                                    <ul class="student-readable-list">
-                                        @foreach (var objective in lesson.LearningObjectives)
+                                    <li>@criterion</li>
+                                }
+                            </ul>
+                        }
+                        @if (lesson.LessonSteps.Count > 0)
+                        {
+                            <h4>What To Do</h4>
+                            <ol class="student-readable-list">
+                                @foreach (var step in lesson.LessonSteps)
+                                {
+                                    <li>
+                                        <strong>@step.Title</strong>
+                                        <p>@step.Instructions</p>
+                                        <small>@EnumLabel(step.StepType.ToString())@(step.EstimatedMinutes > 0 ? $" | {step.EstimatedMinutes} minutes" : "")@(step.Required ? " | Required" : " | Optional")</small>
+                                    </li>
+                                }
+                            </ol>
+                        }
+                        @if (lesson.Resources.Count > 0)
+                        {
+                            <h4>Resources</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var resource in lesson.Resources)
+                                {
+                                    <li>
+                                        @LessonResourceDisplay(resource)
+                                        @if (!string.IsNullOrWhiteSpace(resource.StudentInstructions))
                                         {
-                                            <li>@objective.Text <small>@EnumLabel(objective.BloomLevel.ToString())</small></li>
+                                            <p>@resource.StudentInstructions</p>
                                         }
-                                    </ul>
-                                }
-                                @if (lesson.SuccessCriteria.Count > 0)
-                                {
-                                    <h4>Success Criteria</h4>
-                                    <ul class="student-readable-list">
-                                        @foreach (var criterion in lesson.SuccessCriteria)
+                                        @if (!string.IsNullOrWhiteSpace(resource.NotesPrompt))
                                         {
-                                            <li>@criterion</li>
+                                            <small>Notes prompt: @resource.NotesPrompt</small>
                                         }
-                                    </ul>
-                                }
-                                @if (lesson.LessonSteps.Count > 0)
-                                {
-                                    <h4>What To Do</h4>
-                                    <ol class="student-readable-list">
-                                        @foreach (var step in lesson.LessonSteps)
+                                        @if (resource.EstimatedMinutes > 0)
                                         {
-                                            <li>
-                                                <strong>@step.Title</strong>
-                                                <p>@step.Instructions</p>
-                                                <small>@EnumLabel(step.StepType.ToString())@(step.EstimatedMinutes > 0 ? $" | {step.EstimatedMinutes} minutes" : "")@(step.Required ? " | Required" : " | Optional")</small>
-                                            </li>
+                                            <small>@resource.EstimatedMinutes minutes</small>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        @if (lesson.ProblemSets.Count > 0)
+                        {
+                            <h4>Practice</h4>
+                            @foreach (var problemSet in lesson.ProblemSets)
+                            {
+                                <div class="student-nested-panel">
+                                    <strong>@problemSet.Title</strong>
+                                    @if (!string.IsNullOrWhiteSpace(problemSet.Instructions))
+                                    {
+                                        <p>@problemSet.Instructions</p>
+                                    }
+                                    <ol>
+                                        @foreach (var problem in problemSet.Problems)
+                                        {
+                                            <li>@problem.Prompt</li>
                                         }
                                     </ol>
-                                }
-                                @if (lesson.Resources.Count > 0)
-                                {
-                                    <h4>Resources</h4>
-                                }
-                                <ul class="student-readable-list">
-                                    @foreach (var resource in lesson.Resources)
-                                    {
-                                        <li>
-                                            @LessonResourceDisplay(resource)
-                                            @if (!string.IsNullOrWhiteSpace(resource.StudentInstructions))
-                                            {
-                                                <p>@resource.StudentInstructions</p>
-                                            }
-                                            @if (!string.IsNullOrWhiteSpace(resource.NotesPrompt))
-                                            {
-                                                <small>Notes prompt: @resource.NotesPrompt</small>
-                                            }
-                                            @if (resource.EstimatedMinutes > 0)
-                                            {
-                                                <small>@resource.EstimatedMinutes minutes</small>
-                                            }
-                                        </li>
-                                    }
-                                </ul>
-                                @if (lesson.ProblemSets.Count > 0)
-                                {
-                                    <h4>Practice</h4>
-                                    @foreach (var problemSet in lesson.ProblemSets)
-                                    {
-                                        <div class="student-nested-panel">
-                                            <strong>@problemSet.Title</strong>
-                                            @if (!string.IsNullOrWhiteSpace(problemSet.Instructions))
-                                            {
-                                                <p>@problemSet.Instructions</p>
-                                            }
-                                            <ol>
-                                                @foreach (var problem in problemSet.Problems)
-                                                {
-                                                    <li>@problem.Prompt</li>
-                                                }
-                                            </ol>
-                                        </div>
-                                    }
-                                }
-                                @if (lesson.PortfolioConnections.Count > 0)
-                                {
-                                    <h4>Portfolio Connections</h4>
-                                    <ul class="student-readable-list">
-                                        @foreach (var connection in lesson.PortfolioConnections)
-                                        {
-                                            <li>
-                                                <strong>@connection.ArtifactTitle</strong>
-                                                <p>@connection.ArtifactPurpose</p>
-                                                @if (!string.IsNullOrWhiteSpace(connection.PortfolioSection))
-                                                {
-                                                    <small>@connection.PortfolioSection</small>
-                                                }
-                                            </li>
-                                        }
-                                    </ul>
-                                }
-                                @if (lesson.Rubric is not null && lesson.Rubric.Criteria.Count > 0)
-                                {
-                                    <h4>How This Will Be Reviewed</h4>
-                                    <ul class="student-readable-list">
-                                        @foreach (var criterion in lesson.Rubric.Criteria)
-                                        {
-                                            <li>
-                                                <strong>@criterion.Criterion</strong>
-                                                <small>@criterion.Level4</small>
-                                            </li>
-                                        }
-                                    </ul>
-                                }
-                                @if (lesson.ReflectionPrompts.Count > 0)
-                                {
-                                    <h4>Reflection</h4>
-                                    <ul class="student-readable-list">
-                                        @foreach (var prompt in lesson.ReflectionPrompts)
-                                        {
-                                            <li>@prompt</li>
-                                        }
-                                    </ul>
-                                }
-                                @if (lesson.LinkedAssignmentTitles.Count > 0)
-                                {
-                                    <small>Related assignments: @string.Join(", ", lesson.LinkedAssignmentTitles)</small>
-                                }
-                            </li>
+                                </div>
+                            }
                         }
-                    </ol>
+                        @if (lesson.PortfolioConnections.Count > 0)
+                        {
+                            <h4>Portfolio Connections</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var connection in lesson.PortfolioConnections)
+                                {
+                                    <li>
+                                        <strong>@connection.ArtifactTitle</strong>
+                                        <p>@connection.ArtifactPurpose</p>
+                                        @if (!string.IsNullOrWhiteSpace(connection.PortfolioSection))
+                                        {
+                                            <small>@connection.PortfolioSection</small>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        @if (lesson.Rubric is not null && lesson.Rubric.Criteria.Count > 0)
+                        {
+                            <h4>How This Will Be Reviewed</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var criterion in lesson.Rubric.Criteria)
+                                {
+                                    <li>
+                                        <strong>@criterion.Criterion</strong>
+                                        <small>@criterion.Level4</small>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        @if (lesson.ReflectionPrompts.Count > 0)
+                        {
+                            <h4>Reflection</h4>
+                            <ul class="student-readable-list">
+                                @foreach (var prompt in lesson.ReflectionPrompts)
+                                {
+                                    <li>@prompt</li>
+                                }
+                            </ul>
+                        }
+                        @if (lesson.LinkedAssignmentTitles.Count > 0)
+                        {
+                            <small>Related assignments: @string.Join(", ", lesson.LinkedAssignmentTitles)</small>
+                        }
+                    </div>
                 }
             </section>
 
             <section class="form-section">
-                <h2>Assignments</h2>
+                <h2>@AssignmentSectionHeading</h2>
                 @if (module.Assignments.Count == 0)
                 {
                     <p>No assignments have been added yet.</p>
                 }
+                else if (CurrentLesson is null)
+                {
+                    <p>Select a lesson to see its assignments.</p>
+                }
+                else if (CurrentLessonAssignments.Count == 0)
+                {
+                    <p>No assignments are linked to this lesson yet.</p>
+                }
                 else
                 {
                     <ol class="student-lesson-list">
-                        @foreach (var assignment in module.Assignments)
+                        @foreach (var assignment in CurrentLessonAssignments)
                         {
                             <li>
                                 <h3>@assignment.Title</h3>
@@ -460,6 +463,13 @@ else
                         }
                     </ol>
                 }
+                @if (module.Lessons.Count > 0)
+                {
+                    <nav class="student-lesson-pager" aria-label="Lesson navigation">
+                        <button type="button" class="btn btn-outline-secondary" disabled="@(!CanMoveToPreviousLesson)" @onclick="ShowPreviousLesson">Previous Lesson</button>
+                        <button type="button" class="btn btn-primary" disabled="@(!CanMoveToNextLesson)" @onclick="ShowNextLesson">Next Lesson</button>
+                    </nav>
+                }
             </section>
         </main>
 
@@ -495,6 +505,7 @@ else
 
     private bool canView;
     private StudentModulePage? module;
+    private int selectedLessonIndex;
     private readonly List<string> messages = [];
 
     protected override async Task OnParametersSetAsync()
@@ -518,15 +529,95 @@ else
             StudentId == Guid.Empty ? null : StudentId);
         if (result.Succeeded)
         {
-            module = result.Value;
+            module = result.Value!;
+            selectedLessonIndex = DefaultLessonIndex(module);
             messages.Clear();
         }
         else
         {
             module = null;
+            selectedLessonIndex = 0;
             messages.Clear();
             messages.AddRange(result.Errors);
         }
+    }
+
+    private StudentLessonView? CurrentLesson =>
+        module is null || module.Lessons.Count == 0 || selectedLessonIndex < 0 || selectedLessonIndex >= module.Lessons.Count
+            ? null
+            : module.Lessons[selectedLessonIndex];
+
+    private IReadOnlyList<StudentAssignmentView> CurrentLessonAssignments =>
+        module is null || CurrentLesson is null
+            ? []
+            : module.Assignments
+                .Where(assignment => assignment.RelatedLessonIds.Contains(CurrentLesson.LessonId))
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .ToArray();
+
+    private string LessonSectionHeading =>
+        CurrentLesson is null
+            ? "Lessons"
+            : $"Lesson {selectedLessonIndex + 1}: {CurrentLesson.Title}";
+
+    private string AssignmentSectionHeading =>
+        CurrentLesson is null
+            ? "Assignments"
+            : $"Assignments for Lesson {selectedLessonIndex + 1}";
+
+    private bool CanMoveToPreviousLesson => selectedLessonIndex > 0;
+
+    private bool CanMoveToNextLesson => module is not null && selectedLessonIndex < module.Lessons.Count - 1;
+
+    private async Task ShowPreviousLesson()
+    {
+        if (CanMoveToPreviousLesson)
+        {
+            selectedLessonIndex--;
+            await ScrollToLessonHeadingAsync();
+        }
+    }
+
+    private async Task ShowNextLesson()
+    {
+        if (CanMoveToNextLesson)
+        {
+            selectedLessonIndex++;
+            await ScrollToLessonHeadingAsync();
+        }
+    }
+
+    private async Task ScrollToLessonHeadingAsync()
+    {
+        await InvokeAsync(StateHasChanged);
+        await JS.InvokeVoidAsync("homeschoolScroll.intoViewById", "student-lesson-heading");
+    }
+
+    private static int DefaultLessonIndex(StudentModulePage module)
+    {
+        if (module.Lessons.Count == 0)
+        {
+            return 0;
+        }
+
+        for (var index = 0; index < module.Lessons.Count; index++)
+        {
+            if (!LessonIsComplete(module.Lessons[index], module.Assignments))
+            {
+                return index;
+            }
+        }
+
+        return module.Lessons.Count - 1;
+    }
+
+    private static bool LessonIsComplete(StudentLessonView lesson, IReadOnlyList<StudentAssignmentView> assignments)
+    {
+        var linkedAssignments = assignments
+            .Where(assignment => assignment.RelatedLessonIds.Contains(lesson.LessonId))
+            .ToArray();
+
+        return linkedAssignments.Length > 0 && linkedAssignments.All(assignment => assignment.Status == AssignmentStatus.Complete);
     }
 
     private static string StatusText(ModuleStatus status)

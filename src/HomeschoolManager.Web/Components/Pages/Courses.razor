@@ -221,9 +221,14 @@
             {
                 <div class="course-pack-actions">
                     <p class="mb-0">@selectedPack.Description</p>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadSelectedPack">
-                        Download course plan .zip
-                    </button>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadSelectedPack">
+                            Download course plan .zip
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadCoursePlanBundleTemplate">
+                            Download bundle template
+                        </button>
+                    </div>
                 </div>
                 <p>@selectedTemplateIds.Count selected course(s), @CreditText(SelectedPackCreditTotal()) planned credits</p>
                 @if (Session.IsParentAdmin)
@@ -600,6 +605,24 @@
     {
         messages.Clear();
         var result = CourseService.DownloadCoursePackTemplate();
+        if (!result.Succeeded || result.Value is null)
+        {
+            messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            result.Value.FileName,
+            result.Value.ContentType,
+            Convert.ToBase64String(result.Value.Content));
+        messages.Add(new PageMessage($"Downloaded {result.Value.FileName}.", "alert alert-success"));
+    }
+
+    private async Task DownloadCoursePlanBundleTemplate()
+    {
+        messages.Clear();
+        var result = CourseService.DownloadCoursePlanBundleTemplate();
         if (!result.Succeeded || result.Value is null)
         {
             messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));

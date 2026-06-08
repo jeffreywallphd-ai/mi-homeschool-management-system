@@ -85,6 +85,16 @@ else
                 <h2>Texts and resources</h2>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleResourceForm">@ResourceToggleText()</button>
             </div>
+            @if (descriptionForm.ShowResourceForm)
+            {
+                <div class="inline-entry-form">
+                    <label class="form-label" for="resource-name">Name</label>
+                    <input id="resource-name" class="form-control" @bind="descriptionForm.NewResourceName" />
+                    <label class="form-label" for="resource-link">Link</label>
+                    <input id="resource-link" class="form-control" type="url" @bind="descriptionForm.NewResourceLink" />
+                    <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
+                </div>
+            }
             @if (descriptionForm.Resources.Count == 0)
             {
                 <p>No texts or resources have been added.</p>
@@ -104,20 +114,10 @@ else
                                     <a href="@resource.Link" target="_blank" rel="noopener">View</a>
                                 }
                             </div>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Remove</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Delete</button>
                         </li>
                     }
                 </ul>
-            }
-            @if (descriptionForm.ShowResourceForm)
-            {
-                <div class="inline-entry-form">
-                    <label class="form-label" for="resource-name">Name</label>
-                    <input id="resource-name" class="form-control" @bind="descriptionForm.NewResourceName" />
-                    <label class="form-label" for="resource-link">Link</label>
-                    <input id="resource-link" class="form-control" type="url" @bind="descriptionForm.NewResourceLink" />
-                    <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
-                </div>
             }
                 </section>
 
@@ -154,6 +154,14 @@ else
                 <h3>Learning objectives</h3>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleObjectiveForm">@ObjectiveToggleText()</button>
             </div>
+            @if (planForm.ShowObjectiveForm)
+            {
+                <div class="inline-entry-form">
+                    <label class="form-label" for="objective-text">Objective</label>
+                    <input id="objective-text" class="form-control" @bind="planForm.NewObjectiveText" />
+                    <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
+                </div>
+            }
             @if (planForm.LearningObjectives.Count == 0)
             {
                 <p>No learning objectives have been added.</p>
@@ -167,18 +175,10 @@ else
                         var objective = planForm.LearningObjectives[index];
                         <li>
                             <span>@objective.Text</span>
-                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Remove</button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Delete</button>
                         </li>
                     }
                 </ul>
-            }
-            @if (planForm.ShowObjectiveForm)
-            {
-                <div class="inline-entry-form">
-                    <label class="form-label" for="objective-text">Objective</label>
-                    <input id="objective-text" class="form-control" @bind="planForm.NewObjectiveText" />
-                    <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
-                </div>
             }
             <label class="form-label" for="sequence">Planned sequence</label>
             <textarea id="sequence" class="form-control" rows="4" @bind="planForm.PlannedSequence" @bind:after="AutoSavePlan"></textarea>

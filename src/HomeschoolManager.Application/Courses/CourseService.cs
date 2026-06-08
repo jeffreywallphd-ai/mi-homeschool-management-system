@@ -614,6 +614,73 @@ public sealed class CourseService
             true));
     }
 
+    public OperationResult<CoursePackDownloadFile> DownloadCoursePlanBundleTemplate()
+    {
+        var downloadedAtUtc = DateTimeOffset.UtcNow;
+        var identity = TemplateIdentity("courseplan-bundle-template");
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteZipJson(
+                archive,
+                "courseplan.courseplanpack",
+                new CoursePlanPackEnvelope(
+                    "homeschool-manager.courseplanpack",
+                    1,
+                    downloadedAtUtc,
+                    "json",
+                    "This template manifest lists the sample course folder included in this course plan bundle template.",
+                    "sample-course-plan",
+                    "Course Plan Bundle Template",
+                    "Replace the sample course, module, lesson, and assignment templates with the plan you want to import.",
+                    "Year",
+                    [
+                        new CoursePlanOffering("sample-course-1", "Sample Course Title", "Semester 1", 1)
+                    ],
+                    identity,
+                    true));
+
+            WriteZipJson(
+                archive,
+                "courses/sample-course/course.coursepack",
+                CoursePackTemplate with
+                {
+                    DownloadedAtUtc = downloadedAtUtc,
+                    SourceIdentity = identity
+                });
+            WriteZipJson(
+                archive,
+                "courses/sample-course/modules/01-sample-module/module.modulepack",
+                ModulePackTemplate with
+                {
+                    DownloadedAtUtc = downloadedAtUtc,
+                    SourceIdentity = identity
+                });
+            WriteZipJson(
+                archive,
+                "courses/sample-course/modules/01-sample-module/lessons.lessonpack",
+                LessonPackTemplate with
+                {
+                    DownloadedAtUtc = downloadedAtUtc,
+                    SourceIdentity = identity
+                });
+            WriteZipJson(
+                archive,
+                "courses/sample-course/modules/01-sample-module/assignments.assignmentpack",
+                AssignmentPackTemplate with
+                {
+                    DownloadedAtUtc = downloadedAtUtc,
+                    SourceIdentity = identity
+                });
+        }
+
+        return OperationResult<CoursePackDownloadFile>.Success(new CoursePackDownloadFile(
+            "course-plan-bundle-template.zip",
+            "application/zip",
+            stream.ToArray(),
+            true));
+    }
+
     public async Task<OperationResult<CourseImportResult>> ImportCoursePackAsync(
         UserContext user,
         Guid? studentId,

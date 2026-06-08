@@ -31,3 +31,9 @@ window.homeschoolFiles = {
         link.remove();
     }
 };
+
+window.homeschoolScroll = {
+    intoViewById(id) {
+        document.getElementById(id)?.scrollIntoView({ block: "start" });
+    }
+};

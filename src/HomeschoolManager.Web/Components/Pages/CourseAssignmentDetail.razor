@@ -101,26 +101,131 @@ else
                 <textarea id="assignment-output" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RequiredOutput" @bind:after="AutoSaveAssignment"></textarea>
                 @ValidationFor("assignment.RequiredOutput")
 
-                <label class="form-label" for="assignment-deliverables">Required deliverables</label>
-                <textarea id="assignment-deliverables" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RequiredDeliverablesText" @bind:after="AutoSaveAssignment"></textarea>
-
-                <label class="form-label" for="assignment-checklist">Student checklist</label>
-                <textarea id="assignment-checklist" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.StudentChecklistText" @bind:after="AutoSaveAssignment"></textarea>
-
-                <label class="form-label" for="assignment-reflection">Reflection prompts</label>
-                <textarea id="assignment-reflection" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ReflectionPromptsText" @bind:after="AutoSaveAssignment"></textarea>
+                <ItemizedTextListEditor Title="Required deliverables" EntryLabel="Deliverable" EmptyText="No required deliverables have been added." Items="assignmentForm.RequiredDeliverables" ItemsChanged="UpdateRequiredDeliverables" Disabled="@(!CanEdit)" AllowReorder="true" />
+                <ItemizedTextListEditor Title="Student checklist" EntryLabel="Checklist item" EmptyText="No checklist items have been added." Items="assignmentForm.StudentChecklist" ItemsChanged="UpdateStudentChecklist" Disabled="@(!CanEdit)" AllowReorder="true" />
+                <ItemizedTextListEditor Title="Reflection prompts" EntryLabel="Reflection prompt" EmptyText="No reflection prompts have been added." Items="assignmentForm.ReflectionPrompts" ItemsChanged="UpdateReflectionPrompts" Disabled="@(!CanEdit)" AllowReorder="true" UseTextArea="true" />
             </section>
 
             <section class="form-section">
                 <h2>Workflow and Resources</h2>
-                <label class="form-label" for="assignment-steps">Assignment steps</label>
-                <textarea id="assignment-steps" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.AssignmentStepsText" @bind:after="AutoSaveAssignment"></textarea>
+                <div class="section-heading-row mt-3">
+                    <h3>Assignment steps</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleAssignmentStepForm">@AssignmentStepToggleText()</button>
+                    }
+                </div>
+                @if (assignmentForm.ShowAssignmentStepForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="assignment-step-title">Title</label>
+                        <input id="assignment-step-title" class="form-control" @bind="assignmentForm.NewStepTitle" />
+                        <label class="form-label" for="assignment-step-instructions">Instructions</label>
+                        <textarea id="assignment-step-instructions" class="form-control" rows="3" @bind="assignmentForm.NewStepInstructions"></textarea>
+                        <label class="form-label" for="assignment-step-minutes">Estimated minutes</label>
+                        <input id="assignment-step-minutes" class="form-control" type="number" min="0" step="1" @bind="assignmentForm.NewStepEstimatedMinutes" />
+                        <button class="btn btn-secondary mt-2" @onclick="AddAssignmentStep">Add step</button>
+                    </div>
+                }
+                @if (assignmentForm.AssignmentSteps.Count == 0)
+                {
+                    <p>No assignment steps have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < assignmentForm.AssignmentSteps.Count; index++)
+                        {
+                            var stepIndex = index;
+                            var step = assignmentForm.AssignmentSteps[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@step.Title</strong>
+                                    <span>@step.Instructions</span>
+                                    @if (step.EstimatedMinutes > 0)
+                                    {
+                                        <small>@step.EstimatedMinutes minutes</small>
+                                    }
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <div class="module-order-actions">
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(stepIndex == 0)" @onclick="() => MoveAssignmentStep(stepIndex, -1)">Up</button>
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(stepIndex == assignmentForm.AssignmentSteps.Count - 1)" @onclick="() => MoveAssignmentStep(stepIndex, 1)">Down</button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteAssignmentStep(stepIndex)">Delete</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
 
-                <label class="form-label" for="assignment-resources">Assignment resources</label>
-                <textarea id="assignment-resources" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.ResourcesText" @bind:after="AutoSaveAssignment"></textarea>
+                <div class="section-heading-row mt-3">
+                    <h3>Assignment resources</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleAssignmentResourceForm">@AssignmentResourceToggleText()</button>
+                    }
+                </div>
+                @if (assignmentForm.ShowAssignmentResourceForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="assignment-resource-name">Name</label>
+                        <input id="assignment-resource-name" class="form-control" @bind="assignmentForm.NewResourceName" />
+                        <label class="form-label" for="assignment-resource-url">Link</label>
+                        <input id="assignment-resource-url" class="form-control" type="url" @bind="assignmentForm.NewResourceUrl" />
+                        <label class="form-label" for="assignment-resource-type">Type</label>
+                        <select id="assignment-resource-type" class="form-select" @bind="assignmentForm.NewResourceType">
+                            @foreach (var type in Enum.GetValues<LessonResourceType>())
+                            {
+                                <option value="@type">@EnumLabel(type.ToString())</option>
+                            }
+                        </select>
+                        <label class="form-label" for="assignment-resource-instructions">Student instructions</label>
+                        <textarea id="assignment-resource-instructions" class="form-control" rows="3" @bind="assignmentForm.NewResourceStudentInstructions"></textarea>
+                        <label class="form-label" for="assignment-resource-note">Source note</label>
+                        <input id="assignment-resource-note" class="form-control" @bind="assignmentForm.NewResourceSourceNote" />
+                        <button class="btn btn-secondary mt-2" @onclick="AddAssignmentResource">Add resource</button>
+                    </div>
+                }
+                @if (assignmentForm.Resources.Count == 0)
+                {
+                    <p>No assignment resources have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < assignmentForm.Resources.Count; index++)
+                        {
+                            var resourceIndex = index;
+                            var resource = assignmentForm.Resources[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@resource.Name</strong>
+                                    <small>@EnumLabel(resource.Type.ToString())</small>
+                                    @if (!string.IsNullOrWhiteSpace(resource.Url))
+                                    {
+                                        <a href="@resource.Url" target="_blank" rel="noopener">View</a>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(resource.StudentInstructions))
+                                    {
+                                        <small>Student use: @resource.StudentInstructions</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(resource.SourceNote))
+                                    {
+                                        <small>@resource.SourceNote</small>
+                                    }
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteAssignmentResource(resourceIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
 
-                <label class="form-label" for="assignment-skills">Assessment skills</label>
-                <textarea id="assignment-skills" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.AssessmentSkillsText" @bind:after="AutoSaveAssignment"></textarea>
+                <ItemizedTextListEditor Title="Assessment skills" EntryLabel="Assessment skill" EmptyText="No assessment skills have been added." Items="assignmentForm.AssessmentSkills" ItemsChanged="UpdateAssessmentSkills" Disabled="@(!CanEdit)" />
             </section>
 
             <section class="form-section">
@@ -189,11 +294,8 @@ else
                 <label class="form-label" for="portfolio-reuse">Reuse instructions</label>
                 <textarea id="portfolio-reuse" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.ReuseInstructions" @bind:after="AutoSaveAssignment"></textarea>
 
-                <label class="form-label" for="portfolio-links">Cross-course links</label>
-                <textarea id="portfolio-links" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.CrossCourseLinksText" @bind:after="AutoSaveAssignment"></textarea>
-
-                <label class="form-label" for="completion-requirements">Completion requirements</label>
-                <textarea id="completion-requirements" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.CompletionRequirementsText" @bind:after="AutoSaveAssignment"></textarea>
+                <ItemizedTextListEditor Title="Cross-course links" EntryLabel="Cross-course link" EmptyText="No cross-course links have been added." Items="assignmentForm.CrossCourseLinks" ItemsChanged="UpdateCrossCourseLinks" Disabled="@(!CanEdit)" />
+                <ItemizedTextListEditor Title="Completion requirements" EntryLabel="Completion requirement" EmptyText="No completion requirements have been added." Items="assignmentForm.CompletionRequirements" ItemsChanged="UpdateCompletionRequirements" Disabled="@(!CanEdit)" AllowReorder="true" UseTextArea="true" />
 
                 <div class="form-check mt-2">
                     <input id="completion-parent-review" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RequiresParentReview" @bind:after="AutoSaveAssignment" />
@@ -289,8 +391,56 @@ else
                 <label class="form-label" for="assignment-rubric-scale">Scale</label>
                 <input id="assignment-rubric-scale" class="form-control" disabled="@(!CanEdit)" @bind="assignmentForm.RubricScale" @bind:after="AutoSaveAssignment" />
 
-                <label class="form-label" for="assignment-rubric-criteria">Criteria</label>
-                <textarea id="assignment-rubric-criteria" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="assignmentForm.RubricCriteriaText" @bind:after="AutoSaveAssignment"></textarea>
+                <div class="section-heading-row mt-3">
+                    <h3>Criteria</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleRubricCriterionForm">@RubricCriterionToggleText()</button>
+                    }
+                </div>
+                @if (assignmentForm.ShowRubricCriterionForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="assignment-rubric-criterion">Criterion</label>
+                        <input id="assignment-rubric-criterion" class="form-control" @bind="assignmentForm.NewRubricCriterion" />
+                        <label class="form-label" for="assignment-rubric-level4">Level 4</label>
+                        <input id="assignment-rubric-level4" class="form-control" @bind="assignmentForm.NewRubricLevel4" />
+                        <label class="form-label" for="assignment-rubric-level3">Level 3</label>
+                        <input id="assignment-rubric-level3" class="form-control" @bind="assignmentForm.NewRubricLevel3" />
+                        <label class="form-label" for="assignment-rubric-level2">Level 2</label>
+                        <input id="assignment-rubric-level2" class="form-control" @bind="assignmentForm.NewRubricLevel2" />
+                        <label class="form-label" for="assignment-rubric-level1">Level 1</label>
+                        <input id="assignment-rubric-level1" class="form-control" @bind="assignmentForm.NewRubricLevel1" />
+                        <button class="btn btn-secondary mt-2" @onclick="AddRubricCriterion">Add criterion</button>
+                    </div>
+                }
+                @if (assignmentForm.RubricCriteria.Count == 0)
+                {
+                    <p>No rubric criteria have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < assignmentForm.RubricCriteria.Count; index++)
+                        {
+                            var criterionIndex = index;
+                            var criterion = assignmentForm.RubricCriteria[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@criterion.Criterion</strong>
+                                    <small>Level 4: @criterion.Level4</small>
+                                    <small>Level 3: @criterion.Level3</small>
+                                    <small>Level 2: @criterion.Level2</small>
+                                    <small>Level 1: @criterion.Level1</small>
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteRubricCriterion(criterionIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
             </section>
 
             <section class="form-section">
@@ -314,8 +464,7 @@ else
                     }
                 </select>
 
-                <label class="form-label" for="assignment-file-types">Recommended file types</label>
-                <textarea id="assignment-file-types" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.RecommendedFileTypesText" @bind:after="AutoSaveAssignment"></textarea>
+                <ItemizedTextListEditor Title="Recommended file types" EntryLabel="File type" EmptyText="No recommended file types have been added." Items="assignmentForm.RecommendedFileTypes" ItemsChanged="UpdateRecommendedFileTypes" Disabled="@(!CanEdit)" />
 
                 <div class="form-check mt-2">
                     <input id="assignment-retain-records" class="form-check-input" type="checkbox" disabled="@(!CanEdit)" @bind="assignmentForm.RetainForRecords" @bind:after="AutoSaveAssignment" />
@@ -399,31 +548,33 @@ else
                 StudentFacingGoal = assignment.StudentFacingGoal,
                 EstimatedMinutesMin = assignment.EstimatedMinutesMin,
                 EstimatedMinutesMax = assignment.EstimatedMinutesMax,
-                RequiredDeliverablesText = Lines(assignment.RequiredDeliverables),
+                RequiredDeliverables = assignment.RequiredDeliverables.ToList(),
                 SubmissionFormats = assignment.SubmissionFormats.ToList(),
                 PortfolioSection = assignment.PortfolioConnection?.PortfolioSection ?? "",
                 ArtifactTitle = assignment.PortfolioConnection?.ArtifactTitle ?? "",
                 ArtifactPurpose = assignment.PortfolioConnection?.ArtifactPurpose ?? "",
                 ReuseInstructions = assignment.PortfolioConnection?.ReuseInstructions ?? "",
-                CrossCourseLinksText = Lines(assignment.PortfolioConnection?.CrossCourseLinks ?? []),
+                CrossCourseLinks = (assignment.PortfolioConnection?.CrossCourseLinks ?? []).ToList(),
                 RubricId = assignment.Rubric?.RubricId ?? "",
                 RubricScale = assignment.Rubric?.Scale ?? "",
-                RubricCriteriaText = SerializeRubric(assignment.Rubric),
+                RubricCriteria = assignment.Rubric?.Criteria
+                    .Select(criteria => new RubricCriterionFormItem(criteria.Criterion, criteria.Level4, criteria.Level3, criteria.Level2, criteria.Level1))
+                    .ToList() ?? [],
                 LinkedRubricId = assignment.LinkedRubricId,
-                AssessmentSkillsText = Lines(assignment.AssessmentSkills),
-                StudentChecklistText = Lines(assignment.StudentChecklist),
-                ResourcesText = SerializeResources(assignment.Resources),
-                AssignmentStepsText = SerializeSteps(assignment.AssignmentSteps),
+                AssessmentSkills = assignment.AssessmentSkills.ToList(),
+                StudentChecklist = assignment.StudentChecklist.ToList(),
+                Resources = assignment.Resources.ToList(),
+                AssignmentSteps = assignment.AssignmentSteps.OrderBy(step => step.StepOrder).ToList(),
                 AllowRevision = assignment.RevisionPolicy?.AllowRevision ?? false,
                 RevisionExpectation = assignment.RevisionPolicy?.RevisionExpectation ?? "",
                 MinimumRevisionCount = assignment.RevisionPolicy?.MinimumRevisionCount ?? 0,
-                CompletionRequirementsText = Lines(assignment.CompletionCriteria?.MinimumRequirements ?? []),
+                CompletionRequirements = (assignment.CompletionCriteria?.MinimumRequirements ?? []).ToList(),
                 RequiresParentReview = assignment.CompletionCriteria?.RequiresParentReview ?? false,
                 MasteryThreshold = assignment.CompletionCriteria?.MasteryThreshold,
-                ReflectionPromptsText = Lines(assignment.ReflectionPrompts),
+                ReflectionPrompts = assignment.ReflectionPrompts.ToList(),
                 RetainForRecords = assignment.EvidenceRequirements?.RetainForRecords ?? false,
                 EvidenceType = assignment.EvidenceRequirements?.EvidenceType ?? AssignmentEvidenceType.PortfolioArtifact,
-                RecommendedFileTypesText = Lines(assignment.EvidenceRequirements?.RecommendedFileTypes ?? []),
+                RecommendedFileTypes = (assignment.EvidenceRequirements?.RecommendedFileTypes ?? []).ToList(),
                 RequiresStudentExplanation = assignment.EvidenceRequirements?.RequiresStudentExplanation ?? false,
                 RequiresParentEvaluation = assignment.EvidenceRequirements?.RequiresParentEvaluation ?? false,
                 GradingMode = assignment.Scoring?.GradingMode ?? AssignmentGradingMode.Points,
@@ -464,18 +615,18 @@ else
                 assignmentForm.StudentFacingGoal,
                 assignmentForm.EstimatedMinutesMin,
                 assignmentForm.EstimatedMinutesMax,
-                SplitLines(assignmentForm.RequiredDeliverablesText),
+                assignmentForm.RequiredDeliverables,
                 assignmentForm.SubmissionFormats,
                 BuildPortfolioCommand(),
                 BuildRubricCommand(),
                 assignmentForm.LinkedRubricId,
-                SplitLines(assignmentForm.AssessmentSkillsText),
-                SplitLines(assignmentForm.StudentChecklistText),
+                assignmentForm.AssessmentSkills,
+                assignmentForm.StudentChecklist,
                 BuildResourceCommands(),
                 BuildStepCommands(),
                 BuildRevisionCommand(),
                 BuildCompletionCommand(),
-                SplitLines(assignmentForm.ReflectionPromptsText),
+                assignmentForm.ReflectionPrompts,
                 BuildEvidenceCommand(),
                 BuildScoringCommand())));
     }
@@ -511,31 +662,33 @@ else
         assignmentForm.StudentFacingGoal = variant.StudentFacingGoal;
         assignmentForm.EstimatedMinutesMin = variant.EstimatedMinutesMin;
         assignmentForm.EstimatedMinutesMax = variant.EstimatedMinutesMax;
-        assignmentForm.RequiredDeliverablesText = Lines(variant.RequiredDeliverables);
+        assignmentForm.RequiredDeliverables = variant.RequiredDeliverables.ToList();
         assignmentForm.SubmissionFormats = variant.SubmissionFormats.ToList();
         assignmentForm.PortfolioSection = variant.PortfolioConnection?.PortfolioSection ?? "";
         assignmentForm.ArtifactTitle = variant.PortfolioConnection?.ArtifactTitle ?? "";
         assignmentForm.ArtifactPurpose = variant.PortfolioConnection?.ArtifactPurpose ?? "";
         assignmentForm.ReuseInstructions = variant.PortfolioConnection?.ReuseInstructions ?? "";
-        assignmentForm.CrossCourseLinksText = Lines(variant.PortfolioConnection?.CrossCourseLinks ?? []);
+        assignmentForm.CrossCourseLinks = (variant.PortfolioConnection?.CrossCourseLinks ?? []).ToList();
         assignmentForm.RubricId = variant.Rubric?.RubricId ?? "";
         assignmentForm.RubricScale = variant.Rubric?.Scale ?? "";
-        assignmentForm.RubricCriteriaText = SerializeRubric(variant.Rubric);
+        assignmentForm.RubricCriteria = variant.Rubric?.Criteria
+            .Select(criteria => new RubricCriterionFormItem(criteria.Criterion, criteria.Level4, criteria.Level3, criteria.Level2, criteria.Level1))
+            .ToList() ?? [];
         assignmentForm.LinkedRubricId = variant.LinkedRubricId;
-        assignmentForm.AssessmentSkillsText = Lines(variant.AssessmentSkills);
-        assignmentForm.StudentChecklistText = Lines(variant.StudentChecklist);
-        assignmentForm.ResourcesText = SerializeResources(variant.Resources);
-        assignmentForm.AssignmentStepsText = SerializeSteps(variant.AssignmentSteps);
+        assignmentForm.AssessmentSkills = variant.AssessmentSkills.ToList();
+        assignmentForm.StudentChecklist = variant.StudentChecklist.ToList();
+        assignmentForm.Resources = variant.Resources.ToList();
+        assignmentForm.AssignmentSteps = variant.AssignmentSteps.OrderBy(step => step.StepOrder).ToList();
         assignmentForm.AllowRevision = variant.RevisionPolicy?.AllowRevision ?? false;
         assignmentForm.RevisionExpectation = variant.RevisionPolicy?.RevisionExpectation ?? "";
         assignmentForm.MinimumRevisionCount = variant.RevisionPolicy?.MinimumRevisionCount ?? 0;
-        assignmentForm.CompletionRequirementsText = Lines(variant.CompletionCriteria?.MinimumRequirements ?? []);
+        assignmentForm.CompletionRequirements = (variant.CompletionCriteria?.MinimumRequirements ?? []).ToList();
         assignmentForm.RequiresParentReview = variant.CompletionCriteria?.RequiresParentReview ?? false;
         assignmentForm.MasteryThreshold = variant.CompletionCriteria?.MasteryThreshold;
-        assignmentForm.ReflectionPromptsText = Lines(variant.ReflectionPrompts);
+        assignmentForm.ReflectionPrompts = variant.ReflectionPrompts.ToList();
         assignmentForm.RetainForRecords = variant.EvidenceRequirements?.RetainForRecords ?? false;
         assignmentForm.EvidenceType = variant.EvidenceRequirements?.EvidenceType ?? AssignmentEvidenceType.PortfolioArtifact;
-        assignmentForm.RecommendedFileTypesText = Lines(variant.EvidenceRequirements?.RecommendedFileTypes ?? []);
+        assignmentForm.RecommendedFileTypes = (variant.EvidenceRequirements?.RecommendedFileTypes ?? []).ToList();
         assignmentForm.RequiresStudentExplanation = variant.EvidenceRequirements?.RequiresStudentExplanation ?? false;
         assignmentForm.RequiresParentEvaluation = variant.EvidenceRequirements?.RequiresParentEvaluation ?? false;
         assignmentForm.GradingMode = variant.Scoring?.GradingMode ?? AssignmentGradingMode.Points;
@@ -584,6 +737,174 @@ else
         }
 
         await AutoSaveAssignment();
+    }
+
+    private async Task UpdateRequiredDeliverables(IReadOnlyList<string> values)
+    {
+        assignmentForm.RequiredDeliverables = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateStudentChecklist(IReadOnlyList<string> values)
+    {
+        assignmentForm.StudentChecklist = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateReflectionPrompts(IReadOnlyList<string> values)
+    {
+        assignmentForm.ReflectionPrompts = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateAssessmentSkills(IReadOnlyList<string> values)
+    {
+        assignmentForm.AssessmentSkills = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateCrossCourseLinks(IReadOnlyList<string> values)
+    {
+        assignmentForm.CrossCourseLinks = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateCompletionRequirements(IReadOnlyList<string> values)
+    {
+        assignmentForm.CompletionRequirements = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private async Task UpdateRecommendedFileTypes(IReadOnlyList<string> values)
+    {
+        assignmentForm.RecommendedFileTypes = values.ToList();
+        await AutoSaveAssignment();
+    }
+
+    private string AssignmentStepToggleText() => assignmentForm.ShowAssignmentStepForm ? "Hide" : "Add";
+
+    private void ToggleAssignmentStepForm()
+    {
+        assignmentForm.ShowAssignmentStepForm = !assignmentForm.ShowAssignmentStepForm;
+    }
+
+    private async Task AddAssignmentStep()
+    {
+        var title = assignmentForm.NewStepTitle.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return;
+        }
+
+        assignmentForm.AssignmentSteps.Add(new AssignmentStep(
+            assignmentForm.AssignmentSteps.Count + 1,
+            title,
+            assignmentForm.NewStepInstructions,
+            assignmentForm.NewStepEstimatedMinutes));
+        assignmentForm.NewStepTitle = "";
+        assignmentForm.NewStepInstructions = "";
+        assignmentForm.NewStepEstimatedMinutes = 0;
+        await AutoSaveAssignment();
+    }
+
+    private async Task DeleteAssignmentStep(int index)
+    {
+        if (index >= 0 && index < assignmentForm.AssignmentSteps.Count)
+        {
+            assignmentForm.AssignmentSteps.RemoveAt(index);
+            await AutoSaveAssignment();
+        }
+    }
+
+    private async Task MoveAssignmentStep(int index, int direction)
+    {
+        var target = index + direction;
+        if (index < 0 || target < 0 || index >= assignmentForm.AssignmentSteps.Count || target >= assignmentForm.AssignmentSteps.Count)
+        {
+            return;
+        }
+
+        (assignmentForm.AssignmentSteps[index], assignmentForm.AssignmentSteps[target]) = (assignmentForm.AssignmentSteps[target], assignmentForm.AssignmentSteps[index]);
+        await AutoSaveAssignment();
+    }
+
+    private string AssignmentResourceToggleText() => assignmentForm.ShowAssignmentResourceForm ? "Hide" : "Add";
+
+    private void ToggleAssignmentResourceForm()
+    {
+        assignmentForm.ShowAssignmentResourceForm = !assignmentForm.ShowAssignmentResourceForm;
+    }
+
+    private async Task AddAssignmentResource()
+    {
+        var name = assignmentForm.NewResourceName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        assignmentForm.Resources.Add(new AssignmentResource(
+            name,
+            assignmentForm.NewResourceType,
+            assignmentForm.NewResourceUrl.Trim(),
+            "",
+            assignmentForm.NewResourceType == LessonResourceType.PhysicalResource,
+            true,
+            assignmentForm.NewResourceStudentInstructions.Trim(),
+            assignmentForm.NewResourceSourceNote.Trim()));
+        assignmentForm.NewResourceName = "";
+        assignmentForm.NewResourceUrl = "";
+        assignmentForm.NewResourceType = LessonResourceType.Website;
+        assignmentForm.NewResourceStudentInstructions = "";
+        assignmentForm.NewResourceSourceNote = "";
+        await AutoSaveAssignment();
+    }
+
+    private async Task DeleteAssignmentResource(int index)
+    {
+        if (index >= 0 && index < assignmentForm.Resources.Count)
+        {
+            assignmentForm.Resources.RemoveAt(index);
+            await AutoSaveAssignment();
+        }
+    }
+
+    private string RubricCriterionToggleText() => assignmentForm.ShowRubricCriterionForm ? "Hide" : "Add";
+
+    private void ToggleRubricCriterionForm()
+    {
+        assignmentForm.ShowRubricCriterionForm = !assignmentForm.ShowRubricCriterionForm;
+    }
+
+    private async Task AddRubricCriterion()
+    {
+        var criterion = assignmentForm.NewRubricCriterion.Trim();
+        if (string.IsNullOrWhiteSpace(criterion))
+        {
+            return;
+        }
+
+        assignmentForm.RubricCriteria.Add(new RubricCriterionFormItem(
+            criterion,
+            assignmentForm.NewRubricLevel4.Trim(),
+            assignmentForm.NewRubricLevel3.Trim(),
+            assignmentForm.NewRubricLevel2.Trim(),
+            assignmentForm.NewRubricLevel1.Trim()));
+        assignmentForm.NewRubricCriterion = "";
+        assignmentForm.NewRubricLevel4 = "";
+        assignmentForm.NewRubricLevel3 = "";
+        assignmentForm.NewRubricLevel2 = "";
+        assignmentForm.NewRubricLevel1 = "";
+        await AutoSaveAssignment();
+    }
+
+    private async Task DeleteRubricCriterion(int index)
+    {
+        if (index >= 0 && index < assignmentForm.RubricCriteria.Count)
+        {
+            assignmentForm.RubricCriteria.RemoveAt(index);
+            await AutoSaveAssignment();
+        }
     }
 
     private async Task Run(Func<Task<OperationResult>> action)
@@ -654,7 +975,7 @@ else
             string.IsNullOrWhiteSpace(assignmentForm.ArtifactTitle) &&
             string.IsNullOrWhiteSpace(assignmentForm.ArtifactPurpose) &&
             string.IsNullOrWhiteSpace(assignmentForm.ReuseInstructions) &&
-            string.IsNullOrWhiteSpace(assignmentForm.CrossCourseLinksText))
+            assignmentForm.CrossCourseLinks.Count == 0)
         {
             return null;
         }
@@ -665,57 +986,47 @@ else
             assignmentForm.ArtifactTitle,
             assignmentForm.ArtifactPurpose,
             assignmentForm.ReuseInstructions,
-            SplitLines(assignmentForm.CrossCourseLinksText));
+            assignmentForm.CrossCourseLinks);
     }
 
     private LessonRubricCommand? BuildRubricCommand()
     {
-        var criteria = ParseRubric(assignmentForm.RubricCriteriaText);
         if (string.IsNullOrWhiteSpace(assignmentForm.RubricId) &&
             string.IsNullOrWhiteSpace(assignmentForm.RubricScale) &&
-            criteria.Count == 0)
+            assignmentForm.RubricCriteria.Count == 0)
         {
             return null;
         }
 
-        return new LessonRubricCommand(assignmentForm.RubricId, assignmentForm.RubricScale, criteria);
+        return new LessonRubricCommand(
+            assignmentForm.RubricId,
+            assignmentForm.RubricScale,
+            assignmentForm.RubricCriteria
+                .Select(criteria => new LessonRubricCriterionCommand(criteria.Criterion, criteria.Level4, criteria.Level3, criteria.Level2, criteria.Level1))
+                .ToArray());
     }
 
     private IReadOnlyList<AssignmentResourceCommand> BuildResourceCommands()
     {
-        return assignmentForm.ResourcesText
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select((line, index) =>
-            {
-                var parts = line.Split('|', StringSplitOptions.TrimEntries);
-                var type = parts.Length > 2 && Enum.TryParse<LessonResourceType>(parts[2], true, out var parsedType)
-                    ? parsedType
-                    : LessonResourceType.Website;
-                return new AssignmentResourceCommand(
-                    parts.ElementAtOrDefault(0) ?? "",
-                    type,
-                    parts.ElementAtOrDefault(1) ?? "",
-                    "",
-                    type == LessonResourceType.PhysicalResource,
-                    true,
-                    parts.ElementAtOrDefault(3) ?? "",
-                    parts.ElementAtOrDefault(4) ?? "",
-                    null);
-            })
+        return assignmentForm.Resources
+            .Select(resource => new AssignmentResourceCommand(
+                resource.Name,
+                resource.Type,
+                resource.Url,
+                resource.FilePath,
+                resource.IsPhysicalResource,
+                resource.Required,
+                resource.StudentInstructions,
+                resource.SourceNote,
+                null))
             .Where(item => !string.IsNullOrWhiteSpace(item.Name))
             .ToArray();
     }
 
     private IReadOnlyList<AssignmentStepCommand> BuildStepCommands()
     {
-        return assignmentForm.AssignmentStepsText
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select((line, index) =>
-            {
-                var parts = line.Split('|', StringSplitOptions.TrimEntries);
-                var minutes = int.TryParse(parts.ElementAtOrDefault(2), out var parsed) ? parsed : 0;
-                return new AssignmentStepCommand(index + 1, parts.ElementAtOrDefault(0) ?? "", parts.ElementAtOrDefault(1) ?? "", minutes);
-            })
+        return assignmentForm.AssignmentSteps
+            .Select((step, index) => new AssignmentStepCommand(index + 1, step.Title, step.Instructions, step.EstimatedMinutes))
             .Where(item => !string.IsNullOrWhiteSpace(item.Title))
             .ToArray();
     }
@@ -737,7 +1048,7 @@ else
 
     private AssignmentCompletionCriteriaCommand? BuildCompletionCommand()
     {
-        var requirements = SplitLines(assignmentForm.CompletionRequirementsText);
+        var requirements = assignmentForm.CompletionRequirements;
         if (requirements.Count == 0 && !assignmentForm.RequiresParentReview && assignmentForm.MasteryThreshold is null)
         {
             return null;
@@ -748,7 +1059,7 @@ else
 
     private AssignmentEvidenceRequirementsCommand? BuildEvidenceCommand()
     {
-        var fileTypes = SplitLines(assignmentForm.RecommendedFileTypesText);
+        var fileTypes = assignmentForm.RecommendedFileTypes;
         if (!assignmentForm.RetainForRecords &&
             fileTypes.Count == 0 &&
             !assignmentForm.RequiresStudentExplanation &&
@@ -773,54 +1084,6 @@ else
             assignmentForm.GradingMode,
             assignmentForm.CountsTowardGrade,
             assignmentForm.AllowPartialCredit);
-    }
-
-    private static IReadOnlyList<string> SplitLines(string value)
-    {
-        return value
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .ToArray();
-    }
-
-    private static string Lines(IEnumerable<string> values)
-    {
-        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
-    }
-
-    private static IReadOnlyList<LessonRubricCriterionCommand> ParseRubric(string value)
-    {
-        return value
-            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line =>
-            {
-                var parts = line.Split('|', StringSplitOptions.TrimEntries);
-                return new LessonRubricCriterionCommand(
-                    parts.ElementAtOrDefault(0) ?? "",
-                    parts.ElementAtOrDefault(1) ?? "",
-                    parts.ElementAtOrDefault(2) ?? "",
-                    parts.ElementAtOrDefault(3) ?? "",
-                    parts.ElementAtOrDefault(4) ?? "");
-            })
-            .Where(item => !string.IsNullOrWhiteSpace(item.Criterion))
-            .ToArray();
-    }
-
-    private static string SerializeRubric(LessonRubric? rubric)
-    {
-        return rubric is null
-            ? ""
-            : Lines(rubric.Criteria.Select(item => $"{item.Criterion} | {item.Level4} | {item.Level3} | {item.Level2} | {item.Level1}"));
-    }
-
-    private static string SerializeResources(IReadOnlyList<AssignmentResource> resources)
-    {
-        return Lines(resources.Select(item => $"{item.Name} | {item.Url} | {item.Type} | {item.StudentInstructions} | {item.SourceNote}"));
-    }
-
-    private static string SerializeSteps(IReadOnlyList<AssignmentStep> steps)
-    {
-        return Lines(steps.OrderBy(step => step.StepOrder).Select(item => $"{item.Title} | {item.Instructions} | {item.EstimatedMinutes}"));
     }
 
     private static string AssignmentTypeLabel(AssignmentType type)
@@ -872,6 +1135,7 @@ else
     }
 
     private sealed record PageMessage(string Text, string CssClass);
+    private sealed record RubricCriterionFormItem(string Criterion, string Level4, string Level3, string Level2, string Level1);
 
     private sealed class AssignmentFormModel
     {
@@ -889,31 +1153,31 @@ else
         public List<string> LinkedModuleObjectives { get; set; } = [];
         public List<Guid> LinkedLessonIds { get; set; } = [];
         public string RequiredOutput { get; set; } = "";
-        public string RequiredDeliverablesText { get; set; } = "";
+        public List<string> RequiredDeliverables { get; set; } = [];
         public List<AssignmentSubmissionFormat> SubmissionFormats { get; set; } = [];
         public string PortfolioSection { get; set; } = "";
         public string ArtifactTitle { get; set; } = "";
         public string ArtifactPurpose { get; set; } = "";
         public string ReuseInstructions { get; set; } = "";
-        public string CrossCourseLinksText { get; set; } = "";
+        public List<string> CrossCourseLinks { get; set; } = [];
         public string RubricId { get; set; } = "";
         public string RubricScale { get; set; } = "";
-        public string RubricCriteriaText { get; set; } = "";
+        public List<RubricCriterionFormItem> RubricCriteria { get; set; } = [];
         public string LinkedRubricId { get; set; } = "";
-        public string AssessmentSkillsText { get; set; } = "";
-        public string StudentChecklistText { get; set; } = "";
-        public string ResourcesText { get; set; } = "";
-        public string AssignmentStepsText { get; set; } = "";
+        public List<string> AssessmentSkills { get; set; } = [];
+        public List<string> StudentChecklist { get; set; } = [];
+        public List<AssignmentResource> Resources { get; set; } = [];
+        public List<AssignmentStep> AssignmentSteps { get; set; } = [];
         public bool AllowRevision { get; set; }
         public string RevisionExpectation { get; set; } = "";
         public int MinimumRevisionCount { get; set; }
-        public string CompletionRequirementsText { get; set; } = "";
+        public List<string> CompletionRequirements { get; set; } = [];
         public bool RequiresParentReview { get; set; }
         public decimal? MasteryThreshold { get; set; }
-        public string ReflectionPromptsText { get; set; } = "";
+        public List<string> ReflectionPrompts { get; set; } = [];
         public bool RetainForRecords { get; set; }
         public AssignmentEvidenceType EvidenceType { get; set; } = AssignmentEvidenceType.PortfolioArtifact;
-        public string RecommendedFileTypesText { get; set; } = "";
+        public List<string> RecommendedFileTypes { get; set; } = [];
         public bool RequiresStudentExplanation { get; set; }
         public bool RequiresParentEvaluation { get; set; }
         public AssignmentGradingMode GradingMode { get; set; } = AssignmentGradingMode.Points;
@@ -924,5 +1188,21 @@ else
         public decimal? PlannedPoints { get; set; }
         public decimal? PlannedWeight { get; set; }
         public AssignmentStatus Status { get; set; } = AssignmentStatus.Planned;
+        public bool ShowAssignmentStepForm { get; set; }
+        public string NewStepTitle { get; set; } = "";
+        public string NewStepInstructions { get; set; } = "";
+        public int NewStepEstimatedMinutes { get; set; }
+        public bool ShowAssignmentResourceForm { get; set; }
+        public string NewResourceName { get; set; } = "";
+        public string NewResourceUrl { get; set; } = "";
+        public LessonResourceType NewResourceType { get; set; } = LessonResourceType.Website;
+        public string NewResourceStudentInstructions { get; set; } = "";
+        public string NewResourceSourceNote { get; set; } = "";
+        public bool ShowRubricCriterionForm { get; set; }
+        public string NewRubricCriterion { get; set; } = "";
+        public string NewRubricLevel4 { get; set; } = "";
+        public string NewRubricLevel3 { get; set; } = "";
+        public string NewRubricLevel2 { get; set; } = "";
+        public string NewRubricLevel1 { get; set; } = "";
     }
 }

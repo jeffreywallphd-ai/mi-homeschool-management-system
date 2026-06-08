@@ -89,6 +89,7 @@ public sealed record StudentModuleResourceView(
 public sealed record StudentResourceView(string Name, string Link);
 
 public sealed record StudentLessonView(
+    Guid LessonId,
     int SequenceOrder,
     string Title,
     string IntroductoryText,
@@ -187,6 +188,7 @@ public sealed record StudentAssignmentView(
     string DueTimingLabel,
     DateOnly? DueDate,
     IReadOnlyList<string> LinkedModuleObjectives,
+    IReadOnlyList<Guid> RelatedLessonIds,
     IReadOnlyList<string> RelatedLessonTitles,
     string RequiredOutput,
     bool IsPortfolioCandidate,

@@ -95,24 +95,166 @@ else
 
             <section class="form-section">
                 <h2>Planning Metadata</h2>
-                <label class="form-label" for="lesson-subjects">Subject areas</label>
-                <textarea id="lesson-subjects" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SubjectAreasText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-tags">Tags</label>
-                <textarea id="lesson-tags" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.TagsText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-prerequisites">Prerequisites</label>
-                <textarea id="lesson-prerequisites" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.PrerequisitesText" @bind:after="AutoSaveLesson"></textarea>
+                <ItemizedTextListEditor Title="Subject areas" EntryLabel="Subject area" EmptyText="No subject areas have been added." Items="lessonForm.SubjectAreas" ItemsChanged="UpdateLessonSubjectAreas" Disabled="@(!CanEdit)" />
+                <ItemizedTextListEditor Title="Tags" EntryLabel="Tag" EmptyText="No tags have been added." Items="lessonForm.Tags" ItemsChanged="UpdateLessonTags" Disabled="@(!CanEdit)" />
+                <ItemizedTextListEditor Title="Prerequisites" EntryLabel="Prerequisite" EmptyText="No prerequisites have been added." Items="lessonForm.Prerequisites" ItemsChanged="UpdateLessonPrerequisites" Disabled="@(!CanEdit)" />
             </section>
 
             <section class="form-section">
                 <h2>Student Workflow</h2>
-                <label class="form-label" for="lesson-objectives">Lesson learning objectives</label>
-                <textarea id="lesson-objectives" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.LearningObjectivesText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-standards">Standards alignment</label>
-                <textarea id="lesson-standards" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.StandardsAlignmentsText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-success">Success criteria</label>
-                <textarea id="lesson-success" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SuccessCriteriaText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-steps">Lesson steps</label>
-                <textarea id="lesson-steps" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.LessonStepsText" @bind:after="AutoSaveLesson"></textarea>
+                <div class="section-heading-row mt-3">
+                    <h3>Lesson learning objectives</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleLessonObjectiveForm">@LessonObjectiveToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowLessonObjectiveForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-objective-id">Objective id</label>
+                        <input id="lesson-objective-id" class="form-control" @bind="lessonForm.NewObjectiveId" />
+                        <label class="form-label" for="lesson-objective-bloom">Bloom level</label>
+                        <select id="lesson-objective-bloom" class="form-select" @bind="lessonForm.NewObjectiveBloomLevel">
+                            @foreach (var level in Enum.GetValues<BloomLevel>())
+                            {
+                                <option value="@level">@EnumLabel(level.ToString())</option>
+                            }
+                        </select>
+                        <label class="form-label" for="lesson-objective-text">Objective text</label>
+                        <textarea id="lesson-objective-text" class="form-control" rows="3" @bind="lessonForm.NewObjectiveText"></textarea>
+                        <button class="btn btn-secondary mt-2" @onclick="AddLessonObjective">Add objective</button>
+                    </div>
+                }
+                @if (lessonForm.LearningObjectives.Count == 0)
+                {
+                    <p>No lesson learning objectives have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.LearningObjectives.Count; index++)
+                        {
+                            var objectiveIndex = index;
+                            var objective = lessonForm.LearningObjectives[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@objective.Text</strong>
+                                    <small>@objective.ObjectiveId</small>
+                                    <small>@EnumLabel(objective.BloomLevel.ToString())</small>
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteLessonObjective(objectiveIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                <div class="section-heading-row mt-3">
+                    <h3>Standards alignment</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleStandardsForm">@StandardsToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowStandardsForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-standard-framework">Framework</label>
+                        <input id="lesson-standard-framework" class="form-control" @bind="lessonForm.NewStandardFramework" />
+                        <label class="form-label" for="lesson-standard-code">Code</label>
+                        <input id="lesson-standard-code" class="form-control" @bind="lessonForm.NewStandardCode" />
+                        <label class="form-label" for="lesson-standard-description">Description</label>
+                        <textarea id="lesson-standard-description" class="form-control" rows="3" @bind="lessonForm.NewStandardDescription"></textarea>
+                        <button class="btn btn-secondary mt-2" @onclick="AddStandard">Add standard</button>
+                    </div>
+                }
+                @if (lessonForm.StandardsAlignments.Count == 0)
+                {
+                    <p>No standards alignments have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.StandardsAlignments.Count; index++)
+                        {
+                            var standardIndex = index;
+                            var standard = lessonForm.StandardsAlignments[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@standard.Code</strong>
+                                    <small>@standard.Framework</small>
+                                    <span>@standard.Description</span>
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteStandard(standardIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                <ItemizedTextListEditor Title="Success criteria" EntryLabel="Success criterion" EmptyText="No success criteria have been added." Items="lessonForm.SuccessCriteria" ItemsChanged="UpdateLessonSuccessCriteria" Disabled="@(!CanEdit)" AllowReorder="true" />
+                <div class="section-heading-row mt-3">
+                    <h3>Lesson steps</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleLessonStepForm">@LessonStepToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowLessonStepForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-step-title">Title</label>
+                        <input id="lesson-step-title" class="form-control" @bind="lessonForm.NewStepTitle" />
+                        <label class="form-label" for="lesson-step-type">Step type</label>
+                        <select id="lesson-step-type" class="form-select" @bind="lessonForm.NewStepType">
+                            @foreach (var type in Enum.GetValues<LessonStepType>())
+                            {
+                                <option value="@type">@EnumLabel(type.ToString())</option>
+                            }
+                        </select>
+                        <label class="form-label" for="lesson-step-instructions">Instructions</label>
+                        <textarea id="lesson-step-instructions" class="form-control" rows="3" @bind="lessonForm.NewStepInstructions"></textarea>
+                        <label class="form-label" for="lesson-step-minutes">Estimated minutes</label>
+                        <input id="lesson-step-minutes" class="form-control" type="number" min="0" step="1" @bind="lessonForm.NewStepEstimatedMinutes" />
+                        <div class="form-check mt-2">
+                            <input id="lesson-step-required" class="form-check-input" type="checkbox" @bind="lessonForm.NewStepRequired" />
+                            <label class="form-check-label" for="lesson-step-required">Required step</label>
+                        </div>
+                        <button class="btn btn-secondary mt-2" @onclick="AddLessonStep">Add step</button>
+                    </div>
+                }
+                @if (lessonForm.LessonSteps.Count == 0)
+                {
+                    <p>No lesson steps have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.LessonSteps.Count; index++)
+                        {
+                            var stepIndex = index;
+                            var step = lessonForm.LessonSteps[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@step.Title</strong>
+                                    <span>@step.Instructions</span>
+                                    <small>@EnumLabel(step.StepType.ToString())@(step.EstimatedMinutes > 0 ? $" | {step.EstimatedMinutes} minutes" : "")@(step.Required ? " | Required" : " | Optional")</small>
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <div class="module-order-actions">
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(stepIndex == 0)" @onclick="() => MoveLessonStep(stepIndex, -1)">Up</button>
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(stepIndex == lessonForm.LessonSteps.Count - 1)" @onclick="() => MoveLessonStep(stepIndex, 1)">Down</button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteLessonStep(stepIndex)">Delete</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
             </section>
 
             <section class="form-section">
@@ -124,6 +266,45 @@ else
                     }
                 </div>
                 @ValidationFor("lesson.Resources")
+                @if (lessonForm.ShowResourceForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-resource-name">Name</label>
+                        <input id="lesson-resource-name" class="form-control" @bind="lessonForm.NewResourceName" />
+                        <label class="form-label" for="lesson-resource-type">Type</label>
+                        <select id="lesson-resource-type" class="form-select" @bind="lessonForm.NewResourceType">
+                            @foreach (var type in Enum.GetValues<LessonResourceType>())
+                            {
+                                <option value="@type">@ResourceTypeLabel(type)</option>
+                            }
+                        </select>
+                        <label class="form-label" for="lesson-resource-url">Link</label>
+                        <input id="lesson-resource-url" class="form-control" type="url" @bind="lessonForm.NewResourceUrl" />
+                        <label class="form-label" for="lesson-resource-file">File upload</label>
+                        <InputFile id="lesson-resource-file" class="form-control" OnChange="SelectResourceFile" />
+                        <div class="form-check mt-2">
+                            <input id="lesson-resource-physical" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceIsPhysical" />
+                            <label class="form-check-label" for="lesson-resource-physical">Physical resource</label>
+                        </div>
+                        <label class="form-label" for="lesson-resource-note">Source note</label>
+                        <input id="lesson-resource-note" class="form-control" @bind="lessonForm.NewResourceSourceNote" />
+                        <div class="form-grid two-column-form-grid">
+                            <div class="form-check mt-2">
+                                <input id="lesson-resource-required" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceRequired" />
+                                <label class="form-check-label" for="lesson-resource-required">Required resource</label>
+                            </div>
+                            <div>
+                                <label class="form-label" for="lesson-resource-minutes">Estimated minutes</label>
+                                <input id="lesson-resource-minutes" class="form-control" type="number" min="0" @bind="lessonForm.NewResourceEstimatedMinutes" />
+                            </div>
+                        </div>
+                        <label class="form-label" for="lesson-resource-instructions">Student instructions</label>
+                        <textarea id="lesson-resource-instructions" class="form-control" rows="4" @bind="lessonForm.NewResourceStudentInstructions"></textarea>
+                        <label class="form-label" for="lesson-resource-notes-prompt">Notes prompt</label>
+                        <textarea id="lesson-resource-notes-prompt" class="form-control" rows="4" @bind="lessonForm.NewResourceNotesPrompt"></textarea>
+                        <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
+                    </div>
+                }
                 @if (lessonForm.Resources.Count == 0)
                 {
                     <p>No lesson resources have been added.</p>
@@ -170,75 +351,198 @@ else
                                 </div>
                                 @if (CanEdit)
                                 {
-                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Remove</button>
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveResource(resourceIndex)">Delete</button>
                                 }
                             </li>
                         }
                     </ul>
                 }
-                @if (lessonForm.ShowResourceForm && CanEdit)
-                {
-                    <div class="inline-entry-form">
-                        <label class="form-label" for="lesson-resource-name">Name</label>
-                        <input id="lesson-resource-name" class="form-control" @bind="lessonForm.NewResourceName" />
-                        <label class="form-label" for="lesson-resource-type">Type</label>
-                        <select id="lesson-resource-type" class="form-select" @bind="lessonForm.NewResourceType">
-                            @foreach (var type in Enum.GetValues<LessonResourceType>())
-                            {
-                                <option value="@type">@ResourceTypeLabel(type)</option>
-                            }
-                        </select>
-                        <label class="form-label" for="lesson-resource-url">Link</label>
-                        <input id="lesson-resource-url" class="form-control" type="url" @bind="lessonForm.NewResourceUrl" />
-                        <label class="form-label" for="lesson-resource-file">File upload</label>
-                        <InputFile id="lesson-resource-file" class="form-control" OnChange="SelectResourceFile" />
-                        <div class="form-check mt-2">
-                            <input id="lesson-resource-physical" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceIsPhysical" />
-                            <label class="form-check-label" for="lesson-resource-physical">Physical resource</label>
-                        </div>
-                        <label class="form-label" for="lesson-resource-note">Source note</label>
-                        <input id="lesson-resource-note" class="form-control" @bind="lessonForm.NewResourceSourceNote" />
-                        <div class="form-grid two-column-form-grid">
-                            <div class="form-check mt-2">
-                                <input id="lesson-resource-required" class="form-check-input" type="checkbox" @bind="lessonForm.NewResourceRequired" />
-                                <label class="form-check-label" for="lesson-resource-required">Required resource</label>
-                            </div>
-                            <div>
-                                <label class="form-label" for="lesson-resource-minutes">Estimated minutes</label>
-                                <input id="lesson-resource-minutes" class="form-control" type="number" min="0" @bind="lessonForm.NewResourceEstimatedMinutes" />
-                            </div>
-                        </div>
-                        <label class="form-label" for="lesson-resource-instructions">Student instructions</label>
-                        <textarea id="lesson-resource-instructions" class="form-control" rows="4" @bind="lessonForm.NewResourceStudentInstructions"></textarea>
-                        <label class="form-label" for="lesson-resource-notes-prompt">Notes prompt</label>
-                        <textarea id="lesson-resource-notes-prompt" class="form-control" rows="4" @bind="lessonForm.NewResourceNotesPrompt"></textarea>
-                        <button class="btn btn-secondary mt-2" @onclick="AddResource">Add resource</button>
-                    </div>
-                }
             </section>
 
             <section class="form-section">
                 <h2>Practice and Evidence</h2>
-                <label class="form-label" for="lesson-problem-sets">Problem sets</label>
-                <textarea id="lesson-problem-sets" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.ProblemSetsText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-portfolio">Portfolio connections</label>
-                <textarea id="lesson-portfolio" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.PortfolioConnectionsText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-reflection">Reflection prompts</label>
-                <textarea id="lesson-reflection" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.ReflectionPromptsText" @bind:after="AutoSaveLesson"></textarea>
+                <div class="section-heading-row">
+                    <h3>Problem sets</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleProblemSetForm">@ProblemSetToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowProblemSetForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-problem-set-id">Problem set id</label>
+                        <input id="lesson-problem-set-id" class="form-control" @bind="lessonForm.NewProblemSetId" />
+                        <label class="form-label" for="lesson-problem-set-title">Title</label>
+                        <input id="lesson-problem-set-title" class="form-control" @bind="lessonForm.NewProblemSetTitle" />
+                        <label class="form-label" for="lesson-problem-set-minutes">Estimated minutes</label>
+                        <input id="lesson-problem-set-minutes" class="form-control" type="number" min="0" @bind="lessonForm.NewProblemSetEstimatedMinutes" />
+                        <label class="form-label" for="lesson-problem-prompt">Problem prompt</label>
+                        <textarea id="lesson-problem-prompt" class="form-control" rows="3" @bind="lessonForm.NewProblemPrompt"></textarea>
+                        <label class="form-label" for="lesson-problem-answer">Expected answer</label>
+                        <textarea id="lesson-problem-answer" class="form-control" rows="3" @bind="lessonForm.NewProblemExpectedAnswer"></textarea>
+                        <button class="btn btn-secondary mt-2" @onclick="AddProblemSet">Add problem set</button>
+                    </div>
+                }
+                @if (lessonForm.ProblemSets.Count == 0)
+                {
+                    <p>No problem sets have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.ProblemSets.Count; index++)
+                        {
+                            var problemSetIndex = index;
+                            var problemSet = lessonForm.ProblemSets[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@problemSet.Title</strong>
+                                    <small>@problemSet.ProblemSetId</small>
+                                    @if (problemSet.EstimatedMinutes > 0)
+                                    {
+                                        <small>@problemSet.EstimatedMinutes minutes</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(problemSet.ProblemPrompt))
+                                    {
+                                        <small>Prompt: @problemSet.ProblemPrompt</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(problemSet.ExpectedAnswer))
+                                    {
+                                        <small>Expected answer: @problemSet.ExpectedAnswer</small>
+                                    }
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <div class="module-order-actions">
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(problemSetIndex == 0)" @onclick="() => MoveProblemSet(problemSetIndex, -1)">Up</button>
+                                        <button class="btn btn-outline-secondary btn-sm" disabled="@(problemSetIndex == lessonForm.ProblemSets.Count - 1)" @onclick="() => MoveProblemSet(problemSetIndex, 1)">Down</button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteProblemSet(problemSetIndex)">Delete</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <div class="section-heading-row mt-3">
+                    <h3>Portfolio connections</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="TogglePortfolioConnectionForm">@PortfolioConnectionToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowPortfolioConnectionForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-portfolio-section">Portfolio section</label>
+                        <input id="lesson-portfolio-section" class="form-control" @bind="lessonForm.NewPortfolioSection" />
+                        <label class="form-label" for="lesson-portfolio-artifact">Artifact title</label>
+                        <input id="lesson-portfolio-artifact" class="form-control" @bind="lessonForm.NewPortfolioArtifactTitle" />
+                        <label class="form-label" for="lesson-portfolio-purpose">Artifact purpose</label>
+                        <textarea id="lesson-portfolio-purpose" class="form-control" rows="3" @bind="lessonForm.NewPortfolioArtifactPurpose"></textarea>
+                        <ItemizedTextListEditor Title="Cross-course links" EntryLabel="Cross-course link" EmptyText="No cross-course links have been added." Items="lessonForm.NewPortfolioCrossCourseLinks" ItemsChanged="UpdateNewPortfolioCrossCourseLinks" />
+                        <label class="form-label" for="lesson-portfolio-reuse">Reuse instructions</label>
+                        <textarea id="lesson-portfolio-reuse" class="form-control" rows="3" @bind="lessonForm.NewPortfolioReuseInstructions"></textarea>
+                        <button class="btn btn-secondary mt-2" @onclick="AddPortfolioConnection">Add portfolio connection</button>
+                    </div>
+                }
+                @if (lessonForm.PortfolioConnections.Count == 0)
+                {
+                    <p>No portfolio connections have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.PortfolioConnections.Count; index++)
+                        {
+                            var connectionIndex = index;
+                            var connection = lessonForm.PortfolioConnections[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@connection.ArtifactTitle</strong>
+                                    <small>@connection.PortfolioSection</small>
+                                    @if (!string.IsNullOrWhiteSpace(connection.ArtifactPurpose))
+                                    {
+                                        <small>Purpose: @connection.ArtifactPurpose</small>
+                                    }
+                                    @if (connection.CrossCourseLinks.Count > 0)
+                                    {
+                                        <small>Links: @string.Join(", ", connection.CrossCourseLinks)</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(connection.ReuseInstructions))
+                                    {
+                                        <small>Reuse: @connection.ReuseInstructions</small>
+                                    }
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeletePortfolioConnection(connectionIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                <ItemizedTextListEditor Title="Reflection prompts" EntryLabel="Reflection prompt" EmptyText="No reflection prompts have been added." Items="lessonForm.ReflectionPrompts" ItemsChanged="UpdateLessonReflectionPrompts" Disabled="@(!CanEdit)" AllowReorder="true" UseTextArea="true" />
             </section>
 
             <section class="form-section">
                 <h2>Rubric and Parent Notes</h2>
-                <label class="form-label" for="lesson-rubric">Rubric criteria</label>
-                <textarea id="lesson-rubric" class="form-control" rows="6" disabled="@(!CanEdit)" @bind="lessonForm.RubricText" @bind:after="AutoSaveLesson"></textarea>
+                <div class="section-heading-row mt-3">
+                    <h3>Rubric criteria</h3>
+                    @if (CanEdit)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleRubricCriterionForm">@RubricCriterionToggleText()</button>
+                    }
+                </div>
+                @if (lessonForm.ShowRubricCriterionForm && CanEdit)
+                {
+                    <div class="inline-entry-form">
+                        <label class="form-label" for="lesson-rubric-criterion">Criterion</label>
+                        <input id="lesson-rubric-criterion" class="form-control" @bind="lessonForm.NewRubricCriterion" />
+                        <label class="form-label" for="lesson-rubric-level4">Level 4</label>
+                        <input id="lesson-rubric-level4" class="form-control" @bind="lessonForm.NewRubricLevel4" />
+                        <label class="form-label" for="lesson-rubric-level3">Level 3</label>
+                        <input id="lesson-rubric-level3" class="form-control" @bind="lessonForm.NewRubricLevel3" />
+                        <label class="form-label" for="lesson-rubric-level2">Level 2</label>
+                        <input id="lesson-rubric-level2" class="form-control" @bind="lessonForm.NewRubricLevel2" />
+                        <label class="form-label" for="lesson-rubric-level1">Level 1</label>
+                        <input id="lesson-rubric-level1" class="form-control" @bind="lessonForm.NewRubricLevel1" />
+                        <button class="btn btn-secondary mt-2" @onclick="AddRubricCriterion">Add criterion</button>
+                    </div>
+                }
+                @if (lessonForm.RubricCriteria.Count == 0)
+                {
+                    <p>No rubric criteria have been added.</p>
+                }
+                else
+                {
+                    <ul class="itemized-editor-list stacked-editor-list">
+                        @for (var index = 0; index < lessonForm.RubricCriteria.Count; index++)
+                        {
+                            var criterionIndex = index;
+                            var criterion = lessonForm.RubricCriteria[index];
+                            <li>
+                                <div class="itemized-editor-content">
+                                    <strong>@criterion.Criterion</strong>
+                                    <small>Level 4: @criterion.Level4</small>
+                                    <small>Level 3: @criterion.Level3</small>
+                                    <small>Level 2: @criterion.Level2</small>
+                                    <small>Level 1: @criterion.Level1</small>
+                                </div>
+                                @if (CanEdit)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteRubricCriterion(criterionIndex)">Delete</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
                 <label class="form-label" for="lesson-instructor-notes">Instructor overview</label>
                 <textarea id="lesson-instructor-notes" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.InstructorOverview" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-look-fors">Look fors</label>
-                <textarea id="lesson-look-fors" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.LookForsText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-common-issues">Common issues</label>
-                <textarea id="lesson-common-issues" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.CommonIssuesText" @bind:after="AutoSaveLesson"></textarea>
-                <label class="form-label" for="lesson-feedback">Suggested feedback</label>
-                <textarea id="lesson-feedback" class="form-control" rows="4" disabled="@(!CanEdit)" @bind="lessonForm.SuggestedFeedbackText" @bind:after="AutoSaveLesson"></textarea>
+                <ItemizedTextListEditor Title="Look fors" EntryLabel="Look for" EmptyText="No look fors have been added." Items="lessonForm.LookFors" ItemsChanged="UpdateLessonLookFors" Disabled="@(!CanEdit)" AllowReorder="true" />
+                <ItemizedTextListEditor Title="Common issues" EntryLabel="Common issue" EmptyText="No common issues have been added." Items="lessonForm.CommonIssues" ItemsChanged="UpdateLessonCommonIssues" Disabled="@(!CanEdit)" AllowReorder="true" />
+                <ItemizedTextListEditor Title="Suggested feedback" EntryLabel="Suggested feedback" EmptyText="No suggested feedback has been added." Items="lessonForm.SuggestedFeedback" ItemsChanged="UpdateLessonSuggestedFeedback" Disabled="@(!CanEdit)" AllowReorder="true" UseTextArea="true" />
             </section>
         </main>
 
@@ -356,22 +660,44 @@ else
                 lessonForm.EstimatedMinutes,
                 lessonForm.SuggestedDays,
                 lessonForm.DifficultyLevel,
-                SplitLines(lessonForm.SubjectAreasText).ToArray(),
-                SplitLines(lessonForm.TagsText).ToArray(),
-                SplitLines(lessonForm.PrerequisitesText).ToArray(),
-                ParseLessonObjectives(lessonForm.LearningObjectivesText).ToArray(),
-                ParseStandards(lessonForm.StandardsAlignmentsText).ToArray(),
-                SplitLines(lessonForm.SuccessCriteriaText).ToArray(),
-                ParseLessonSteps(lessonForm.LessonStepsText).ToArray(),
-                ParseProblemSets(lessonForm.ProblemSetsText).ToArray(),
-                ParsePortfolioConnections(lessonForm.PortfolioConnectionsText).ToArray(),
-                ParseRubric(lessonForm.RubricText),
-                SplitLines(lessonForm.ReflectionPromptsText).ToArray(),
+                lessonForm.SubjectAreas.ToArray(),
+                lessonForm.Tags.ToArray(),
+                lessonForm.Prerequisites.ToArray(),
+                lessonForm.LearningObjectives
+                    .Select(objective => new LessonLearningObjectiveCommand(objective.ObjectiveId, objective.Text, objective.BloomLevel))
+                    .ToArray(),
+                lessonForm.StandardsAlignments
+                    .Select(standard => new StandardsAlignmentCommand(standard.Framework, standard.Code, standard.Description))
+                    .ToArray(),
+                lessonForm.SuccessCriteria.ToArray(),
+                lessonForm.LessonSteps
+                    .Select((step, index) => new LessonStepCommand(index + 1, step.Title, step.StepType, step.Instructions, step.EstimatedMinutes, step.Required))
+                    .ToArray(),
+                lessonForm.ProblemSets
+                    .Select(problemSet => new LessonProblemSetCommand(
+                        problemSet.ProblemSetId,
+                        problemSet.Title,
+                        "",
+                        problemSet.EstimatedMinutes,
+                        string.IsNullOrWhiteSpace(problemSet.ProblemPrompt)
+                            ? []
+                            : [new LessonProblemCommand($"{problemSet.ProblemSetId}-problem-1", problemSet.ProblemPrompt, ProblemResponseType.WorkedSolution, problemSet.ExpectedAnswer, "", [], "")]))
+                    .ToArray(),
+                lessonForm.PortfolioConnections
+                    .Select(connection => new LessonPortfolioConnectionCommand(
+                        connection.PortfolioSection,
+                        connection.ArtifactTitle,
+                        connection.ArtifactPurpose,
+                        connection.CrossCourseLinks.ToArray(),
+                        connection.ReuseInstructions))
+                    .ToArray(),
+                BuildLessonRubricCommand(),
+                lessonForm.ReflectionPrompts.ToArray(),
                 new LessonInstructorNotesCommand(
                     lessonForm.InstructorOverview,
-                    SplitLines(lessonForm.LookForsText).ToArray(),
-                    SplitLines(lessonForm.CommonIssuesText).ToArray(),
-                    SplitLines(lessonForm.SuggestedFeedbackText).ToArray()),
+                    lessonForm.LookFors.ToArray(),
+                    lessonForm.CommonIssues.ToArray(),
+                    lessonForm.SuggestedFeedback.ToArray()),
                 lessonForm.LinkedAssignmentIds.ToArray())));
     }
 
@@ -433,21 +759,44 @@ else
                 EstimatedMinutes = lesson.EstimatedMinutes,
                 SuggestedDays = lesson.SuggestedDays,
                 DifficultyLevel = lesson.DifficultyLevel,
-                SubjectAreasText = Lines(lesson.SubjectAreas),
-                TagsText = Lines(lesson.Tags),
-                PrerequisitesText = Lines(lesson.Prerequisites),
-                LearningObjectivesText = SerializeLessonObjectives(lesson.LearningObjectives),
-                StandardsAlignmentsText = SerializeStandards(lesson.StandardsAlignments),
-                SuccessCriteriaText = Lines(lesson.SuccessCriteria),
-                LessonStepsText = SerializeLessonSteps(lesson.LessonSteps),
-                ProblemSetsText = SerializeProblemSets(lesson.ProblemSets),
-                PortfolioConnectionsText = SerializePortfolioConnections(lesson.PortfolioConnections),
-                RubricText = SerializeRubric(lesson.Rubric),
-                ReflectionPromptsText = Lines(lesson.ReflectionPrompts),
+                SubjectAreas = lesson.SubjectAreas.ToList(),
+                Tags = lesson.Tags.ToList(),
+                Prerequisites = lesson.Prerequisites.ToList(),
+                LearningObjectives = lesson.LearningObjectives
+                    .Select(objective => new LessonObjectiveFormItem(objective.ObjectiveId, objective.Text, objective.BloomLevel))
+                    .ToList(),
+                StandardsAlignments = lesson.StandardsAlignments
+                    .Select(standard => new StandardFormItem(standard.Framework, standard.Code, standard.Description))
+                    .ToList(),
+                SuccessCriteria = lesson.SuccessCriteria.ToList(),
+                LessonSteps = lesson.LessonSteps
+                    .OrderBy(step => step.StepOrder)
+                    .Select(step => new LessonStepFormItem(step.Title, step.StepType, step.Instructions, step.EstimatedMinutes, step.Required))
+                    .ToList(),
+                ProblemSets = lesson.ProblemSets
+                    .Select(problemSet => new LessonProblemSetFormItem(
+                        problemSet.ProblemSetId,
+                        problemSet.Title,
+                        problemSet.EstimatedMinutes,
+                        problemSet.Problems.FirstOrDefault()?.Prompt ?? "",
+                        problemSet.Problems.FirstOrDefault()?.ExpectedAnswer ?? ""))
+                    .ToList(),
+                PortfolioConnections = lesson.PortfolioConnections
+                    .Select(connection => new LessonPortfolioConnectionFormItem(
+                        connection.PortfolioSection,
+                        connection.ArtifactTitle,
+                        connection.ArtifactPurpose,
+                        connection.CrossCourseLinks.ToList(),
+                        connection.ReuseInstructions))
+                    .ToList(),
+                RubricCriteria = lesson.Rubric?.Criteria
+                    .Select(criteria => new RubricCriterionFormItem(criteria.Criterion, criteria.Level4, criteria.Level3, criteria.Level2, criteria.Level1))
+                    .ToList() ?? [],
+                ReflectionPrompts = lesson.ReflectionPrompts.ToList(),
                 InstructorOverview = lesson.InstructorNotes?.Overview ?? "",
-                LookForsText = Lines(lesson.InstructorNotes?.LookFors ?? []),
-                CommonIssuesText = Lines(lesson.InstructorNotes?.CommonIssues ?? []),
-                SuggestedFeedbackText = Lines(lesson.InstructorNotes?.SuggestedFeedback ?? []),
+                LookFors = (lesson.InstructorNotes?.LookFors ?? []).ToList(),
+                CommonIssues = (lesson.InstructorNotes?.CommonIssues ?? []).ToList(),
+                SuggestedFeedback = (lesson.InstructorNotes?.SuggestedFeedback ?? []).ToList(),
                 LinkedAssignmentIds = lesson.LinkedAssignmentIds.ToList(),
                 Resources = lesson.Resources
                     .Select(resource => new LessonResourceFormItem(
@@ -618,6 +967,311 @@ else
         await AutoSaveLesson();
     }
 
+    private async Task UpdateLessonSubjectAreas(IReadOnlyList<string> values)
+    {
+        lessonForm.SubjectAreas = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonTags(IReadOnlyList<string> values)
+    {
+        lessonForm.Tags = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonPrerequisites(IReadOnlyList<string> values)
+    {
+        lessonForm.Prerequisites = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonSuccessCriteria(IReadOnlyList<string> values)
+    {
+        lessonForm.SuccessCriteria = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonReflectionPrompts(IReadOnlyList<string> values)
+    {
+        lessonForm.ReflectionPrompts = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonLookFors(IReadOnlyList<string> values)
+    {
+        lessonForm.LookFors = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonCommonIssues(IReadOnlyList<string> values)
+    {
+        lessonForm.CommonIssues = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private async Task UpdateLessonSuggestedFeedback(IReadOnlyList<string> values)
+    {
+        lessonForm.SuggestedFeedback = values.ToList();
+        await AutoSaveLesson();
+    }
+
+    private string LessonObjectiveToggleText() => lessonForm.ShowLessonObjectiveForm ? "Hide" : "Add";
+
+    private void ToggleLessonObjectiveForm()
+    {
+        lessonForm.ShowLessonObjectiveForm = !lessonForm.ShowLessonObjectiveForm;
+    }
+
+    private async Task AddLessonObjective()
+    {
+        var text = lessonForm.NewObjectiveText.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        lessonForm.LearningObjectives.Add(new LessonObjectiveFormItem(
+            string.IsNullOrWhiteSpace(lessonForm.NewObjectiveId) ? $"objective-{lessonForm.LearningObjectives.Count + 1}" : lessonForm.NewObjectiveId.Trim(),
+            text,
+            lessonForm.NewObjectiveBloomLevel));
+        lessonForm.NewObjectiveId = "";
+        lessonForm.NewObjectiveText = "";
+        lessonForm.NewObjectiveBloomLevel = BloomLevel.Apply;
+        await AutoSaveLesson();
+    }
+
+    private async Task DeleteLessonObjective(int index)
+    {
+        if (index >= 0 && index < lessonForm.LearningObjectives.Count)
+        {
+            lessonForm.LearningObjectives.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private string StandardsToggleText() => lessonForm.ShowStandardsForm ? "Hide" : "Add";
+
+    private void ToggleStandardsForm()
+    {
+        lessonForm.ShowStandardsForm = !lessonForm.ShowStandardsForm;
+    }
+
+    private async Task AddStandard()
+    {
+        if (string.IsNullOrWhiteSpace(lessonForm.NewStandardFramework) &&
+            string.IsNullOrWhiteSpace(lessonForm.NewStandardCode) &&
+            string.IsNullOrWhiteSpace(lessonForm.NewStandardDescription))
+        {
+            return;
+        }
+
+        lessonForm.StandardsAlignments.Add(new StandardFormItem(
+            lessonForm.NewStandardFramework.Trim(),
+            lessonForm.NewStandardCode.Trim(),
+            lessonForm.NewStandardDescription.Trim()));
+        lessonForm.NewStandardFramework = "";
+        lessonForm.NewStandardCode = "";
+        lessonForm.NewStandardDescription = "";
+        await AutoSaveLesson();
+    }
+
+    private async Task DeleteStandard(int index)
+    {
+        if (index >= 0 && index < lessonForm.StandardsAlignments.Count)
+        {
+            lessonForm.StandardsAlignments.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private string LessonStepToggleText() => lessonForm.ShowLessonStepForm ? "Hide" : "Add";
+
+    private void ToggleLessonStepForm()
+    {
+        lessonForm.ShowLessonStepForm = !lessonForm.ShowLessonStepForm;
+    }
+
+    private async Task AddLessonStep()
+    {
+        var title = lessonForm.NewStepTitle.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return;
+        }
+
+        lessonForm.LessonSteps.Add(new LessonStepFormItem(
+            title,
+            lessonForm.NewStepType,
+            lessonForm.NewStepInstructions.Trim(),
+            lessonForm.NewStepEstimatedMinutes,
+            lessonForm.NewStepRequired));
+        lessonForm.NewStepTitle = "";
+        lessonForm.NewStepType = LessonStepType.Practice;
+        lessonForm.NewStepInstructions = "";
+        lessonForm.NewStepEstimatedMinutes = 0;
+        lessonForm.NewStepRequired = true;
+        await AutoSaveLesson();
+    }
+
+    private async Task DeleteLessonStep(int index)
+    {
+        if (index >= 0 && index < lessonForm.LessonSteps.Count)
+        {
+            lessonForm.LessonSteps.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private async Task MoveLessonStep(int index, int direction)
+    {
+        var target = index + direction;
+        if (index < 0 || target < 0 || index >= lessonForm.LessonSteps.Count || target >= lessonForm.LessonSteps.Count)
+        {
+            return;
+        }
+
+        (lessonForm.LessonSteps[index], lessonForm.LessonSteps[target]) = (lessonForm.LessonSteps[target], lessonForm.LessonSteps[index]);
+        await AutoSaveLesson();
+    }
+
+    private string ProblemSetToggleText() => lessonForm.ShowProblemSetForm ? "Hide" : "Add";
+
+    private void ToggleProblemSetForm()
+    {
+        lessonForm.ShowProblemSetForm = !lessonForm.ShowProblemSetForm;
+    }
+
+    private async Task AddProblemSet()
+    {
+        var title = lessonForm.NewProblemSetTitle.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return;
+        }
+
+        var problemSetId = string.IsNullOrWhiteSpace(lessonForm.NewProblemSetId)
+            ? $"problem-set-{lessonForm.ProblemSets.Count + 1}"
+            : lessonForm.NewProblemSetId.Trim();
+        lessonForm.ProblemSets.Add(new LessonProblemSetFormItem(
+            problemSetId,
+            title,
+            lessonForm.NewProblemSetEstimatedMinutes,
+            lessonForm.NewProblemPrompt.Trim(),
+            lessonForm.NewProblemExpectedAnswer.Trim()));
+        lessonForm.NewProblemSetId = "";
+        lessonForm.NewProblemSetTitle = "";
+        lessonForm.NewProblemSetEstimatedMinutes = 0;
+        lessonForm.NewProblemPrompt = "";
+        lessonForm.NewProblemExpectedAnswer = "";
+        await AutoSaveLesson();
+    }
+
+    private async Task DeleteProblemSet(int index)
+    {
+        if (index >= 0 && index < lessonForm.ProblemSets.Count)
+        {
+            lessonForm.ProblemSets.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private async Task MoveProblemSet(int index, int direction)
+    {
+        var target = index + direction;
+        if (index < 0 || target < 0 || index >= lessonForm.ProblemSets.Count || target >= lessonForm.ProblemSets.Count)
+        {
+            return;
+        }
+
+        (lessonForm.ProblemSets[index], lessonForm.ProblemSets[target]) = (lessonForm.ProblemSets[target], lessonForm.ProblemSets[index]);
+        await AutoSaveLesson();
+    }
+
+    private string PortfolioConnectionToggleText() => lessonForm.ShowPortfolioConnectionForm ? "Hide" : "Add";
+
+    private void TogglePortfolioConnectionForm()
+    {
+        lessonForm.ShowPortfolioConnectionForm = !lessonForm.ShowPortfolioConnectionForm;
+    }
+
+    private Task UpdateNewPortfolioCrossCourseLinks(IReadOnlyList<string> values)
+    {
+        lessonForm.NewPortfolioCrossCourseLinks = values.ToList();
+        return Task.CompletedTask;
+    }
+
+    private async Task AddPortfolioConnection()
+    {
+        if (string.IsNullOrWhiteSpace(lessonForm.NewPortfolioSection) &&
+            string.IsNullOrWhiteSpace(lessonForm.NewPortfolioArtifactTitle) &&
+            string.IsNullOrWhiteSpace(lessonForm.NewPortfolioArtifactPurpose) &&
+            lessonForm.NewPortfolioCrossCourseLinks.Count == 0 &&
+            string.IsNullOrWhiteSpace(lessonForm.NewPortfolioReuseInstructions))
+        {
+            return;
+        }
+
+        lessonForm.PortfolioConnections.Add(new LessonPortfolioConnectionFormItem(
+            lessonForm.NewPortfolioSection.Trim(),
+            lessonForm.NewPortfolioArtifactTitle.Trim(),
+            lessonForm.NewPortfolioArtifactPurpose.Trim(),
+            lessonForm.NewPortfolioCrossCourseLinks.ToList(),
+            lessonForm.NewPortfolioReuseInstructions.Trim()));
+        lessonForm.NewPortfolioSection = "";
+        lessonForm.NewPortfolioArtifactTitle = "";
+        lessonForm.NewPortfolioArtifactPurpose = "";
+        lessonForm.NewPortfolioCrossCourseLinks = [];
+        lessonForm.NewPortfolioReuseInstructions = "";
+        await AutoSaveLesson();
+    }
+
+    private async Task DeletePortfolioConnection(int index)
+    {
+        if (index >= 0 && index < lessonForm.PortfolioConnections.Count)
+        {
+            lessonForm.PortfolioConnections.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
+    private string RubricCriterionToggleText() => lessonForm.ShowRubricCriterionForm ? "Hide" : "Add";
+
+    private void ToggleRubricCriterionForm()
+    {
+        lessonForm.ShowRubricCriterionForm = !lessonForm.ShowRubricCriterionForm;
+    }
+
+    private async Task AddRubricCriterion()
+    {
+        var criterion = lessonForm.NewRubricCriterion.Trim();
+        if (string.IsNullOrWhiteSpace(criterion))
+        {
+            return;
+        }
+
+        lessonForm.RubricCriteria.Add(new RubricCriterionFormItem(
+            criterion,
+            lessonForm.NewRubricLevel4.Trim(),
+            lessonForm.NewRubricLevel3.Trim(),
+            lessonForm.NewRubricLevel2.Trim(),
+            lessonForm.NewRubricLevel1.Trim()));
+        lessonForm.NewRubricCriterion = "";
+        lessonForm.NewRubricLevel4 = "";
+        lessonForm.NewRubricLevel3 = "";
+        lessonForm.NewRubricLevel2 = "";
+        lessonForm.NewRubricLevel1 = "";
+        await AutoSaveLesson();
+    }
+
+    private async Task DeleteRubricCriterion(int index)
+    {
+        if (index >= 0 && index < lessonForm.RubricCriteria.Count)
+        {
+            lessonForm.RubricCriteria.RemoveAt(index);
+            await AutoSaveLesson();
+        }
+    }
+
     private bool ValidateLesson()
     {
         messages.Clear();
@@ -678,6 +1332,18 @@ else
             item.License);
     }
 
+    private LessonRubricCommand? BuildLessonRubricCommand()
+    {
+        return lessonForm.RubricCriteria.Count == 0
+            ? null
+            : new LessonRubricCommand(
+                "lesson-rubric",
+                "4-point",
+                lessonForm.RubricCriteria
+                    .Select(criteria => new LessonRubricCriterionCommand(criteria.Criterion, criteria.Level4, criteria.Level3, criteria.Level2, criteria.Level1))
+                    .ToArray());
+    }
+
     private static string ResourceTypeLabel(LessonResourceType type)
     {
         return type switch
@@ -689,162 +1355,18 @@ else
         };
     }
 
-    private static IEnumerable<string> SplitLines(string value)
-    {
-        return (value ?? "")
-            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => !string.IsNullOrWhiteSpace(line));
-    }
-
-    private static string Lines(IEnumerable<string> values)
-    {
-        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
-    }
-
-    private static IEnumerable<LessonLearningObjectiveCommand> ParseLessonObjectives(string value)
-    {
-        return SplitLines(value)
-            .Select(line =>
-            {
-                var parts = line.Split('|', 3, StringSplitOptions.TrimEntries);
-                var bloom = parts.Length > 1 && Enum.TryParse<BloomLevel>(parts[1], true, out var parsedBloom)
-                    ? parsedBloom
-                    : BloomLevel.Apply;
-                return new LessonLearningObjectiveCommand(
-                    parts.Length > 0 ? parts[0] : "",
-                    parts.Length > 2 ? parts[2] : parts[0],
-                    bloom);
-            });
-    }
-
-    private static string SerializeLessonObjectives(IEnumerable<LessonLearningObjectiveView> objectives)
-    {
-        return Lines(objectives.Select(objective => $"{objective.ObjectiveId} | {objective.BloomLevel} | {objective.Text}"));
-    }
-
-    private static IEnumerable<StandardsAlignmentCommand> ParseStandards(string value)
-    {
-        return SplitLines(value)
-            .Select(line =>
-            {
-                var parts = line.Split('|', 3, StringSplitOptions.TrimEntries);
-                return new StandardsAlignmentCommand(
-                    parts.Length > 0 ? parts[0] : "",
-                    parts.Length > 1 ? parts[1] : "",
-                    parts.Length > 2 ? parts[2] : "");
-            });
-    }
-
-    private static string SerializeStandards(IEnumerable<StandardsAlignmentView> standards)
-    {
-        return Lines(standards.Select(standard => $"{standard.Framework} | {standard.Code} | {standard.Description}"));
-    }
-
-    private static IEnumerable<LessonStepCommand> ParseLessonSteps(string value)
-    {
-        return SplitLines(value).Select((line, index) =>
-        {
-            var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
-            var type = parts.Length > 1 && Enum.TryParse<LessonStepType>(parts[1], true, out var parsedType)
-                ? parsedType
-                : LessonStepType.Practice;
-            var minutes = parts.Length > 3 && int.TryParse(parts[3], out var parsedMinutes)
-                ? parsedMinutes
-                : 0;
-            var required = parts.Length <= 4 || !bool.TryParse(parts[4], out var parsedRequired) || parsedRequired;
-            return new LessonStepCommand(
-                index + 1,
-                parts.Length > 0 ? parts[0] : $"Step {index + 1}",
-                type,
-                parts.Length > 2 ? parts[2] : line,
-                minutes,
-                required);
-        });
-    }
-
-    private static string SerializeLessonSteps(IEnumerable<LessonStepView> steps)
-    {
-        return Lines(steps.Select(step => $"{step.Title} | {step.StepType} | {step.Instructions} | {step.EstimatedMinutes} | {step.Required}"));
-    }
-
-    private static IEnumerable<LessonProblemSetCommand> ParseProblemSets(string value)
-    {
-        return SplitLines(value).Select((line, index) =>
-        {
-            var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
-            var minutes = parts.Length > 2 && int.TryParse(parts[2], out var parsedMinutes)
-                ? parsedMinutes
-                : 0;
-            var problemPrompt = parts.Length > 3 ? parts[3] : "";
-            var problem = string.IsNullOrWhiteSpace(problemPrompt)
-                ? Array.Empty<LessonProblemCommand>()
-                : [new LessonProblemCommand($"{parts[0]}-problem-1", problemPrompt, ProblemResponseType.WorkedSolution, parts.Length > 4 ? parts[4] : "", "", [], "")];
-            return new LessonProblemSetCommand(
-                parts.Length > 0 ? parts[0] : $"problem-set-{index + 1}",
-                parts.Length > 1 ? parts[1] : line,
-                "",
-                minutes,
-                problem);
-        });
-    }
-
-    private static string SerializeProblemSets(IEnumerable<LessonProblemSetView> problemSets)
-    {
-        return Lines(problemSets.Select(problemSet =>
-            $"{problemSet.ProblemSetId} | {problemSet.Title} | {problemSet.EstimatedMinutes} | {problemSet.Problems.FirstOrDefault()?.Prompt ?? ""} | {problemSet.Problems.FirstOrDefault()?.ExpectedAnswer ?? ""}"));
-    }
-
-    private static IEnumerable<LessonPortfolioConnectionCommand> ParsePortfolioConnections(string value)
-    {
-        return SplitLines(value)
-            .Select(line =>
-            {
-                var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
-                return new LessonPortfolioConnectionCommand(
-                    parts.Length > 0 ? parts[0] : "",
-                    parts.Length > 1 ? parts[1] : "",
-                    parts.Length > 2 ? parts[2] : "",
-                    parts.Length > 3 ? parts[3].Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [],
-                    parts.Length > 4 ? parts[4] : "");
-            });
-    }
-
-    private static string SerializePortfolioConnections(IEnumerable<LessonPortfolioConnectionView> connections)
-    {
-        return Lines(connections.Select(connection => $"{connection.PortfolioSection} | {connection.ArtifactTitle} | {connection.ArtifactPurpose} | {string.Join("; ", connection.CrossCourseLinks)} | {connection.ReuseInstructions}"));
-    }
-
-    private static LessonRubricCommand? ParseRubric(string value)
-    {
-        var criteria = SplitLines(value)
-            .Select(line =>
-            {
-                var parts = line.Split('|', 5, StringSplitOptions.TrimEntries);
-                return new LessonRubricCriterionCommand(
-                    parts.Length > 0 ? parts[0] : "",
-                    parts.Length > 1 ? parts[1] : "",
-                    parts.Length > 2 ? parts[2] : "",
-                    parts.Length > 3 ? parts[3] : "",
-                    parts.Length > 4 ? parts[4] : "");
-            })
-            .Where(item => !string.IsNullOrWhiteSpace(item.Criterion))
-            .ToArray();
-        return criteria.Length == 0 ? null : new LessonRubricCommand("lesson-rubric", "4-point", criteria);
-    }
-
-    private static string SerializeRubric(LessonRubricView? rubric)
-    {
-        return rubric is null
-            ? ""
-            : Lines(rubric.Criteria.Select(criteria => $"{criteria.Criterion} | {criteria.Level4} | {criteria.Level3} | {criteria.Level2} | {criteria.Level1}"));
-    }
-
     private static string EnumLabel(string value)
     {
         return System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
     }
 
     private sealed record PageMessage(string Text, string CssClass);
+    private sealed record LessonObjectiveFormItem(string ObjectiveId, string Text, BloomLevel BloomLevel);
+    private sealed record StandardFormItem(string Framework, string Code, string Description);
+    private sealed record LessonStepFormItem(string Title, LessonStepType StepType, string Instructions, int EstimatedMinutes, bool Required);
+    private sealed record LessonProblemSetFormItem(string ProblemSetId, string Title, int EstimatedMinutes, string ProblemPrompt, string ExpectedAnswer);
+    private sealed record LessonPortfolioConnectionFormItem(string PortfolioSection, string ArtifactTitle, string ArtifactPurpose, List<string> CrossCourseLinks, string ReuseInstructions);
+    private sealed record RubricCriterionFormItem(string Criterion, string Level4, string Level3, string Level2, string Level1);
     private sealed record LessonResourceFormItem(
         string Name,
         LessonResourceType Type,
@@ -871,21 +1393,21 @@ else
         public int EstimatedMinutes { get; set; }
         public int SuggestedDays { get; set; }
         public LessonDifficultyLevel DifficultyLevel { get; set; } = LessonDifficultyLevel.StandardHighSchool;
-        public string SubjectAreasText { get; set; } = "";
-        public string TagsText { get; set; } = "";
-        public string PrerequisitesText { get; set; } = "";
-        public string LearningObjectivesText { get; set; } = "";
-        public string StandardsAlignmentsText { get; set; } = "";
-        public string SuccessCriteriaText { get; set; } = "";
-        public string LessonStepsText { get; set; } = "";
-        public string ProblemSetsText { get; set; } = "";
-        public string PortfolioConnectionsText { get; set; } = "";
-        public string RubricText { get; set; } = "";
-        public string ReflectionPromptsText { get; set; } = "";
+        public List<string> SubjectAreas { get; set; } = [];
+        public List<string> Tags { get; set; } = [];
+        public List<string> Prerequisites { get; set; } = [];
+        public List<LessonObjectiveFormItem> LearningObjectives { get; set; } = [];
+        public List<StandardFormItem> StandardsAlignments { get; set; } = [];
+        public List<string> SuccessCriteria { get; set; } = [];
+        public List<LessonStepFormItem> LessonSteps { get; set; } = [];
+        public List<LessonProblemSetFormItem> ProblemSets { get; set; } = [];
+        public List<LessonPortfolioConnectionFormItem> PortfolioConnections { get; set; } = [];
+        public List<RubricCriterionFormItem> RubricCriteria { get; set; } = [];
+        public List<string> ReflectionPrompts { get; set; } = [];
         public string InstructorOverview { get; set; } = "";
-        public string LookForsText { get; set; } = "";
-        public string CommonIssuesText { get; set; } = "";
-        public string SuggestedFeedbackText { get; set; } = "";
+        public List<string> LookFors { get; set; } = [];
+        public List<string> CommonIssues { get; set; } = [];
+        public List<string> SuggestedFeedback { get; set; } = [];
         public List<Guid> LinkedAssignmentIds { get; set; } = [];
         public List<LessonResourceFormItem> Resources { get; set; } = [];
         public bool ShowResourceForm { get; set; }
@@ -898,5 +1420,37 @@ else
         public int NewResourceEstimatedMinutes { get; set; }
         public string NewResourceStudentInstructions { get; set; } = "";
         public string NewResourceNotesPrompt { get; set; } = "";
+        public bool ShowLessonObjectiveForm { get; set; }
+        public string NewObjectiveId { get; set; } = "";
+        public string NewObjectiveText { get; set; } = "";
+        public BloomLevel NewObjectiveBloomLevel { get; set; } = BloomLevel.Apply;
+        public bool ShowStandardsForm { get; set; }
+        public string NewStandardFramework { get; set; } = "";
+        public string NewStandardCode { get; set; } = "";
+        public string NewStandardDescription { get; set; } = "";
+        public bool ShowLessonStepForm { get; set; }
+        public string NewStepTitle { get; set; } = "";
+        public LessonStepType NewStepType { get; set; } = LessonStepType.Practice;
+        public string NewStepInstructions { get; set; } = "";
+        public int NewStepEstimatedMinutes { get; set; }
+        public bool NewStepRequired { get; set; } = true;
+        public bool ShowProblemSetForm { get; set; }
+        public string NewProblemSetId { get; set; } = "";
+        public string NewProblemSetTitle { get; set; } = "";
+        public int NewProblemSetEstimatedMinutes { get; set; }
+        public string NewProblemPrompt { get; set; } = "";
+        public string NewProblemExpectedAnswer { get; set; } = "";
+        public bool ShowPortfolioConnectionForm { get; set; }
+        public string NewPortfolioSection { get; set; } = "";
+        public string NewPortfolioArtifactTitle { get; set; } = "";
+        public string NewPortfolioArtifactPurpose { get; set; } = "";
+        public List<string> NewPortfolioCrossCourseLinks { get; set; } = [];
+        public string NewPortfolioReuseInstructions { get; set; } = "";
+        public bool ShowRubricCriterionForm { get; set; }
+        public string NewRubricCriterion { get; set; } = "";
+        public string NewRubricLevel4 { get; set; } = "";
+        public string NewRubricLevel3 { get; set; } = "";
+        public string NewRubricLevel2 { get; set; } = "";
+        public string NewRubricLevel1 { get; set; } = "";
     }
 }

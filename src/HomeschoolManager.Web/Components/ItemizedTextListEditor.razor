@@ -1,0 +1,130 @@
+<div class="section-heading-row mt-3">
+    <h3>@Title</h3>
+    @if (!Disabled)
+    {
+        <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleForm">@ToggleText</button>
+    }
+</div>
+@if (showForm && !Disabled)
+{
+    <div class="inline-entry-form">
+        <label class="form-label" for="@inputId">@EntryLabel</label>
+        @if (UseTextArea)
+        {
+            <textarea id="@inputId" class="form-control" rows="@Rows" @bind="newValue"></textarea>
+        }
+        else
+        {
+            <input id="@inputId" class="form-control" @bind="newValue" />
+        }
+        <button class="btn btn-secondary mt-2" @onclick="AddItem">Add</button>
+    </div>
+}
+@if (Items.Count == 0)
+{
+    <p>@EmptyText</p>
+}
+else
+{
+    <ul class="itemized-editor-list stacked-editor-list">
+        @for (var index = 0; index < Items.Count; index++)
+        {
+            var itemIndex = index;
+            <li>
+                <div class="itemized-editor-content">
+                    <span>@Items[index]</span>
+                </div>
+                @if (!Disabled)
+                {
+                    <div class="module-order-actions">
+                        @if (AllowReorder)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(itemIndex == 0)" @onclick="() => MoveItem(itemIndex, -1)">Up</button>
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(itemIndex == Items.Count - 1)" @onclick="() => MoveItem(itemIndex, 1)">Down</button>
+                        }
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteItem(itemIndex)">Delete</button>
+                    </div>
+                }
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "";
+
+    [Parameter]
+    public string EntryLabel { get; set; } = "Item";
+
+    [Parameter]
+    public string EmptyText { get; set; } = "No items have been added.";
+
+    [Parameter]
+    public IReadOnlyList<string> Items { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<IReadOnlyList<string>> ItemsChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public bool AllowReorder { get; set; }
+
+    [Parameter]
+    public bool UseTextArea { get; set; }
+
+    [Parameter]
+    public int Rows { get; set; } = 3;
+
+    private readonly string inputId = $"itemized-text-{Guid.NewGuid():N}";
+    private bool showForm;
+    private string newValue = "";
+
+    private string ToggleText => showForm ? "Hide" : "Add";
+
+    private void ToggleForm()
+    {
+        showForm = !showForm;
+    }
+
+    private async Task AddItem()
+    {
+        var value = newValue.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var items = Items.ToList();
+        items.Add(value);
+        newValue = "";
+        await ItemsChanged.InvokeAsync(items);
+    }
+
+    private async Task DeleteItem(int index)
+    {
+        if (index < 0 || index >= Items.Count)
+        {
+            return;
+        }
+
+        var items = Items.ToList();
+        items.RemoveAt(index);
+        await ItemsChanged.InvokeAsync(items);
+    }
+
+    private async Task MoveItem(int index, int direction)
+    {
+        var target = index + direction;
+        if (index < 0 || target < 0 || index >= Items.Count || target >= Items.Count)
+        {
+            return;
+        }
+
+        var items = Items.ToList();
+        (items[index], items[target]) = (items[target], items[index]);
+        await ItemsChanged.InvokeAsync(items);
+    }
+}

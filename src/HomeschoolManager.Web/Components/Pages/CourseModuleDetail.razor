@@ -140,6 +140,22 @@ else
                             <button class="btn btn-outline-secondary btn-sm" @onclick="ToggleObjectiveForm">@ObjectiveToggleText()</button>
                         }
                     </div>
+                    @if (moduleForm.ShowObjectiveForm && CanEdit)
+                    {
+                        <div class="inline-entry-form">
+                            <label class="form-label" for="module-objective-text">Objective</label>
+                            <input id="module-objective-text" class="form-control" @bind="moduleForm.NewObjectiveText" />
+                            <label class="form-label" for="course-objective-link">Linked course objective</label>
+                            <select id="course-objective-link" class="form-select" @bind="moduleForm.NewLinkedCourseObjective">
+                                <option value="">Module specific objective</option>
+                                @foreach (var objective in CourseObjectives())
+                                {
+                                    <option value="@objective">@objective</option>
+                                }
+                            </select>
+                            <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
+                        </div>
+                    }
                     @ValidationFor("module.Objectives")
                     @if (moduleForm.Objectives.Count == 0)
                     {
@@ -162,27 +178,11 @@ else
                                     </div>
                                     @if (CanEdit)
                                     {
-                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Remove</button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => RemoveObjective(objectiveIndex)">Delete</button>
                                     }
                                 </li>
                             }
                         </ul>
-                    }
-                    @if (moduleForm.ShowObjectiveForm && CanEdit)
-                    {
-                        <div class="inline-entry-form">
-                            <label class="form-label" for="module-objective-text">Objective</label>
-                            <input id="module-objective-text" class="form-control" @bind="moduleForm.NewObjectiveText" />
-                            <label class="form-label" for="course-objective-link">Linked course objective</label>
-                            <select id="course-objective-link" class="form-select" @bind="moduleForm.NewLinkedCourseObjective">
-                                <option value="">Module specific objective</option>
-                                @foreach (var objective in CourseObjectives())
-                                {
-                                    <option value="@objective">@objective</option>
-                                }
-                            </select>
-                            <button class="btn btn-secondary mt-2" @onclick="AddObjective">Add objective</button>
-                        </div>
                     }
                 </section>
 

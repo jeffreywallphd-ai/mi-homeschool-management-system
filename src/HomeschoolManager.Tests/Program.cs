@@ -229,6 +229,45 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(courseDocument.RootElement.GetProperty("course").TryGetProperty("moduleReferences", out _), "Bundled coursepack should reference modules.");
         AssertFalse(courseDocument.RootElement.GetProperty("course").TryGetProperty("modules", out _), "Bundled coursepack should not embed module bodies.");
     }),
+    ("Course plan bundle template downloads all inner templates", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var service = new CourseService(repository);
+        var result = service.DownloadCoursePlanBundleTemplate();
+        AssertTrue(result.Succeeded, "Course plan bundle template download should succeed.");
+        if (result.Value is null)
+        {
+            throw new InvalidOperationException("Course plan bundle template did not return a file.");
+        }
+
+        AssertEqual("course-plan-bundle-template.zip", result.Value.FileName, "Template should have a clear zip file name.");
+        AssertEqual("application/zip", result.Value.ContentType, "Template should be a zip archive.");
+        AssertTrue(result.Value.IsArchive, "Template should be marked as an archive.");
+
+        using var stream = new MemoryStream(result.Value.Content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var expectedEntries = new[]
+        {
+            "courseplan.courseplanpack",
+            "courses/sample-course/course.coursepack",
+            "courses/sample-course/modules/01-sample-module/module.modulepack",
+            "courses/sample-course/modules/01-sample-module/lessons.lessonpack",
+            "courses/sample-course/modules/01-sample-module/assignments.assignmentpack"
+        };
+
+        foreach (var expectedEntry in expectedEntries)
+        {
+            AssertTrue(archive.Entries.Any(entry => entry.FullName == expectedEntry), $"Template bundle should include {expectedEntry}.");
+        }
+
+        foreach (var entry in archive.Entries.Where(item => item.FullName.EndsWith("pack", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var document = JsonDocument.Parse(entry.Open());
+            AssertTrue(document.RootElement.GetProperty("isTemplate").GetBoolean(), $"{entry.FullName} should identify itself as a template.");
+            AssertTrue(document.RootElement.TryGetProperty("sourceIdentity", out var sourceIdentity), $"{entry.FullName} should include source identity.");
+            AssertEqual("template.courseplan-bundle-template", sourceIdentity.GetProperty("sourceNamespace").GetString() ?? "", $"{entry.FullName} should share the bundle template source namespace.");
+        }
+    }),
     ("Course plan bundle imports courses modules lessons and assignments", (Func<Task>)(async () =>
     {
         var sourceRepository = await CreateRepositoryAsync();
@@ -1559,9 +1598,11 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertFalse(string.IsNullOrWhiteSpace(module.Value!.Instructions), "Module page should include instructions.");
         AssertTrue(module.Value.LearningObjectives.Count > 0, "Module page should include objectives.");
         AssertTrue(module.Value.Lessons.Count > 0, "Module page should include lessons.");
+        AssertTrue(module.Value.Lessons.All(lesson => lesson.LessonId != Guid.Empty), "Student lessons should expose stable lesson ids for navigation.");
         AssertTrue(module.Value.Lessons.All(lesson => lesson.Resources.Count > 0), "Student lessons should include lesson resources.");
         AssertTrue(module.Value.Assignments.Count > 0, "Student module page should include assignments.");
         AssertTrue(module.Value.Assignments.All(assignment => !string.IsNullOrWhiteSpace(assignment.RequiredOutput)), "Student assignments should include expected work.");
+        AssertTrue(module.Value.Assignments.All(assignment => assignment.RelatedLessonIds.Count > 0), "Student assignments should expose lesson links for sequential lesson flow.");
         AssertTrue(module.Value.Assignments.All(assignment => assignment.RelatedLessonTitles.Count > 0), "Student assignments should connect to lesson materials.");
 
         var parentPreview = await studentService.GetCourseAsync(parent, firstCourse.CourseId, primaryStudent.Id);
