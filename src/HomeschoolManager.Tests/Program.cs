@@ -210,6 +210,7 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(result.Value.IsArchive, "Course plan bundle should be a zip archive.");
         using var stream = new MemoryStream(result.Value.Content);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        AssertBundleEntryNamesAreShort(archive);
         AssertTrue(archive.Entries.Any(entry => entry.FullName == "courseplan.courseplanpack"), "Bundle should include a courseplanpack manifest.");
         AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/course.coursepack", StringComparison.OrdinalIgnoreCase)), "Bundle should include course folders with coursepacks.");
         AssertTrue(archive.Entries.Any(entry => entry.FullName.EndsWith("/module.modulepack", StringComparison.OrdinalIgnoreCase)), "Bundle should include modulepacks.");
@@ -246,9 +247,11 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         using var stream = new MemoryStream(result.Value.Content);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        AssertBundleEntryNamesAreShort(archive);
         var expectedEntries = new[]
         {
             "courseplan.courseplanpack",
+            "acceptable-values.md",
             "courses/sample-course/course.coursepack",
             "courses/sample-course/modules/01-sample-module/module.modulepack",
             "courses/sample-course/modules/01-sample-module/lessons.lessonpack",
@@ -267,6 +270,16 @@ var tests = new List<(string Name, Func<Task> Test)>
             AssertTrue(document.RootElement.TryGetProperty("sourceIdentity", out var sourceIdentity), $"{entry.FullName} should include source identity.");
             AssertEqual("template.courseplan-bundle-template", sourceIdentity.GetProperty("sourceNamespace").GetString() ?? "", $"{entry.FullName} should share the bundle template source namespace.");
         }
+
+        var guideEntry = archive.Entries.First(entry => entry.FullName == "acceptable-values.md");
+        using var guideReader = new StreamReader(guideEntry.Open());
+        var guide = guideReader.ReadToEnd();
+        AssertTrue(guide.Contains("Course Plan Bundle Acceptable Values", StringComparison.Ordinal), "Template guide should explain acceptable values.");
+        AssertTrue(guide.Contains("duration: One of OneSemester, TwoSemesters", StringComparison.Ordinal), "Template guide should include course duration values.");
+        AssertTrue(guide.Contains("lessonType: One of SelfGuided, ParentLed, Discussion, LabOrFieldwork, ProjectStudio, AssessmentPrep", StringComparison.Ordinal), "Template guide should include lesson type values.");
+        AssertTrue(guide.Contains("type: One of Reading, TextbookChapter, Article, Video, Website, File, PhysicalResource, DataSource", StringComparison.Ordinal), "Template guide should include resource type values.");
+        AssertTrue(guide.Contains("submissionFormats accepted values", StringComparison.Ordinal), "Template guide should include assignment submission values.");
+        AssertTrue(guide.Contains("gradingMode: One of Completion, Points, Rubric, ParentReview, NotGraded", StringComparison.Ordinal), "Template guide should include scoring values.");
     }),
     ("Course plan bundle imports courses modules lessons and assignments", (Func<Task>)(async () =>
     {
@@ -2420,6 +2433,18 @@ static void AssertEqual<T>(T expected, T actual, string message)
     if (!expected.Equals(actual))
     {
         throw new InvalidOperationException($"{message} Expected {expected}, got {actual}.");
+    }
+}
+
+static void AssertBundleEntryNamesAreShort(ZipArchive archive)
+{
+    foreach (var entry in archive.Entries)
+    {
+        AssertTrue(entry.FullName.Length <= 140, $"Bundle entry path should stay short for Windows extraction: {entry.FullName}");
+        foreach (var segment in entry.FullName.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            AssertTrue(segment.Length <= 36, $"Bundle path segment should stay short for Windows extraction: {entry.FullName}");
+        }
     }
 }
 

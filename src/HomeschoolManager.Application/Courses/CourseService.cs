@@ -20,6 +20,9 @@ public sealed class CourseService
     private readonly IHomeschoolRepository repository;
     private const string DefaultPublisherId = "homeschool-manager";
     private const string DefaultPackVersion = "2026.1";
+    private const int MaxBundleEntryPathLength = 140;
+    private const int MaxBundleFolderSegmentLength = 36;
+    private const int CompactBundleFolderSegmentLength = 18;
     private static readonly JsonSerializerOptions CoursePackJsonOptions = CreateCoursePackJsonOptions();
     private static readonly LessonPackEnvelope LessonPackTemplate = new(
         "homeschool-manager.lessonpack",
@@ -258,6 +261,405 @@ public sealed class CourseService
             ]),
         TemplateIdentity("coursepack-template"),
         true);
+    private const string CoursePlanBundleTemplateGuide = """
+# Course Plan Bundle Acceptable Values
+
+This guide belongs with the course plan bundle template. Keep the zip structure intact and edit the JSON pack files inside the folders.
+
+Do not use custom labels in enum fields. Use the exact values listed here, including capitalization. Human-readable labels can go in title, description, sourceNote, notes, studentInstructions, or parentNotes fields.
+
+## Bundle Layout
+
+- courseplan.courseplanpack
+- courses/{course-folder}/course.coursepack
+- courses/{course-folder}/modules/{module-folder}/module.modulepack
+- courses/{course-folder}/modules/{module-folder}/lessons.lessonpack
+- courses/{course-folder}/modules/{module-folder}/assignments.assignmentpack
+
+Folder names can be short. The real titles are stored inside the JSON files.
+
+## Shared Envelope Fields
+
+Every pack file has these top-level fields:
+
+- format: Required fixed value for each file type.
+- formatVersion: Required supported version number for each file type.
+- downloadedAtUtc: ISO date/time string.
+- packageMode: Use json.
+- archiveNote: Plain note for humans.
+- sourceIdentity: Object with publisherId, packId, packVersion, sourceNamespace.
+- isTemplate: true for templates, false for normal import bundles.
+
+Accepted format and version values:
+
+- courseplan.courseplanpack: format homeschool-manager.courseplanpack, formatVersion 1.
+- course.coursepack: format homeschool-manager.coursepack, formatVersion 2.
+- module.modulepack: format homeschool-manager.modulepack, formatVersion 1.
+- lessons.lessonpack: format homeschool-manager.lessonpack, formatVersion 1.
+- assignments.assignmentpack: format homeschool-manager.assignmentpack, formatVersion 1.
+
+## courseplan.courseplanpack
+
+Fields:
+
+- planId: Stable source id for the plan.
+- name: Plan name.
+- description: Plan description.
+- pacing: Free text such as Year, Semester, or Term.
+- offerings: Array of course offerings.
+
+Offering fields:
+
+- sourceCourseId: Must match a course.sourceCourseId in a course.coursepack.
+- courseTitle: Display title.
+- termName: Free text term label.
+- sequenceOrder: Whole number, 1 or greater.
+
+## course.coursepack
+
+The course object fields:
+
+- sourceCourseId: Stable source id for the course.
+- title: Course title.
+- subjectAreas: Array of internal subject labels.
+- duration: One of OneSemester, TwoSemesters.
+- plannedCreditValue: Number greater than 0.
+- description: Course description object.
+- curriculumPlan: Curriculum plan object.
+- requirementMappings: Array of requirement mapping objects.
+- moduleReferences: Array of module references.
+
+description fields:
+
+- description
+- instructionalMethods
+- majorTopics
+- textsAndResources
+- assessmentMethods
+- gradingBasis
+
+curriculumPlan fields:
+
+- goals
+- learningObjectives
+- majorResources
+- plannedSequence
+- parentNotes
+
+requirementMappings item fields:
+
+- requirementAreaView: Plain text, such as Statutory.
+- requirementAreaName: Must match the target requirement area name if you want it to map automatically.
+- coverageLevel: One of Primary, Secondary, Supporting.
+- notes
+
+moduleReferences item fields:
+
+- sourceModuleId: Must match module.sourceModuleId in a module.modulepack.
+- title
+- sequenceOrder: Whole number, 1 or greater.
+- termName
+
+## module.modulepack
+
+Top-level fields after the shared envelope:
+
+- name
+- description
+- module
+
+module fields:
+
+- sourceModuleId: Stable source id for the module.
+- sequenceOrder: Whole number, 1 or greater.
+- title
+- description
+- termName
+- estimatedLength
+- instructions
+- learningObjectives: Array of module objective objects.
+- resources: Array of module resource objects.
+- assignmentEvidencePlaceholder
+- status: One of Planned, Active, Complete.
+- lessonSequence: Array of item references.
+- assignmentSequence: Array of item references.
+
+learningObjectives item fields:
+
+- text
+- linkedCourseObjective: Optional; should match a course learning objective when used.
+
+resources item fields:
+
+- name
+- link
+- filePath
+- isPhysicalResource: true or false.
+
+lessonSequence and assignmentSequence item fields:
+
+- sourceId: Must match sourceLessonId or sourceAssignmentId.
+- title
+- sequenceOrder: Whole number, 1 or greater.
+
+## lessons.lessonpack
+
+Top-level fields after the shared envelope:
+
+- name
+- description
+- lessons: Array of lesson objects.
+
+lesson fields:
+
+- sourceLessonId: Stable source id for the lesson.
+- sequenceOrder: Whole number, 1 or greater.
+- title
+- introductoryText
+- linkedModuleObjective: Optional; should match a module objective text when used.
+- lessonType: One of SelfGuided, ParentLed, Discussion, LabOrFieldwork, ProjectStudio, AssessmentPrep.
+- estimatedMinutes: Whole number, 0 or greater.
+- suggestedDays: Whole number, 0 or greater.
+- difficultyLevel: One of IntroductoryHighSchool, StandardHighSchool, AdvancedHighSchool, CollegePreparatory.
+- subjectAreas: Array of text labels.
+- tags: Array of text labels.
+- prerequisites: Array of text labels.
+- learningObjectives: Array of lesson objective objects.
+- standardsAlignments: Array of standards alignment objects.
+- successCriteria: Array of text labels.
+- lessonSteps: Array of lesson step objects.
+- resources: Array of lesson resource objects.
+- problemSets: Array of problem set objects.
+- portfolioConnections: Array of portfolio connection objects.
+- rubric: Rubric object or null.
+- reflectionPrompts: Array of text prompts.
+- instructorNotes: Instructor notes object or null.
+- linkedAssignmentSourceIds: Array of sourceAssignmentId values.
+- linkedAssignmentTitles: Array of assignment titles.
+
+learningObjectives item fields:
+
+- objectiveId
+- text
+- bloomLevel: One of Remember, Understand, Apply, Analyze, Evaluate, Create.
+
+standardsAlignments item fields:
+
+- framework
+- code
+- description
+
+lessonSteps item fields:
+
+- stepOrder: Whole number, 1 or greater.
+- title
+- stepType: One of Reading, Video, Notes, Discussion, Practice, ProblemSet, LabOrSimulation, PortfolioArtifact, Reflection, ParentConference, Planning, Research.
+- instructions
+- estimatedMinutes: Whole number, 0 or greater.
+- required: true or false.
+
+resources item fields:
+
+- name
+- type: One of Reading, TextbookChapter, Article, Video, Website, File, PhysicalResource, DataSource.
+- url
+- filePath
+- isPhysicalResource: true or false.
+- sourceNote
+- required: true or false.
+- estimatedMinutes: Whole number, 0 or greater.
+- studentInstructions
+- notesPrompt
+- citation: Citation object or null.
+- offlineAvailable: true or false.
+- license
+
+citation fields:
+
+- title
+- publisher
+- accessedAtUtc: ISO date/time string or null.
+
+problemSets item fields:
+
+- problemSetId
+- title
+- instructions
+- estimatedMinutes: Whole number, 0 or greater.
+- problems: Array of problem objects.
+
+problem item fields:
+
+- problemId
+- prompt
+- responseType: One of ShortAnswer, WorkedSolution, Essay, Diagram, Spreadsheet, OralExplanation, WrittenExplanation, GraphAndWrittenAnalysis.
+- expectedAnswer
+- solution
+- skills: Array of text labels.
+- difficulty
+
+portfolioConnections item fields:
+
+- portfolioSection
+- artifactTitle
+- artifactPurpose
+- crossCourseLinks: Array of text labels.
+- reuseInstructions
+
+rubric fields:
+
+- rubricId
+- scale
+- criteria: Array of rubric criterion objects.
+
+rubric criterion fields:
+
+- criterion
+- level4
+- level3
+- level2
+- level1
+
+instructorNotes fields:
+
+- overview
+- lookFors: Array of text labels.
+- commonIssues: Array of text labels.
+- suggestedFeedback: Array of text labels.
+
+## assignments.assignmentpack
+
+Top-level fields after the shared envelope:
+
+- name
+- description
+- assignments: Array of assignment objects.
+
+assignment fields:
+
+- sourceAssignmentId: Stable source id for the assignment.
+- sequenceOrder: Whole number, 1 or greater.
+- title
+- type: One of ReadingResponse, ProblemSet, LabOrSimulation, Discussion, Project, Essay, QuizOrTestPrep, Presentation, PortfolioArtifact, Reflection, PracticalDemonstration.
+- methodProfile: One of Hybrid, ExplicitGuidedPractice, ProjectBasedApplied, InquiryDiscussion, IndependentStudy, MasteryPractice, Digital.
+- instructions
+- estimatedEffort
+- dueTimingLabel
+- dueDate: Date value such as 2026-09-15, or null.
+- linkedModuleObjectives: Array of module objective text values.
+- linkedLessonSourceIds: Array of sourceLessonId values.
+- linkedLessonTitles: Array of lesson titles.
+- requiredOutput
+- parentNotes
+- isPortfolioCandidate: true or false.
+- plannedPoints: Number or null.
+- plannedWeight: Number or null.
+- status: One of Planned, Assigned, Submitted, Reviewed, Complete, Skipped.
+- assignmentSummary
+- studentFacingGoal
+- estimatedMinutesMin: Whole number or null.
+- estimatedMinutesMax: Whole number or null.
+- requiredDeliverables: Array of text labels.
+- submissionFormats: Array using accepted submission format values.
+- portfolioConnection: Assignment portfolio connection object or null.
+- rubric: Rubric object or null.
+- linkedRubricId
+- assessmentSkills: Array of text labels.
+- studentChecklist: Array of text labels.
+- resources: Array of assignment resource objects.
+- assignmentSteps: Array of assignment step objects.
+- revisionPolicy: Revision policy object or null.
+- completionCriteria: Completion criteria object or null.
+- reflectionPrompts: Array of text prompts.
+- evidenceRequirements: Evidence requirements object or null.
+- scoring: Scoring object or null.
+
+submissionFormats accepted values:
+
+- WrittenResponse
+- WorkedSolutions
+- Spreadsheet
+- Graph
+- DataTable
+- FieldNotes
+- PhotoEvidence
+- PortfolioEntry
+- DecisionMemo
+- Budget
+- Reflection
+- Presentation
+- PracticalDemonstration
+- WrittenMemo
+- WrittenAnalysis
+- SpreadsheetOptional
+- GraphOptional
+
+portfolioConnection fields:
+
+- isPortfolioCandidate: true or false.
+- portfolioSection
+- artifactTitle
+- artifactPurpose
+- reuseInstructions
+- crossCourseLinks: Array of text labels.
+
+resources item fields:
+
+- name
+- type: One of Reading, TextbookChapter, Article, Video, Website, File, PhysicalResource, DataSource.
+- url
+- filePath
+- isPhysicalResource: true or false.
+- required: true or false.
+- studentInstructions
+- sourceNote
+- citation: Citation object or null.
+
+assignmentSteps item fields:
+
+- stepOrder: Whole number, 1 or greater.
+- title
+- instructions
+- estimatedMinutes: Whole number, 0 or greater.
+
+revisionPolicy fields:
+
+- allowRevision: true or false.
+- revisionExpectation
+- minimumRevisionCount: Whole number, 0 or greater.
+
+completionCriteria fields:
+
+- minimumRequirements: Array of text labels.
+- requiresParentReview: true or false.
+- masteryThreshold: Number or null.
+
+evidenceRequirements fields:
+
+- retainForRecords: true or false.
+- evidenceType: One of PracticeWork, PortfolioArtifact, Assessment, Project, Reflection, FieldObservation, ParentConference.
+- recommendedFileTypes: Array of text labels such as pdf, docx, png.
+- requiresStudentExplanation: true or false.
+- requiresParentEvaluation: true or false.
+
+scoring fields:
+
+- plannedPoints: Number or null.
+- plannedWeight: Number or null.
+- gradingMode: One of Completion, Points, Rubric, ParentReview, NotGraded.
+- countsTowardGrade: true or false.
+- allowPartialCredit: true or false.
+
+## Common Import Tips
+
+- Use arrays for list fields, even when there is only one item.
+- Use null for optional objects you do not need.
+- Keep source ids stable across versions so re-import can update instead of duplicate.
+- Do not use custom enum labels. Put custom wording in title, sourceNote, notes, instructions, or parentNotes.
+- Coursepack files reference module ids only. Module bodies belong in module.modulepack.
+- Modulepack files reference lesson and assignment ids only. Lesson and assignment bodies belong in lessons.lessonpack and assignments.assignmentpack.
+- Requirement mappings that do not match local requirement area names are skipped so parents can review coverage after import.
+""";
 
     public event Action? CourseNavigationChanged;
 
@@ -582,7 +984,7 @@ public sealed class CourseService
             foreach (var template in pack.Courses)
             {
                 var option = template.DefaultOption;
-                var courseFolder = $"courses/{SafeFileName(option.Title)}";
+                var courseFolder = $"courses/{BundleCourseFolder(template.TemplateId, option.Title)}";
                 WriteZipJson(
                     archive,
                     $"{courseFolder}/course.coursepack",
@@ -590,7 +992,7 @@ public sealed class CourseService
 
                 foreach (var module in option.Modules.OrderBy(module => module.SequenceOrder))
                 {
-                    var moduleFolder = $"{courseFolder}/modules/{module.SequenceOrder:00}-{SafeFileName(module.Title)}";
+                    var moduleFolder = $"{courseFolder}/modules/{BundleModuleFolder(module.ModuleId, module.Title, module.SequenceOrder)}";
                     WriteZipJson(
                         archive,
                         $"{moduleFolder}/module.modulepack",
@@ -672,6 +1074,10 @@ public sealed class CourseService
                     DownloadedAtUtc = downloadedAtUtc,
                     SourceIdentity = identity
                 });
+            WriteZipText(
+                archive,
+                "ACCEPTABLE-VALUES.md",
+                CoursePlanBundleTemplateGuide);
         }
 
         return OperationResult<CoursePackDownloadFile>.Success(new CoursePackDownloadFile(
@@ -4138,9 +4544,16 @@ public sealed class CourseService
 
     private static void WriteZipJson<T>(ZipArchive archive, string path, T value)
     {
-        var entry = archive.CreateEntry(path);
+        var entry = archive.CreateEntry(ShortenZipPath(path));
         using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         writer.Write(JsonSerializer.Serialize(value, CoursePackJsonOptions));
+    }
+
+    private static void WriteZipText(ZipArchive archive, string path, string value)
+    {
+        var entry = archive.CreateEntry(ShortenZipPath(path));
+        using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.Write(value);
     }
 
     private static byte[] ReadZipEntry(ZipArchiveEntry entry)
@@ -4848,6 +5261,85 @@ public sealed class CourseService
         var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9._-]+", "-");
         normalized = normalized.Trim('-', '.', '_');
         return string.IsNullOrWhiteSpace(normalized) ? "course-pack" : normalized;
+    }
+
+    private static string BundleCourseFolder(string sourceCourseId, string title)
+    {
+        return ShortZipPathSegment($"c-{StableSourceOrTitle(sourceCourseId, title)}", MaxBundleFolderSegmentLength);
+    }
+
+    private static string BundleModuleFolder(string sourceModuleId, string title, int sequenceOrder)
+    {
+        return ShortZipPathSegment($"m{Math.Max(sequenceOrder, 1):00}-{StableSourceOrTitle(sourceModuleId, title)}", MaxBundleFolderSegmentLength);
+    }
+
+    private static string StableSourceOrTitle(string sourceId, string title)
+    {
+        return string.IsNullOrWhiteSpace(sourceId) ? title : sourceId;
+    }
+
+    private static string ShortenZipPath(string path)
+    {
+        var segments = path
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(segment => ShortZipPathSegment(segment, MaxBundleFolderSegmentLength))
+            .ToArray();
+        var shortened = string.Join('/', segments);
+        if (shortened.Length <= MaxBundleEntryPathLength)
+        {
+            return shortened;
+        }
+
+        return string.Join(
+            '/',
+            segments.Select((segment, index) => index == segments.Length - 1
+                ? ShortZipPathSegment(segment, MaxBundleFolderSegmentLength)
+                : ShortZipPathSegment(segment, CompactBundleFolderSegmentLength)));
+    }
+
+    private static string ShortZipPathSegment(string value, int maxLength)
+    {
+        var safe = SafeFileName(value);
+        if (safe.Length <= maxLength)
+        {
+            return safe;
+        }
+
+        var extension = Path.GetExtension(safe);
+        var stem = string.IsNullOrWhiteSpace(extension)
+            ? safe
+            : safe[..^extension.Length];
+        if (extension.Length >= maxLength - 10)
+        {
+            extension = "";
+            stem = safe;
+        }
+
+        var suffix = StableHash(value);
+        var prefixLength = Math.Max(1, maxLength - suffix.Length - extension.Length - 1);
+        var prefix = stem.Length <= prefixLength ? stem : stem[..prefixLength].Trim('-', '.', '_');
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            prefix = "item";
+        }
+
+        return $"{prefix}-{suffix}{extension}";
+    }
+
+    private static string StableHash(string value)
+    {
+        unchecked
+        {
+            var hash = 2166136261u;
+            foreach (var character in value)
+            {
+                hash ^= character;
+                hash *= 16777619;
+            }
+
+            return hash.ToString("x8");
+        }
     }
 
     private static PackSourceIdentity BuiltInPackIdentity(CoursePackDefinition pack)
