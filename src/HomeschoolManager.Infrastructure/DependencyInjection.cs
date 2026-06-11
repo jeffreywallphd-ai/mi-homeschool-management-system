@@ -1,7 +1,9 @@
 using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Application.Assessments;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Application.Setup;
+using HomeschoolManager.Application.Submissions;
 using HomeschoolManager.Infrastructure.Access;
 using HomeschoolManager.Infrastructure.Configuration;
 using HomeschoolManager.Infrastructure.Persistence;
@@ -19,8 +21,11 @@ public static class DependencyInjection
         services.Configure<HomeschoolManagerOptions>(configuration.GetSection("HomeschoolManager"));
         services.AddSingleton<AppDataPaths>();
         services.AddSingleton<IHomeschoolRepository, JsonHomeschoolRepository>();
+        services.AddSingleton<ISubmissionFileStore, LocalSubmissionFileStore>();
         services.AddScoped<CourseService>();
         services.AddScoped<StudentCourseService>();
+        services.AddScoped<GradebookService>();
+        services.AddScoped<AssignmentSubmissionService>();
         services.AddScoped<SetupService>();
         services.AddScoped<RequirementService>();
         services.AddScoped<LocalAccessService>();

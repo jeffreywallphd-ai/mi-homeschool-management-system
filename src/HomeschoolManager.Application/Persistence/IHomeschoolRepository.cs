@@ -3,6 +3,8 @@ using HomeschoolManager.Domain.Household;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
+using HomeschoolManager.Domain.Submissions;
+using HomeschoolManager.Domain.Assessments;
 
 namespace HomeschoolManager.Application.Persistence;
 
@@ -46,6 +48,22 @@ public interface IHomeschoolRepository
     Task SaveCourseAsync(Course course, CancellationToken cancellationToken = default);
 
     Task DeleteCourseAsync(Guid courseId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AssignmentSubmission>> GetAssignmentSubmissionsAsync(CancellationToken cancellationToken = default);
+
+    Task<AssignmentSubmission?> GetAssignmentSubmissionAsync(Guid submissionId, CancellationToken cancellationToken = default);
+
+    Task SaveAssignmentSubmissionAsync(AssignmentSubmission submission, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<EvidenceRecord>> GetEvidenceRecordsAsync(CancellationToken cancellationToken = default);
+
+    Task SaveEvidenceRecordAsync(EvidenceRecord evidenceRecord, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default);
+
+    Task<AssessmentRecord?> GetAssessmentRecordAsync(Guid assessmentId, CancellationToken cancellationToken = default);
+
+    Task SaveAssessmentRecordAsync(AssessmentRecord assessmentRecord, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CoursePackDefinition>> GetInstalledCoursePacksAsync(CancellationToken cancellationToken = default);
 

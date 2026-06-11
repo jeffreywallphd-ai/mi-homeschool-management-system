@@ -1,13 +1,17 @@
 @page "/"
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Assessments
 @using HomeschoolManager.Application.Courses
 @using HomeschoolManager.Application.Setup
+@using HomeschoolManager.Application.Submissions
 @using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
 @inject NavigationManager Navigation
 @inject SessionState Session
 @inject SetupService SetupService
 @inject CourseService CourseService
+@inject AssignmentSubmissionService SubmissionService
+@inject GradebookService GradebookService
 
 <PageTitle>Home</PageTitle>
 
@@ -52,6 +56,16 @@
                 <img class="hm-icon" src="icons/hm/svg/purple/metric-modules-cube.svg" alt="" aria-hidden="true" />
                 <span>Modules marked complete</span>
                 <strong>@completedModules / @totalModules</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/form-assignment-clipboard.svg" alt="" aria-hidden="true" />
+                <span>Submissions to review</span>
+                <strong>@pendingSubmissions.Count</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/status-alert-triangle.svg" alt="" aria-hidden="true" />
+                <span>Needs assessment</span>
+                <strong>@(gradebookSummary?.NeedsReviewCount ?? 0)</strong>
             </article>
         </section>
 
@@ -100,8 +114,15 @@
                                             <dt>Assignments</dt>
                                             <dd>@row.AssignmentCount</dd>
                                         </div>
+                                        <div>
+                                            <dt>Reviews</dt>
+                                            <dd>@row.PendingSubmissionCount</dd>
+                                        </div>
                                     </dl>
-                                    <a class="btn btn-outline-primary btn-sm" href="@($"student-preview/{row.StudentId}")">Preview work</a>
+                                    <div class="dashboard-row-actions">
+                                        <a class="btn btn-outline-primary btn-sm" href="@($"student-preview/{row.StudentId}")">Preview work</a>
+                                        <a class="btn btn-primary btn-sm" href="@($"gradebook?studentId={row.StudentId}")">Gradebook</a>
+                                    </div>
                                 </article>
                             }
                         </div>
@@ -110,6 +131,55 @@
             </main>
 
             <aside class="dashboard-support">
+                <section class="hm-card dashboard-card">
+                    <h2>Submissions to review</h2>
+                    @if (pendingSubmissions.Count == 0)
+                    {
+                        <p>No submitted work is waiting for review.</p>
+                    }
+                    else
+                    {
+                        <ul class="dashboard-review-list">
+                            @foreach (var submission in pendingSubmissions.Take(5))
+                            {
+                                <li>
+                                    <div>
+                                        <strong>@submission.AssignmentTitle</strong>
+                                        <small>@submission.StudentName | @submission.CourseTitle</small>
+                                    </div>
+                                    <a class="btn btn-outline-primary btn-sm" href="@($"submissions/{submission.SubmissionId}")">Review</a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                <section class="hm-card dashboard-card">
+                    <div class="section-heading-row">
+                        <h2>Assessment queue</h2>
+                        <a class="btn btn-outline-primary btn-sm" href="gradebook">Open gradebook</a>
+                    </div>
+                    <dl class="student-detail-facts">
+                        <div>
+                            <dt>Needs assessment</dt>
+                            <dd>@(gradebookSummary?.NeedsReviewCount ?? 0)</dd>
+                        </div>
+                        <div>
+                            <dt>Assessed</dt>
+                            <dd>@(gradebookSummary?.AssessedCount ?? 0)</dd>
+                        </div>
+                        <div>
+                            <dt>Returned</dt>
+                            <dd>@(gradebookSummary?.ReturnedForRevisionCount ?? 0)</dd>
+                        </div>
+                        <div>
+                            <dt>Incomplete</dt>
+                            <dd>@(gradebookSummary?.IncompleteCount ?? 0)</dd>
+                        </div>
+                    </dl>
+                    <p class="student-muted">These counts summarize assessment records and reviewed work only. They are not final grades, progress, credits, GPA, or course completion.</p>
+                </section>
+
                 <section class="hm-card dashboard-card">
                     <h2>Setup status</h2>
                     @if (summary is null)
@@ -147,6 +217,8 @@
     private decimal totalCredits;
     private int totalModules;
     private int completedModules;
+    private IReadOnlyList<AssignmentSubmissionSummary> pendingSubmissions = [];
+    private GradebookDashboardSummary? gradebookSummary;
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,6 +254,13 @@
     {
         summary = await SetupService.GetSummaryAsync();
         students = await SetupService.ListStudentsAsync();
+        if (Session.CurrentUser is not null)
+        {
+            var pendingResult = await SubmissionService.ListPendingReviewsAsync(Session.CurrentUser);
+            pendingSubmissions = pendingResult.Succeeded ? pendingResult.Value ?? [] : [];
+            var gradebookResult = await GradebookService.GetDashboardSummaryAsync(Session.CurrentUser);
+            gradebookSummary = gradebookResult.Succeeded ? gradebookResult.Value : null;
+        }
 
         var rows = new List<StudentDashboardRow>();
         foreach (var student in students)
@@ -206,7 +285,8 @@
                 details.Sum(detail => detail.Modules.Count),
                 details.Sum(detail => detail.Modules.Count(module => module.Status == ModuleStatus.Complete)),
                 details.Sum(detail => detail.Modules.Sum(module => module.Lessons.Count)),
-                details.Sum(detail => detail.Modules.Sum(module => module.Assignments.Count))));
+                details.Sum(detail => detail.Modules.Sum(module => module.Assignments.Count)),
+                pendingSubmissions.Count(submission => submission.StudentId == student.Id)));
         }
 
         studentRows = rows;
@@ -244,5 +324,6 @@
         int ModuleCount,
         int CompletedModules,
         int LessonCount,
-        int AssignmentCount);
+        int AssignmentCount,
+        int PendingSubmissionCount);
 }

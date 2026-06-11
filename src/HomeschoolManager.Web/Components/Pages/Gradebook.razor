@@ -1,0 +1,636 @@
+@page "/gradebook"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Assessments
+@using HomeschoolManager.Domain.Assessments
+@using HomeschoolManager.Domain.Submissions
+@using HomeschoolManager.Web.Services
+@inject GradebookService GradebookService
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Gradebook</PageTitle>
+
+@if (!canView)
+{
+    <h1>Gradebook</h1>
+    <div class="alert alert-warning">Sign in as parent/admin to assess reviewed work.</div>
+}
+else
+{
+    <div class="gradebook-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/report-table.svg" alt="" />
+            </span>
+            <h1>Gradebook</h1>
+            <p>Record parent-owned assessments from reviewed work. These records are separate from final grades, GPA, credits, transcripts, and course completion.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @if (isLoading)
+    {
+        <section class="status-panel">
+            <h2>Loading gradebook</h2>
+            <p>Gathering assigned work, submissions, evidence, and assessment records.</p>
+        </section>
+    }
+    else if (gradebook is null)
+    {
+        <section class="status-panel">
+            <h2>Gradebook unavailable</h2>
+            @foreach (var message in messages)
+            {
+                <p>@message</p>
+            }
+        </section>
+    }
+    else
+    {
+        <div class="gradebook-selector-bar hm-card">
+            <div>
+                <label class="form-label" for="gradebook-student">Student</label>
+                <select id="gradebook-student" class="form-select" value="@selectedStudentId" @onchange="OnStudentChangedAsync">
+                    @foreach (var student in gradebook.Students)
+                    {
+                        <option value="@student.StudentId">@student.Name</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="gradebook-course">Course</label>
+                <select id="gradebook-course" class="form-select" value="@selectedCourseId" @onchange="OnCourseChangedAsync" disabled="@(gradebook.Courses.Count == 0)">
+                    @foreach (var course in gradebook.Courses)
+                    {
+                        <option value="@course.CourseId">@course.Title</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        @if (gradebook.Summary is not null)
+        {
+            <section class="dashboard-metrics gradebook-metrics" aria-label="Gradebook summary">
+                <article class="hm-card dashboard-metric-card">
+                    <img class="hm-icon" src="icons/hm/svg/purple/form-assignment-clipboard.svg" alt="" aria-hidden="true" />
+                    <span>Assignments</span>
+                    <strong>@gradebook.Summary.AssignmentCount</strong>
+                </article>
+                <article class="hm-card dashboard-metric-card">
+                    <img class="hm-icon" src="icons/hm/svg/purple/status-alert-triangle.svg" alt="" aria-hidden="true" />
+                    <span>Needs assessment</span>
+                    <strong>@gradebook.Summary.NeedsReviewCount</strong>
+                </article>
+                <article class="hm-card dashboard-metric-card">
+                    <img class="hm-icon" src="icons/hm/svg/purple/status-check-circle.svg" alt="" aria-hidden="true" />
+                    <span>Assessed</span>
+                    <strong>@gradebook.Summary.AssessedCount</strong>
+                </article>
+                <article class="hm-card dashboard-metric-card">
+                    <img class="hm-icon" src="icons/hm/svg/purple/action-arrow-left.svg" alt="" aria-hidden="true" />
+                    <span>Returned</span>
+                    <strong>@gradebook.Summary.ReturnedForRevisionCount</strong>
+                </article>
+            </section>
+        }
+
+        @foreach (var message in messages)
+        {
+            <div class="alert @(lastSaveSucceeded ? "alert-success" : "alert-warning")">@message</div>
+        }
+
+        <div class="dashboard-grid gradebook-grid">
+            <main class="dashboard-main">
+                <section class="hm-card dashboard-card">
+                    <div class="section-heading-row">
+                        <h2>Assessment Queue</h2>
+                        <span class="hm-chip">No final grade calculation</span>
+                    </div>
+
+                    @if (gradebook.Rows.Count == 0)
+                    {
+                        <p>No assignments are available for this course yet.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table gradebook-table">
+                                <thead>
+                                    <tr>
+                                        <th>Work</th>
+                                        <th>Source</th>
+                                        <th>Assessment</th>
+                                        <th>Planning</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in gradebook.Rows)
+                                    {
+                                        <tr class="@(Selected(row) ? "gradebook-row-selected" : "")">
+                                            <td>
+                                                <strong>@row.AssignmentTitle</strong>
+                                                <small>@row.ModuleSequence. @row.ModuleTitle</small>
+                                            </td>
+                                            <td>
+                                                <span class="submission-status-pill">@SourceLabel(row)</span>
+                                                @if (row.LatestSubmittedAtUtc.HasValue)
+                                                {
+                                                    <small>@row.LatestSubmittedAtUtc.Value.ToLocalTime().ToString("g")</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="@StateClass(row.EffectiveState)">@StateLabel(row.EffectiveState)</span>
+                                                @if (row.Assessment is not null)
+                                                {
+                                                    <small>@ResultLabel(row.Assessment)</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <small>@PlanningLabel(row)</small>
+                                            </td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SelectRow(row)">Assess</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+            </main>
+
+            <aside class="dashboard-support">
+                <section class="hm-card dashboard-card">
+                    <h2>Assessment Editor</h2>
+                    @if (selectedRow is null)
+                    {
+                        <p>Select an assignment row to record or update an assessment.</p>
+                    }
+                    else
+                    {
+                        <div class="student-feedback-note">
+                            <strong>@selectedRow.AssignmentTitle</strong>
+                            <p>@selectedRow.ModuleTitle</p>
+                            <small>@SourceLabel(selectedRow)</small>
+                        </div>
+
+                        <div class="gradebook-editor-form">
+                            <div class="submission-field">
+                                <label class="form-label" for="assessment-state">Assessment state <span class="required-marker">*</span></label>
+                                <select id="assessment-state" class="form-select" @bind="editor.State">
+                                    @foreach (var state in Enum.GetValues<AssessmentState>())
+                                    {
+                                        <option value="@state">@StateLabel(state)</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="submission-field">
+                                <label class="form-label" for="result-type">Result type <span class="required-marker">*</span></label>
+                                <select id="result-type" class="form-select" @bind="editor.ResultType">
+                                    @foreach (var resultType in Enum.GetValues<AssessmentResultType>())
+                                    {
+                                        <option value="@resultType">@ResultTypeLabel(resultType)</option>
+                                    }
+                                </select>
+                            </div>
+
+                            @if (editor.ResultType is AssessmentResultType.PassFail or AssessmentResultType.LetterGrade or AssessmentResultType.TestScore)
+                            {
+                                <div class="submission-field">
+                                    <label class="form-label" for="result-value">Result value <span class="required-marker">*</span></label>
+                                    <input id="result-value" class="form-control" @bind="editor.ResultValue" />
+                                </div>
+                            }
+
+                            @if (editor.ResultType == AssessmentResultType.Points)
+                            {
+                                <div class="two-column-field-row">
+                                    <div class="submission-field">
+                                        <label class="form-label" for="points-earned">Points earned <span class="required-marker">*</span></label>
+                                        <input id="points-earned" class="form-control" type="number" step="0.01" @bind="editor.PointsEarned" />
+                                    </div>
+                                    <div class="submission-field">
+                                        <label class="form-label" for="points-possible">Points possible <span class="required-marker">*</span></label>
+                                        <input id="points-possible" class="form-control" type="number" step="0.01" @bind="editor.PointsPossible" />
+                                    </div>
+                                </div>
+                            }
+
+                            @if (editor.ResultType is AssessmentResultType.Percentage or AssessmentResultType.TestScore)
+                            {
+                                <div class="submission-field">
+                                    <label class="form-label" for="percentage">Percentage</label>
+                                    <input id="percentage" class="form-control" type="number" min="0" max="100" step="0.01" @bind="editor.Percentage" />
+                                </div>
+                            }
+
+                            @if (editor.ResultType == AssessmentResultType.Narrative)
+                            {
+                                <div class="submission-field">
+                                    <label class="form-label" for="narrative">Narrative assessment <span class="required-marker">*</span></label>
+                                    <textarea id="narrative" class="form-control" rows="5" @bind="editor.Narrative"></textarea>
+                                </div>
+                            }
+
+                            @if (editor.ResultType == AssessmentResultType.RubricSummary)
+                            {
+                                <div class="submission-field">
+                                    <label class="form-label" for="rubric-summary">Rubric summary <span class="required-marker">*</span></label>
+                                    <textarea id="rubric-summary" class="form-control" rows="5" @bind="editor.RubricSummary"></textarea>
+                                </div>
+                            }
+
+                            <div class="submission-field">
+                                <label class="form-label" for="parent-notes">Parent/admin notes</label>
+                                <textarea id="parent-notes" class="form-control" rows="4" @bind="editor.ParentNotes"></textarea>
+                            </div>
+
+                            <div class="submission-field">
+                                <label class="form-label" for="student-feedback">Student-visible feedback</label>
+                                <textarea id="student-feedback" class="form-control" rows="4" @bind="editor.StudentFeedback"></textarea>
+                            </div>
+
+                            <label class="checkbox-row">
+                                <input type="checkbox" @bind="editor.FeedbackVisibleToStudent" />
+                                Show this feedback to the student
+                            </label>
+
+                            <div class="review-action-row">
+                                <button type="button" class="btn btn-primary" @onclick="SaveAssessmentAsync" disabled="@isSaving">Save assessment</button>
+                                @if (selectedRow.Assessment is not null)
+                                {
+                                    <button type="button" class="btn btn-outline-danger" @onclick="ArchiveAssessmentAsync" disabled="@isSaving">Archive</button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </section>
+            </aside>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    public Guid? StudentId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public Guid? CourseId { get; set; }
+
+    private bool canView;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool lastSaveSucceeded;
+    private GradebookPage? gradebook;
+    private GradebookAssessmentRow? selectedRow;
+    private string selectedStudentId = "";
+    private string selectedCourseId = "";
+    private readonly List<string> messages = [];
+    private AssessmentEditorModel editor = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        canView = Session.IsParentAdmin;
+        if (canView)
+        {
+            await LoadAsync(StudentId, CourseId);
+        }
+        else
+        {
+            isLoading = false;
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+        }
+        else if (Session.IsStudent)
+        {
+            Navigation.NavigateTo("/student", replace: true);
+        }
+    }
+
+    private async Task LoadAsync(Guid? studentId, Guid? courseId)
+    {
+        if (Session.CurrentUser is null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        isLoading = true;
+        var result = await GradebookService.GetGradebookAsync(Session.CurrentUser, studentId, courseId);
+        messages.Clear();
+        if (result.Succeeded)
+        {
+            gradebook = result.Value;
+            selectedStudentId = gradebook?.SelectedStudentId.ToString() ?? "";
+            selectedCourseId = gradebook?.SelectedCourseId?.ToString() ?? "";
+            selectedRow = ResolveSelectedRow();
+        }
+        else
+        {
+            gradebook = null;
+            messages.AddRange(result.Errors);
+        }
+
+        isLoading = false;
+    }
+
+    private async Task OnStudentChangedAsync(ChangeEventArgs args)
+    {
+        messages.Clear();
+        selectedRow = null;
+        if (Guid.TryParse(args.Value?.ToString(), out var studentId))
+        {
+            await LoadAsync(studentId, null);
+        }
+    }
+
+    private async Task OnCourseChangedAsync(ChangeEventArgs args)
+    {
+        messages.Clear();
+        selectedRow = null;
+        if (Guid.TryParse(selectedStudentId, out var studentId) &&
+            Guid.TryParse(args.Value?.ToString(), out var courseId))
+        {
+            await LoadAsync(studentId, courseId);
+        }
+    }
+
+    private void SelectRow(GradebookAssessmentRow row)
+    {
+        selectedRow = row;
+        editor = AssessmentEditorModel.From(row);
+        messages.Clear();
+    }
+
+    private async Task SaveAssessmentAsync()
+    {
+        if (Session.CurrentUser is null || selectedRow is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        lastSaveSucceeded = false;
+        try
+        {
+            var result = await GradebookService.SaveAssessmentAsync(Session.CurrentUser, new SaveAssessmentCommand(
+                selectedRow.Assessment?.AssessmentId,
+                selectedRow.StudentId,
+                selectedRow.CourseId,
+                selectedRow.ModuleId,
+                selectedRow.AssignmentId,
+                selectedRow.LatestSubmissionId,
+                selectedRow.EvidenceRecordId,
+                SourceTypeFor(selectedRow),
+                editor.State,
+                editor.ResultType,
+                editor.ResultValue,
+                editor.PointsEarned,
+                editor.PointsPossible,
+                editor.Percentage,
+                editor.Narrative,
+                editor.RubricSummary,
+                editor.ParentNotes,
+                editor.StudentFeedback,
+                editor.FeedbackVisibleToStudent));
+
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                lastSaveSucceeded = true;
+                messages.Add("Assessment saved.");
+                var selectedAssignmentId = selectedRow.AssignmentId;
+                await LoadAsync(selectedRow.StudentId, selectedRow.CourseId);
+                selectedRow = gradebook?.Rows.FirstOrDefault(row => row.AssignmentId == selectedAssignmentId);
+                if (selectedRow is not null)
+                {
+                    editor = AssessmentEditorModel.From(selectedRow);
+                }
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task ArchiveAssessmentAsync()
+    {
+        if (Session.CurrentUser is null || selectedRow?.Assessment is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        lastSaveSucceeded = false;
+        try
+        {
+            var result = await GradebookService.ArchiveAssessmentAsync(Session.CurrentUser, new ArchiveAssessmentCommand(selectedRow.Assessment.AssessmentId));
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                lastSaveSucceeded = true;
+                messages.Add("Assessment archived.");
+                await LoadAsync(selectedRow.StudentId, selectedRow.CourseId);
+                selectedRow = null;
+                editor = new AssessmentEditorModel();
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private GradebookAssessmentRow? ResolveSelectedRow()
+    {
+        return selectedRow is null
+            ? null
+            : gradebook?.Rows.FirstOrDefault(row => row.AssignmentId == selectedRow.AssignmentId);
+    }
+
+    private static AssessmentSourceType SourceTypeFor(GradebookAssessmentRow row)
+    {
+        if (row.EvidenceRecordId.HasValue)
+        {
+            return AssessmentSourceType.Evidence;
+        }
+
+        if (row.LatestSubmissionId.HasValue)
+        {
+            return AssessmentSourceType.Submission;
+        }
+
+        return AssessmentSourceType.Assignment;
+    }
+
+    private bool Selected(GradebookAssessmentRow row)
+    {
+        return selectedRow?.AssignmentId == row.AssignmentId;
+    }
+
+    private string SourceLabel(GradebookAssessmentRow row)
+    {
+        if (row.EvidenceRecordId.HasValue)
+        {
+            return "Accepted evidence";
+        }
+
+        if (row.LatestSubmissionStatus.HasValue)
+        {
+            return SubmissionStatusLabel(row.LatestSubmissionStatus.Value);
+        }
+
+        return "Assignment plan";
+    }
+
+    private static string SubmissionStatusLabel(AssignmentSubmissionStatus status)
+    {
+        return status switch
+        {
+            AssignmentSubmissionStatus.Draft => "Draft",
+            AssignmentSubmissionStatus.Submitted => "Submitted",
+            AssignmentSubmissionStatus.Returned => "Returned",
+            AssignmentSubmissionStatus.Accepted => "Accepted",
+            AssignmentSubmissionStatus.Archived => "Archived",
+            _ => status.ToString()
+        };
+    }
+
+    private static string PlanningLabel(GradebookAssessmentRow row)
+    {
+        var parts = new List<string>();
+        if (row.PlannedPoints.HasValue)
+        {
+            parts.Add($"{row.PlannedPoints:g} planned points");
+        }
+
+        if (row.PlannedWeight.HasValue)
+        {
+            parts.Add($"{row.PlannedWeight:g}% planned weight");
+        }
+
+        return parts.Count == 0 ? "No planning values" : string.Join(" | ", parts);
+    }
+
+    private static string ResultLabel(AssessmentDetail detail)
+    {
+        return detail.ResultType switch
+        {
+            AssessmentResultType.Points when detail.PointsEarned.HasValue && detail.PointsPossible.HasValue => $"{detail.PointsEarned:g} / {detail.PointsPossible:g}",
+            AssessmentResultType.Percentage when detail.Percentage.HasValue => $"{detail.Percentage:g}%",
+            AssessmentResultType.LetterGrade => detail.ResultValue,
+            AssessmentResultType.PassFail => detail.ResultValue,
+            AssessmentResultType.TestScore => !string.IsNullOrWhiteSpace(detail.ResultValue) ? detail.ResultValue : "Test score recorded",
+            AssessmentResultType.RubricSummary => "Rubric summary",
+            AssessmentResultType.Narrative => "Narrative",
+            _ => ResultTypeLabel(detail.ResultType)
+        };
+    }
+
+    private static string StateLabel(AssessmentState state)
+    {
+        return state switch
+        {
+            AssessmentState.NotAssessed => "Not assessed",
+            AssessmentState.NeedsReview => "Needs review",
+            AssessmentState.Assessed => "Assessed",
+            AssessmentState.ReturnedForRevision => "Returned for revision",
+            AssessmentState.Excused => "Excused",
+            AssessmentState.Incomplete => "Incomplete",
+            AssessmentState.NotApplicable => "Not applicable",
+            _ => state.ToString()
+        };
+    }
+
+    private static string ResultTypeLabel(AssessmentResultType type)
+    {
+        return type switch
+        {
+            AssessmentResultType.NotGraded => "Not graded",
+            AssessmentResultType.Narrative => "Narrative",
+            AssessmentResultType.RubricSummary => "Rubric summary",
+            AssessmentResultType.PassFail => "Pass/fail",
+            AssessmentResultType.Points => "Points",
+            AssessmentResultType.Percentage => "Percentage",
+            AssessmentResultType.LetterGrade => "Letter grade",
+            AssessmentResultType.TestScore => "Test score",
+            _ => type.ToString()
+        };
+    }
+
+    private static string StateClass(AssessmentState state)
+    {
+        return state switch
+        {
+            AssessmentState.Assessed => "hm-chip hm-chip-success",
+            AssessmentState.NeedsReview or AssessmentState.ReturnedForRevision or AssessmentState.Incomplete => "hm-chip gradebook-chip-warning",
+            _ => "hm-chip"
+        };
+    }
+
+    private sealed class AssessmentEditorModel
+    {
+        public AssessmentState State { get; set; } = AssessmentState.NotAssessed;
+        public AssessmentResultType ResultType { get; set; } = AssessmentResultType.NotGraded;
+        public string ResultValue { get; set; } = "";
+        public decimal? PointsEarned { get; set; }
+        public decimal? PointsPossible { get; set; }
+        public decimal? Percentage { get; set; }
+        public string Narrative { get; set; } = "";
+        public string RubricSummary { get; set; } = "";
+        public string ParentNotes { get; set; } = "";
+        public string StudentFeedback { get; set; } = "";
+        public bool FeedbackVisibleToStudent { get; set; }
+
+        public static AssessmentEditorModel From(GradebookAssessmentRow row)
+        {
+            if (row.Assessment is null)
+            {
+                return new AssessmentEditorModel
+                {
+                    State = row.EffectiveState,
+                    PointsPossible = row.PlannedPoints
+                };
+            }
+
+            return new AssessmentEditorModel
+            {
+                State = row.Assessment.State,
+                ResultType = row.Assessment.ResultType,
+                ResultValue = row.Assessment.ResultValue,
+                PointsEarned = row.Assessment.PointsEarned,
+                PointsPossible = row.Assessment.PointsPossible,
+                Percentage = row.Assessment.Percentage,
+                Narrative = row.Assessment.Narrative,
+                RubricSummary = row.Assessment.RubricSummary,
+                ParentNotes = row.Assessment.ParentNotes,
+                StudentFeedback = row.Assessment.StudentFeedback,
+                FeedbackVisibleToStudent = row.Assessment.FeedbackVisibleToStudent
+            };
+        }
+    }
+}
+

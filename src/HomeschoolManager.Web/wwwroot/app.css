@@ -746,6 +746,27 @@ body {
     font-family: var(--hm-font-sans);
 }
 
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
 a,
 .btn-link {
     color: var(--hm-purple-700);
@@ -1223,9 +1244,10 @@ small {
 }
 
 .student-main {
-    width: min(72rem, calc(100% - 2rem));
-    margin: 0 auto;
-    padding: var(--hm-space-6) 0 var(--hm-space-10);
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: var(--hm-space-6) clamp(var(--hm-space-4), 4vw, var(--hm-space-10)) var(--hm-space-10);
 }
 
 .student-hero,
@@ -1448,6 +1470,13 @@ small {
     font-size: .9rem;
 }
 
+.dashboard-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--hm-space-3);
+}
+
 .dashboard-check-list {
     display: grid;
     gap: .75rem;
@@ -1468,6 +1497,186 @@ small {
 
 .dashboard-check-pending {
     color: var(--hm-warning);
+}
+
+.student-submit-panel {
+    display: grid;
+    gap: var(--hm-space-3);
+    margin-top: var(--hm-space-4);
+}
+
+.student-submit-panel h4 {
+    margin: 0;
+}
+
+.submission-status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem .85rem;
+    align-items: center;
+    color: var(--hm-muted);
+}
+
+.submission-status-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: .25rem .65rem;
+    border-radius: 999px;
+    color: var(--hm-primary);
+    background: rgba(111, 66, 193, .1);
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.submission-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--hm-space-4);
+    width: 100%;
+}
+
+.submission-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .4rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.submission-field .form-label {
+    display: block;
+    margin: 0;
+    color: var(--hm-text-strong);
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.submission-field .form-control {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.submission-field textarea.form-control {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.submission-file-input {
+    max-width: 100%;
+}
+
+.dashboard-card > label {
+    color: var(--hm-text-strong);
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.dashboard-card textarea {
+    width: 100%;
+    min-height: 6rem;
+    padding: .8rem .9rem;
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface);
+    color: var(--hm-text);
+}
+
+.submission-file-list,
+.dashboard-review-list {
+    display: grid;
+    gap: .75rem;
+}
+
+.dashboard-review-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--hm-space-3);
+    align-items: center;
+    padding: .75rem;
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface);
+}
+
+.submission-file-list small,
+.dashboard-review-list small,
+.student-muted {
+    color: var(--hm-muted);
+}
+
+.student-feedback-note {
+    margin-bottom: 0;
+}
+
+.student-feedback-note p {
+    margin: .35rem 0 0;
+}
+
+.submission-response-text {
+    white-space: pre-wrap;
+}
+
+.checkbox-row {
+    display: flex;
+    gap: .55rem;
+    align-items: center;
+    margin-top: var(--hm-space-3);
+}
+
+.review-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hm-space-3);
+    margin-top: var(--hm-space-4);
+}
+
+.submission-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.gradebook-selector-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--hm-space-4);
+    padding: var(--hm-space-5);
+    margin-bottom: var(--hm-space-5);
+}
+
+.gradebook-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.gradebook-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(22rem, .65fr);
+}
+
+.gradebook-table td {
+    vertical-align: middle;
+}
+
+.gradebook-table td strong,
+.gradebook-table td small {
+    display: block;
+}
+
+.gradebook-row-selected > * {
+    background: var(--hm-lavender-100) !important;
+}
+
+.gradebook-chip-warning {
+    color: var(--hm-warning);
+    background: var(--hm-warning-soft);
+}
+
+.gradebook-editor-form {
+    display: grid;
+    gap: var(--hm-space-4);
+    margin-top: var(--hm-space-4);
 }
 
 @media (max-width: 1024px) {
@@ -1494,8 +1703,15 @@ small {
 
     .dashboard-metrics,
     .dashboard-grid,
-    .dashboard-student-row {
+    .gradebook-selector-bar,
+    .dashboard-student-row,
+    .dashboard-review-list li {
         grid-template-columns: 1fr;
+    }
+
+    .dashboard-review-list li {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
 
@@ -1505,8 +1721,9 @@ small {
     }
 
     .student-main {
-        width: min(100% - 1rem, 72rem);
-        padding-top: var(--hm-space-4);
+        width: 100%;
+        max-width: none;
+        padding: var(--hm-space-4) 1rem var(--hm-space-10);
     }
 
     .student-topbar {

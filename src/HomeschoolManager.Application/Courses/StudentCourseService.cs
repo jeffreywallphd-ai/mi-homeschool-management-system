@@ -1,8 +1,10 @@
 using HomeschoolManager.Application.Common;
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Domain.Access;
+using HomeschoolManager.Domain.Assessments;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Students;
+using HomeschoolManager.Domain.Submissions;
 
 namespace HomeschoolManager.Application.Courses;
 
@@ -176,6 +178,12 @@ public sealed class StudentCourseService
 
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
         var module = modules[index];
+        var submissions = user.Role == UserRole.Student
+            ? await repository.GetAssignmentSubmissionsAsync(cancellationToken)
+            : Array.Empty<AssignmentSubmission>();
+        var assessmentRecords = user.Role == UserRole.Student
+            ? await repository.GetAssessmentRecordsAsync(cancellationToken)
+            : Array.Empty<AssessmentRecord>();
         return OperationResult<StudentModulePage>.Success(new StudentModulePage(
             student.Id,
             course.Id,
@@ -323,7 +331,10 @@ public sealed class StudentCourseService
                     assignment.CompletionCriteria,
                     assignment.ReflectionPrompts,
                     assignment.EvidenceRequirements,
-                    assignment.Scoring))
+                    assignment.Scoring,
+                    assignment.Id,
+                    AssignmentSubmissionsFor(submissions, student.Id, course.Id, module.Id, assignment.Id),
+                    AssignmentFeedbackFor(assessmentRecords, student.Id, course.Id, module.Id, assignment.Id)))
                 .ToArray(),
             module.AssignmentEvidencePlaceholder));
     }
@@ -382,6 +393,80 @@ public sealed class StudentCourseService
         return termId.HasValue
             ? schoolYear?.Terms.FirstOrDefault(term => term.Id == termId.Value)?.Name ?? ""
             : "";
+    }
+
+    private static IReadOnlyList<StudentAssignmentSubmissionView> AssignmentSubmissionsFor(
+        IReadOnlyList<AssignmentSubmission> submissions,
+        Guid studentId,
+        Guid courseId,
+        Guid moduleId,
+        Guid assignmentId)
+    {
+        return submissions
+            .Where(submission => submission.StudentId == studentId)
+            .Where(submission => submission.CourseId == courseId)
+            .Where(submission => submission.ModuleId == moduleId)
+            .Where(submission => submission.AssignmentId == assignmentId)
+            .OrderByDescending(submission => submission.SubmittedAtUtc)
+            .Select(submission => new StudentAssignmentSubmissionView(
+                submission.Id,
+                submission.AttemptNumber,
+                submission.Status,
+                submission.SubmittedAtUtc,
+                submission.ReturnedAtUtc,
+                submission.AcceptedAtUtc,
+                submission.ParentReviewNotes,
+                submission.PortfolioCandidate,
+                submission.Attachments.Count))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<StudentAssignmentAssessmentFeedbackView> AssignmentFeedbackFor(
+        IReadOnlyList<AssessmentRecord> assessmentRecords,
+        Guid studentId,
+        Guid courseId,
+        Guid moduleId,
+        Guid assignmentId)
+    {
+        return assessmentRecords
+            .Where(record => !record.IsArchived)
+            .Where(record => record.FeedbackVisibleToStudent)
+            .Where(record => record.StudentId == studentId)
+            .Where(record => record.CourseId == courseId)
+            .Where(record => record.ModuleId == moduleId)
+            .Where(record => record.AssignmentId == assignmentId)
+            .OrderByDescending(record => record.UpdatedAtUtc)
+            .Select(record => new StudentAssignmentAssessmentFeedbackView(
+                record.Id,
+                record.State,
+                record.ResultType,
+                StudentAssessmentLabel(record),
+                record.StudentFeedback,
+                record.UpdatedAtUtc))
+            .ToArray();
+    }
+
+    private static string StudentAssessmentLabel(AssessmentRecord record)
+    {
+        return record.ResultType switch
+        {
+            AssessmentResultType.Points when record.PointsEarned.HasValue && record.PointsPossible.HasValue => $"{record.PointsEarned:g} / {record.PointsPossible:g}",
+            AssessmentResultType.Percentage when record.Percentage.HasValue => $"{record.Percentage:g}%",
+            AssessmentResultType.LetterGrade => record.ResultValue,
+            AssessmentResultType.PassFail => record.ResultValue,
+            AssessmentResultType.TestScore => !string.IsNullOrWhiteSpace(record.ResultValue) ? record.ResultValue : "Test score recorded",
+            AssessmentResultType.Narrative => "Narrative evaluation",
+            AssessmentResultType.RubricSummary => "Rubric summary",
+            _ => record.State switch
+            {
+                AssessmentState.Assessed => "Assessed",
+                AssessmentState.ReturnedForRevision => "Returned for revision",
+                AssessmentState.Incomplete => "Incomplete",
+                AssessmentState.Excused => "Excused",
+                AssessmentState.NotApplicable => "Not applicable",
+                _ => "Feedback recorded"
+            }
+        };
     }
 
     private static IEnumerable<StudentResourceView> ParseResources(string value)

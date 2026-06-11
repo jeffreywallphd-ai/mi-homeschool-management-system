@@ -64,10 +64,10 @@ The student portal is the separate `HomeschoolManager.StudentPortal.Web` build. 
 .\Start-Dev.ps1 -StudentPortal
 ```
 
-If the parent/admin app is already running, the script may reuse existing shared build output for the student portal. You can also request that directly:
+The student portal start command uses `dotnet watch` by default, so Razor, CSS, and shared-code changes can hot reload or rebuild without manually restarting the portal. Use `-NoWatch` only when you intentionally want a plain non-watch run:
 
 ```powershell
-.\Start-Dev.ps1 -StudentPortal -SkipBuild
+.\Start-Dev.ps1 -StudentPortal -NoWatch
 ```
 
 Open the student portal on this computer at:
@@ -94,8 +94,8 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 dotnet restore HomeschoolManager.sln --configfile NuGet.Config
 dotnet build HomeschoolManager.sln --no-restore
 dotnet run --project "./src/HomeschoolManager.Tests/HomeschoolManager.Tests.csproj" --no-build
-dotnet run --project "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" --launch-profile parent-admin-http
-dotnet run --project "./src/HomeschoolManager.StudentPortal.Web/HomeschoolManager.StudentPortal.Web.csproj" --launch-profile student-wifi-http
+dotnet watch --project "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" --launch-profile parent-admin-http
+dotnet watch --project "./src/HomeschoolManager.StudentPortal.Web/HomeschoolManager.StudentPortal.Web.csproj" --launch-profile student-wifi-http
 ```
 
 Open:

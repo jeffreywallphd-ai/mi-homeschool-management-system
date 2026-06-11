@@ -5,7 +5,7 @@
 - Canonical for: grading, rubrics, tests, evaluations, and grade evidence
 - Related ADRs: [ADR-0005](../adr/ADR-0005-parent-defined-graduation-standards-before-diploma.md)
 - Related docs: [Credits and Graduation Rules](credits-and-graduation-rules.md), [Testing and Verification Standards](../standards/testing-and-verification-standards.md)
-- Related tests: not yet implemented
+- Related tests: `src/HomeschoolManager.Tests/Program.cs`
 - Supersedes: none
 
 ## Grading Model
@@ -39,6 +39,20 @@ Grades should be connected to evidence whenever practical:
 - GPA calculations must use a known grade scale.
 - Missing grades must not silently convert to zero or pass.
 - Null grade values must be represented as explicit states such as not graded, excused, incomplete, or not applicable.
+
+## Assessment Records
+
+Assessment records are parent-owned records of reviewed work or parent evaluation. They may be linked to:
+
+- Assignment plans.
+- Student submissions.
+- Evidence records.
+- Course context.
+- Parent evaluations or later test/portfolio records.
+
+Assessment records may store narrative, rubric summary, pass/fail, points, percentage, letter grade, test score, or explicit not-graded results. These records are not final course grades by themselves. They must not award credit, mark a course complete, calculate GPA, generate report cards, generate transcripts, or determine diploma readiness without a later explicit parent/admin workflow.
+
+Student-visible feedback is controlled separately from parent/admin notes. Student-facing pages may show only feedback that the parent/admin has marked visible to the student.
 
 ## Assignment Status
 

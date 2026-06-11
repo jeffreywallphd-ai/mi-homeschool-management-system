@@ -32,23 +32,17 @@ if ($StudentPortal) {
     $launchProfile = "parent-admin-http"
 }
 
-$effectiveSkipBuild = $SkipBuild
-if ($StudentPortal -and -not $SkipBuild -and (Get-Process HomeschoolManager.Web -ErrorAction SilentlyContinue) -and (Test-Path "./src/HomeschoolManager.StudentPortal.Web/bin/Debug/net9.0/HomeschoolManager.StudentPortal.Web.exe")) {
-    $effectiveSkipBuild = $true
-    Write-Host "`nParent/admin app appears to be running, so student portal startup will reuse existing shared build output." -ForegroundColor Yellow
-}
-
-if (-not $SkipRestore -and -not $effectiveSkipBuild) {
+if (-not $SkipRestore -and -not $SkipBuild) {
     Write-Host "`nRestoring packages..." -ForegroundColor Cyan
     dotnet restore $restoreTarget --configfile NuGet.Config
 }
 
-if (-not $effectiveSkipBuild) {
+if (-not $SkipBuild) {
     Write-Host "`nBuilding app..." -ForegroundColor Cyan
     dotnet build $buildTarget --no-restore
 }
 
-if (-not $SkipTests -and -not $effectiveSkipBuild) {
+if (-not $SkipTests -and -not $SkipBuild) {
     Write-Host "`nRunning tests..." -ForegroundColor Cyan
     if ($StudentPortal) {
         dotnet run --project "./src/HomeschoolManager.Tests/HomeschoolManager.Tests.csproj"
@@ -61,9 +55,7 @@ if ($StudentPortal) {
     Write-Host "`nStarting student portal..." -ForegroundColor Cyan
     Write-Host "Open http://localhost:5172 on this computer."
     Write-Host "For another device on the same Wi-Fi network, open http://<this-computer-ip>:5172"
-    if (-not $effectiveSkipBuild) {
-        Write-Host "If the parent/admin app is already running and build files are locked, rerun with: .\Start-Dev.ps1 -StudentPortal -SkipBuild"
-    }
+    Write-Host "Student portal hot reload is enabled by default. Add -NoWatch only when you want a plain run."
 } else {
     Write-Host "`nStarting parent/admin area..." -ForegroundColor Cyan
     Write-Host "Open http://127.0.0.1:5171"
@@ -72,15 +64,11 @@ if ($StudentPortal) {
 Write-Host "Press Ctrl+C in this window to stop the app.`n"
 
 if ($NoWatch) {
-    if ($effectiveSkipBuild) {
+    if ($SkipBuild) {
         dotnet run --project $projectPath --launch-profile $launchProfile --no-build
     } else {
         dotnet run --project $projectPath --launch-profile $launchProfile
     }
 } else {
-    if ($effectiveSkipBuild) {
-        dotnet run --project $projectPath --launch-profile $launchProfile --no-build
-    } else {
-        dotnet watch --project $projectPath --launch-profile $launchProfile
-    }
+    dotnet watch --project $projectPath --launch-profile $launchProfile
 }

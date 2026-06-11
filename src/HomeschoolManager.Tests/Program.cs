@@ -1,12 +1,16 @@
+using HomeschoolManager.Application.Assessments;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Application.Setup;
+using HomeschoolManager.Application.Submissions;
 using HomeschoolManager.Domain.Access;
+using HomeschoolManager.Domain.Assessments;
 using HomeschoolManager.Domain.Common;
 using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Household;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
+using HomeschoolManager.Domain.Submissions;
 using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using HomeschoolManager.Infrastructure.Configuration;
@@ -26,6 +30,15 @@ var tests = new List<(string Name, Func<Task> Test)>
         var service = new SetupService(repository);
         var result = await service.CreateHouseholdAsync(UserContext.Student("Student"), new CreateHouseholdCommand("Family", "Parent"));
         AssertFalse(result.Succeeded, "Student command should fail.");
+    }),
+    ("Admin gradebook page declares a routable page directive", () =>
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Gradebook.razor");
+        var content = File.ReadAllText(path);
+        AssertTrue(content.StartsWith("@page \"/gradebook\"", StringComparison.Ordinal), "Gradebook page must declare the /gradebook route.");
+        AssertFalse(content.StartsWith("@gradebook", StringComparison.Ordinal), "Gradebook page route directive was accidentally renamed.");
+        return Task.CompletedTask;
     }),
     ("Setup commands persist and reload", async () =>
     {
@@ -58,6 +71,236 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(summary.HasSchoolProfile, "Missing school profile.");
         AssertTrue(summary.HasStudent, "Missing student.");
         AssertTrue(summary.HasSchoolYear, "Missing school year.");
+    }),
+    ("Assessment record requires explicit student course and valid result state", () =>
+    {
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+
+        AssertThrows<DomainException>(() => new AssessmentRecord(
+            Guid.NewGuid(),
+            Guid.Empty,
+            courseId,
+            null,
+            null,
+            null,
+            null,
+            AssessmentSourceType.CourseContext,
+            AssessmentState.Assessed,
+            AssessmentResultType.Narrative,
+            "",
+            null,
+            null,
+            null,
+            "Shows clear understanding.",
+            "",
+            "",
+            "",
+            false,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow));
+
+        AssertThrows<DomainException>(() => new AssessmentRecord(
+            Guid.NewGuid(),
+            studentId,
+            courseId,
+            null,
+            null,
+            null,
+            null,
+            AssessmentSourceType.CourseContext,
+            AssessmentState.Assessed,
+            AssessmentResultType.Points,
+            "",
+            11,
+            10,
+            null,
+            "",
+            "",
+            "",
+            "",
+            false,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow));
+
+        return Task.CompletedTask;
+    }),
+    ("Student cannot save assessment records", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new GradebookService(repository);
+
+        var result = await service.SaveAssessmentAsync(UserContext.Student("Student"), new SaveAssessmentCommand(
+            null,
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            null,
+            null,
+            AssessmentSourceType.Assignment,
+            AssessmentState.Assessed,
+            AssessmentResultType.Narrative,
+            "",
+            null,
+            null,
+            null,
+            "Student work shows mastery.",
+            "",
+            "",
+            "Good work.",
+            true));
+
+        AssertFalse(result.Succeeded, "Student assessment mutation should fail.");
+        AssertEqual(0, (await repository.GetAssessmentRecordsAsync()).Count, "Student mutation should not persist assessment records.");
+    }),
+    ("Accepted submission remains needs review until parent records assessment", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new GradebookService(repository);
+        var submittedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var submission = new AssignmentSubmission(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            1,
+            AssignmentSubmissionStatus.Accepted,
+            "Completed work.",
+            "",
+            [],
+            submittedAt,
+            submittedAt,
+            submittedAt,
+            null,
+            submittedAt,
+            "Accepted for assessment.",
+            false);
+        await repository.SaveAssignmentSubmissionAsync(submission);
+
+        var before = await service.GetGradebookAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id, setup.Course.Id);
+        AssertTrue(before.Succeeded, "Gradebook should load before assessment.");
+        var pendingRow = before.Value?.Rows.Single() ?? throw new InvalidOperationException("Expected one gradebook row.");
+        AssertEqual(AssessmentState.NeedsReview, pendingRow.EffectiveState, "Accepted work should need assessment.");
+        AssertEqual(10m, pendingRow.PlannedPoints ?? 0, "Planned points should remain planning data.");
+
+        var save = await service.SaveAssessmentAsync(UserContext.ParentAdmin("Parent"), new SaveAssessmentCommand(
+            null,
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            submission.Id,
+            null,
+            AssessmentSourceType.Submission,
+            AssessmentState.Assessed,
+            AssessmentResultType.Points,
+            "",
+            9,
+            10,
+            null,
+            "",
+            "",
+            "Parent internal note.",
+            "Strong work on the submitted analysis.",
+            true));
+        AssertTrue(save.Succeeded, "Parent assessment save should succeed.");
+
+        var after = await service.GetGradebookAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id, setup.Course.Id);
+        var assessedRow = after.Value?.Rows.Single() ?? throw new InvalidOperationException("Expected one assessed gradebook row.");
+        AssertEqual(AssessmentState.Assessed, assessedRow.EffectiveState, "Recorded assessment should set explicit assessed state.");
+        AssertEqual(AssessmentResultType.Points, assessedRow.Assessment?.ResultType ?? AssessmentResultType.NotGraded, "Assessment result type should be points.");
+        AssertEqual(1, after.Value?.Summary?.AssessedCount ?? 0, "Summary should count explicit assessments.");
+    })),
+    ("Assessment records persist and reload", (Func<Task>)(async () =>
+    {
+        var created = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(created.Repository);
+        var service = new GradebookService(created.Repository);
+        var save = await service.SaveAssessmentAsync(UserContext.ParentAdmin("Parent"), new SaveAssessmentCommand(
+            null,
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            null,
+            null,
+            AssessmentSourceType.Assignment,
+            AssessmentState.Incomplete,
+            AssessmentResultType.NotGraded,
+            "",
+            null,
+            null,
+            null,
+            "",
+            "",
+            "Waiting on the final graph.",
+            "",
+            false));
+        AssertTrue(save.Succeeded, "Assessment should save before reload.");
+
+        var reloaded = new JsonHomeschoolRepository(created.Paths);
+        await reloaded.EnsureStoreCreatedAsync();
+        var records = await reloaded.GetAssessmentRecordsAsync();
+        AssertEqual(1, records.Count, "Assessment should persist through repository reload.");
+        AssertEqual(AssessmentState.Incomplete, records[0].State, "Reloaded assessment state should remain explicit.");
+    })),
+    ("Student feedback only exposes parent approved assessment feedback", async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new GradebookService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        AssertTrue((await service.SaveAssessmentAsync(parent, new SaveAssessmentCommand(
+            null,
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            null,
+            null,
+            AssessmentSourceType.Assignment,
+            AssessmentState.Assessed,
+            AssessmentResultType.LetterGrade,
+            "A",
+            null,
+            null,
+            null,
+            "",
+            "",
+            "Internal grading note.",
+            "This feedback is hidden.",
+            false))).Succeeded, "Hidden feedback assessment should save.");
+
+        AssertTrue((await service.SaveAssessmentAsync(parent, new SaveAssessmentCommand(
+            null,
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            null,
+            null,
+            AssessmentSourceType.Assignment,
+            AssessmentState.ReturnedForRevision,
+            AssessmentResultType.NotGraded,
+            "",
+            null,
+            null,
+            null,
+            "",
+            "",
+            "Internal revision note.",
+            "Please revise the evidence paragraph.",
+            true))).Succeeded, "Visible feedback assessment should save.");
+
+        var feedback = await service.ListStudentFeedbackAsync(UserContext.Student("Student"), setup.Student.Id, setup.Course.Id, setup.Module.Id);
+        AssertTrue(feedback.Succeeded, "Student should be able to read approved feedback.");
+        AssertEqual(1, feedback.Value?.Count ?? 0, "Student should see only visible feedback.");
+        AssertEqual("Please revise the evidence paragraph.", feedback.Value?[0].StudentFeedback ?? "", "Student feedback should match approved text.");
     }),
     ("Michigan seed is idempotent and keeps views distinct", async () =>
     {
@@ -1621,6 +1864,123 @@ var tests = new List<(string Name, Func<Task> Test)>
         var parentPreview = await studentService.GetCourseAsync(parent, firstCourse.CourseId, primaryStudent.Id);
         AssertTrue(parentPreview.Succeeded, "Parent should be able to preview student course read model.");
     }),
+    ("Student submissions create local file metadata and parent acceptance creates evidence", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var courseService = new CourseService(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var studentCourseService = new StudentCourseService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+        var student = await repository.GetStudentAsync();
+        if (student is null)
+        {
+            throw new InvalidOperationException("Student setup failed.");
+        }
+
+        var course = await courseService.CreateCourseAsync(parent, new CreateCourseCommand("Biology", "Life science overview.", ["Science"], CourseDuration.TwoSemesters, 1, student.Id));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await courseService.CreateLearningModuleAsync(
+            parent,
+            new CreateLearningModuleCommand(
+                course.Value,
+                "Cells",
+                "Cell biology module.",
+                null,
+                "2 weeks",
+                "Study cells.",
+                Objectives("Explain cell structure."),
+                Resources("OpenStax Cells"),
+                "Cell diagram evidence.",
+                ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await courseService.CreateLessonAsync(parent, new CreateLessonCommand(course.Value, module.Value, "Cell structure", "Study the major parts of cells.", "Explain cell structure.", LessonResources("OpenStax Cells")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+        var assignment = await courseService.CreateAssignmentAsync(
+            parent,
+            new CreateAssignmentCommand(
+                course.Value,
+                module.Value,
+                "Cell structure reflection",
+                AssignmentType.Reflection,
+                InstructionalMethodProfile.Hybrid,
+                "Explain the function of cell structures.",
+                "45 minutes",
+                "After lesson 1",
+                null,
+                ["Explain cell structure."],
+                [lesson.Value],
+                "Written reflection.",
+                "",
+                true,
+                20,
+                null,
+                AssignmentStatus.Assigned));
+        AssertTrue(assignment.Succeeded, "Assignment create failed.");
+
+        var deniedSubmit = await submissionService.SubmitAssignmentAsync(
+            parent,
+            new SubmitAssignmentCommand(course.Value, module.Value, assignment.Value, "Parent cannot submit.", "", Array.Empty<AssignmentAttachmentUpload>(), student.Id));
+        AssertFalse(deniedSubmit.Succeeded, "Parent/admin preview should not submit student work.");
+
+        var firstSubmit = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                course.Value,
+                module.Value,
+                assignment.Value,
+                "Cells have structures with distinct jobs.",
+                "Please review my diagram.",
+                [new AssignmentAttachmentUpload("cell-notes.txt", "text/plain", System.Text.Encoding.UTF8.GetBytes("cell evidence"))],
+                student.Id));
+        AssertTrue(firstSubmit.Succeeded, "Student submit failed.");
+
+        var storedSubmission = await repository.GetAssignmentSubmissionAsync(firstSubmit.Value);
+        AssertTrue(storedSubmission is not null, "Submission should persist.");
+        AssertEqual(1, storedSubmission!.Attachments.Count, "Submission should include attachment metadata.");
+        var storedFile = storedSubmission.Attachments[0];
+        AssertTrue(storedFile.Category == StoredFileCategory.AssignmentSubmission, "Attachment category should be assignment submission.");
+        AssertFalse(string.IsNullOrWhiteSpace(storedFile.ChecksumSha256), "Stored file should include checksum.");
+        AssertTrue(File.Exists(Path.Combine(paths.DataRoot, storedFile.StoredPath)), "Stored attachment should exist on disk.");
+
+        var studentModule = await studentCourseService.GetModuleAsync(studentUser, course.Value, module.Value, student.Id);
+        AssertTrue(studentModule.Succeeded, "Student module read failed.");
+        AssertEqual(1, studentModule.Value!.Assignments.Single(item => item.AssignmentId == assignment.Value).Submissions.Count, "True student portal read model should show submission history.");
+
+        var previewModule = await studentCourseService.GetModuleAsync(parent, course.Value, module.Value, student.Id);
+        AssertTrue(previewModule.Succeeded, "Parent preview module read failed.");
+        AssertEqual(0, previewModule.Value!.Assignments.Single(item => item.AssignmentId == assignment.Value).Submissions.Count, "Parent/admin preview should not show student submissions.");
+
+        var pending = await submissionService.ListPendingReviewsAsync(parent);
+        AssertTrue(pending.Succeeded, "Pending reviews should load.");
+        AssertEqual(1, pending.Value!.Count, "Submitted work should appear for parent review.");
+
+        var returned = await submissionService.ReturnSubmissionAsync(parent, new ReturnSubmissionCommand(firstSubmit.Value, "Add one concrete example."));
+        AssertTrue(returned.Succeeded, "Parent should return work with notes.");
+
+        var secondSubmit = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                course.Value,
+                module.Value,
+                assignment.Value,
+                "Cells have structures with distinct jobs, such as nuclei storing genetic information.",
+                "",
+                Array.Empty<AssignmentAttachmentUpload>(),
+                student.Id));
+        AssertTrue(secondSubmit.Succeeded, "Student resubmit failed.");
+
+        var accept = await submissionService.AcceptSubmissionAsync(parent, new AcceptSubmissionCommand(secondSubmit.Value, "Reviewed and accepted.", true));
+        AssertTrue(accept.Succeeded, "Parent should accept submitted work as evidence.");
+        var evidence = await submissionService.ListEvidenceAsync(parent);
+        AssertTrue(evidence.Succeeded, "Evidence list should load.");
+        AssertEqual(1, evidence.Value!.Count, "Accepted submission should create one evidence record.");
+        AssertTrue(evidence.Value[0].PortfolioCandidate, "Portfolio candidate should remain a marker on evidence.");
+
+        var acceptedSubmission = await repository.GetAssignmentSubmissionAsync(secondSubmit.Value);
+        AssertTrue(acceptedSubmission!.Status == AssignmentSubmissionStatus.Accepted, "Accepted submission should have accepted workflow status.");
+    })),
     ("Admin courses are scoped to the selected student", async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -2398,6 +2758,20 @@ static async Task<JsonHomeschoolRepository> CreateRepositoryAsync()
     return repository;
 }
 
+static async Task<(JsonHomeschoolRepository Repository, AppDataPaths Paths)> CreateRepositoryWithPathsAsync()
+{
+    var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerTests", Guid.NewGuid().ToString("N"));
+    var options = Options.Create(new HomeschoolManagerOptions
+    {
+        DataRoot = root,
+        UseDevelopmentDataRoot = true
+    });
+    var paths = new AppDataPaths(options);
+    var repository = new JsonHomeschoolRepository(paths);
+    await repository.EnsureStoreCreatedAsync();
+    return (repository, paths);
+}
+
 static async Task CreateSetupAsync(JsonHomeschoolRepository repository)
 {
     var setupService = new SetupService(repository);
@@ -2411,7 +2785,85 @@ static async Task CreateSetupAsync(JsonHomeschoolRepository repository)
         new DateOnly(2026, 8, 24),
         new DateOnly(2026, 12, 18),
         new DateOnly(2027, 1, 11),
-        new DateOnly(2027, 5, 28)))).Succeeded, "School year setup failed.");
+            new DateOnly(2027, 5, 28)))).Succeeded, "School year setup failed.");
+}
+
+static async Task<(Student Student, SchoolYear SchoolYear, Course Course, LearningModule Module, ModuleAssignment Assignment)> CreateCourseWithAssignmentAsync(JsonHomeschoolRepository repository)
+{
+    await CreateSetupAsync(repository);
+    var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+    var schoolYear = await repository.GetSchoolYearAsync() ?? throw new InvalidOperationException("School year setup failed.");
+    var courseId = Guid.NewGuid();
+    var moduleId = Guid.NewGuid();
+    var assignment = new ModuleAssignment(
+        Guid.NewGuid(),
+        moduleId,
+        "assessment-source",
+        1,
+        "Evidence analysis",
+        AssignmentType.Project,
+        InstructionalMethodProfile.Hybrid,
+        "Complete the analysis and submit the result.",
+        "One lesson",
+        "After lesson work",
+        null,
+        ["Explain evidence clearly."],
+        [],
+        "Written analysis",
+        "",
+        false,
+        10,
+        20,
+        AssignmentStatus.Assigned);
+    var module = new LearningModule(
+        moduleId,
+        courseId,
+        "assessment-module",
+        1,
+        "Assessment Module",
+        "Module for assessment tests.",
+        "One week",
+        "Work through the module.",
+        "Evidence",
+        "Explain evidence clearly.",
+        "",
+        "Retain submitted analysis.",
+        ModuleStatus.Active,
+        assignments: [assignment]);
+    var course = new Course(
+        courseId,
+        student.Id,
+        schoolYear.Id,
+        "Assessment Course",
+        ["Science"],
+        CourseDuration.OneSemester,
+        0.5m,
+        null,
+        null,
+        CourseDescription.Empty,
+        CurriculumPlan.Empty,
+        [],
+        [module]);
+
+    await repository.SaveCourseAsync(course);
+    return (student, schoolYear, course, module, assignment);
+}
+
+static string FindRepositoryRoot()
+{
+    var directory = new DirectoryInfo(AppContext.BaseDirectory);
+    while (directory is not null)
+    {
+        if (File.Exists(Path.Combine(directory.FullName, "docs", "README.md")) &&
+            Directory.Exists(Path.Combine(directory.FullName, "src", "HomeschoolManager.Web")))
+        {
+            return directory.FullName;
+        }
+
+        directory = directory.Parent;
+    }
+
+    throw new InvalidOperationException("Repository root was not found.");
 }
 
 static void AssertTrue(bool condition, string message)
@@ -2428,9 +2880,8 @@ static void AssertFalse(bool condition, string message)
 }
 
 static void AssertEqual<T>(T expected, T actual, string message)
-    where T : IEquatable<T>
 {
-    if (!expected.Equals(actual))
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
     {
         throw new InvalidOperationException($"{message} Expected {expected}, got {actual}.");
     }

@@ -12,8 +12,10 @@ Purpose: Grades, GPA, tests, credit awards, course completion, and graduation pl
 ## Must Preserve
 
 - Missing grades are explicit states, not zero.
+- Assessment records are parent-owned review records, not final course grades by themselves.
 - Assignment status and planned points do not create grades.
 - Assignment status may prepare later evidence or grading workflows only after explicit parent/admin action.
+- Student-facing feedback must be explicitly marked visible by the parent/admin.
 - Credit awards are parent decisions.
 - Diploma generation requires accepted parent-defined graduation standards.
 

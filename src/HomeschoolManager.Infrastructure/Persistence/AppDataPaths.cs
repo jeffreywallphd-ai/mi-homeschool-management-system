@@ -30,4 +30,6 @@ public sealed class AppDataPaths
     public string DataDirectory => Path.Combine(DataRoot, "data");
 
     public string DatabasePath => Path.Combine(DataDirectory, "homeschool.db");
+
+    public string FilesDirectory => Path.Combine(DataRoot, "files");
 }

@@ -5,6 +5,8 @@ using HomeschoolManager.Domain.Curriculum;
 using HomeschoolManager.Domain.Household;
 using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
+using HomeschoolManager.Domain.Submissions;
+using HomeschoolManager.Domain.Assessments;
 
 namespace HomeschoolManager.Infrastructure.Persistence;
 
@@ -184,6 +186,75 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             document =>
             {
                 document.Courses.RemoveAll(existing => existing.Id == courseId);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssignmentSubmission>> GetAssignmentSubmissionsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.AssignmentSubmissions
+            .OrderByDescending(submission => submission.SubmittedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<AssignmentSubmission?> GetAssignmentSubmissionAsync(Guid submissionId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.AssignmentSubmissions.FirstOrDefault(submission => submission.Id == submissionId);
+    }
+
+    public async Task SaveAssignmentSubmissionAsync(AssignmentSubmission submission, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.AssignmentSubmissions.RemoveAll(existing => existing.Id == submission.Id);
+                document.AssignmentSubmissions.Add(submission);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<EvidenceRecord>> GetEvidenceRecordsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.EvidenceRecords
+            .OrderByDescending(evidence => evidence.ConfirmedAtUtc)
+            .ToArray();
+    }
+
+    public async Task SaveEvidenceRecordAsync(EvidenceRecord evidenceRecord, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.EvidenceRecords.RemoveAll(existing => existing.Id == evidenceRecord.Id);
+                document.EvidenceRecords.Add(evidenceRecord);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.AssessmentRecords
+            .OrderByDescending(record => record.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<AssessmentRecord?> GetAssessmentRecordAsync(Guid assessmentId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.AssessmentRecords.FirstOrDefault(record => record.Id == assessmentId);
+    }
+
+    public async Task SaveAssessmentRecordAsync(AssessmentRecord assessmentRecord, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.AssessmentRecords.RemoveAll(existing => existing.Id == assessmentRecord.Id);
+                document.AssessmentRecords.Add(assessmentRecord);
             },
             cancellationToken);
     }

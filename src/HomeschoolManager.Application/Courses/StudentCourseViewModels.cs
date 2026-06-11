@@ -1,4 +1,6 @@
 using HomeschoolManager.Domain.Curriculum;
+using HomeschoolManager.Domain.Submissions;
+using HomeschoolManager.Domain.Assessments;
 
 namespace HomeschoolManager.Application.Courses;
 
@@ -207,4 +209,26 @@ public sealed record StudentAssignmentView(
     AssignmentCompletionCriteria? CompletionCriteria,
     IReadOnlyList<string> ReflectionPrompts,
     AssignmentEvidenceRequirements? EvidenceRequirements,
-    AssignmentScoring? Scoring);
+    AssignmentScoring? Scoring,
+    Guid AssignmentId,
+    IReadOnlyList<StudentAssignmentSubmissionView> Submissions,
+    IReadOnlyList<StudentAssignmentAssessmentFeedbackView> AssessmentFeedback);
+
+public sealed record StudentAssignmentSubmissionView(
+    Guid SubmissionId,
+    int AttemptNumber,
+    AssignmentSubmissionStatus Status,
+    DateTimeOffset SubmittedAtUtc,
+    DateTimeOffset? ReturnedAtUtc,
+    DateTimeOffset? AcceptedAtUtc,
+    string ParentReviewNotes,
+    bool PortfolioCandidate,
+    int AttachmentCount);
+
+public sealed record StudentAssignmentAssessmentFeedbackView(
+    Guid AssessmentId,
+    AssessmentState State,
+    AssessmentResultType ResultType,
+    string ResultLabel,
+    string StudentFeedback,
+    DateTimeOffset UpdatedAtUtc);

@@ -14,6 +14,8 @@ Add a student-facing client that lets the student view parent/admin-created cour
 
 The student client should help the parent see what the administrative course/module setup looks like from the student's side, while preserving tight role boundaries.
 
+The later accepted [Assignment Submissions and Evidence Roadmap](assignment-submissions-and-evidence-roadmap.md) extends the true student portal with assignment submission commands. That later slice does not change this roadmap's parent/admin preview boundary: preview remains read-only course, module, lesson, and assignment content.
+
 ## In Scope
 
 - Student landing page listing all courses.
@@ -29,9 +31,9 @@ The student client should help the parent see what the administrative course/mod
 ## Out of Scope
 
 - Gradebook scoring implementation.
-- Assignment submission workflow.
+- Assignment submission workflow, now covered by the later assignment submissions roadmap.
 - Attendance or activity logging.
-- File evidence upload by the student.
+- File evidence upload by the student, now covered only for assignment submissions by the later assignment submissions roadmap.
 - Parent feedback, grade finalization, credit awards, transcripts, or report cards.
 - Student mutation of courses, modules, mappings, grades, credits, or setup.
 

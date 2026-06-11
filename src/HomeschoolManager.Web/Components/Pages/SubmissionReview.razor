@@ -1,0 +1,272 @@
+@page "/submissions/{SubmissionId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Submissions
+@using HomeschoolManager.Domain.Submissions
+@using HomeschoolManager.Web.Services
+@inject AssignmentSubmissionService Submissions
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Submission Review</PageTitle>
+
+@if (!canView)
+{
+    <h1>Submission Review</h1>
+    <div class="alert alert-warning">Sign in as parent/admin to review submitted work.</div>
+}
+else if (detail is null)
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-assignment-clipboard.svg" alt="" />
+            </span>
+            <h1>Submission Review</h1>
+            <p>Review student-submitted assignment work.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-assignment-clipboard.svg" alt="" />
+            </span>
+            <h1>@detail.AssignmentTitle</h1>
+            <p>@detail.StudentName | @detail.CourseTitle | @detail.ModuleTitle</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-info">@message</div>
+    }
+
+    <div class="dashboard-grid">
+        <main class="dashboard-main">
+            <section class="hm-card dashboard-card">
+                <div class="section-heading-row">
+                    <h2>Submitted Work</h2>
+                    <span class="submission-status-pill">@SubmissionStatusLabel(detail.Status)</span>
+                </div>
+                <dl class="student-detail-facts">
+                    <div>
+                        <dt>Attempt</dt>
+                        <dd>@detail.AttemptNumber</dd>
+                    </div>
+                    <div>
+                        <dt>Submitted</dt>
+                        <dd>@detail.SubmittedAtUtc.ToLocalTime().ToString("g")</dd>
+                    </div>
+                    <div>
+                        <dt>Attachments</dt>
+                        <dd>@detail.Attachments.Count</dd>
+                    </div>
+                    <div>
+                        <dt>Evidence candidate</dt>
+                        <dd>@(detail.PortfolioCandidate ? "Yes" : "No")</dd>
+                    </div>
+                </dl>
+
+                <h3>Response</h3>
+                <p class="submission-response-text">@(string.IsNullOrWhiteSpace(detail.ResponseText) ? "No written response was submitted." : detail.ResponseText)</p>
+
+                @if (!string.IsNullOrWhiteSpace(detail.StudentNotes))
+                {
+                    <h3>Student Notes</h3>
+                    <p class="submission-response-text">@detail.StudentNotes</p>
+                }
+
+                <h3>Attached Files</h3>
+                @if (detail.Attachments.Count == 0)
+                {
+                    <p>No files were attached.</p>
+                }
+                else
+                {
+                    <ul class="submission-file-list">
+                        @foreach (var attachment in detail.Attachments)
+                        {
+                            <li>
+                                <strong>@attachment.OriginalFileName</strong>
+                                <small>@FileSize(attachment.SizeBytes) | @attachment.ContentType | SHA-256 @ShortChecksum(attachment.ChecksumSha256)</small>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </main>
+
+        <aside class="dashboard-support">
+            <section class="hm-card dashboard-card">
+                <h2>Parent Review</h2>
+                @if (detail.Evidence is not null)
+                {
+                    <div class="student-feedback-note">
+                        <strong>Accepted evidence</strong>
+                        <p>@detail.Evidence.Title</p>
+                        <small>@detail.Evidence.ConfirmedAtUtc.ToLocalTime().ToString("g")</small>
+                    </div>
+                }
+
+                <label for="parent-review-notes">Review notes</label>
+                <textarea id="parent-review-notes" rows="6" @bind="reviewNotes"></textarea>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" @bind="markPortfolioCandidate" />
+                    Mark as portfolio candidate
+                </label>
+
+                <div class="review-action-row">
+                    <button type="button" class="btn btn-outline-primary" @onclick="ReturnWorkAsync" disabled="@isSaving">Return to student</button>
+                    <button type="button" class="btn btn-primary" @onclick="AcceptWorkAsync" disabled="@isSaving">Accept as evidence</button>
+                </div>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid SubmissionId { get; set; }
+
+    private bool canView;
+    private bool isSaving;
+    private SubmissionReviewDetail? detail;
+    private string reviewNotes = "";
+    private bool markPortfolioCandidate;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsParentAdmin;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await Submissions.GetReviewDetailAsync(Session.CurrentUser, SubmissionId);
+        if (result.Succeeded)
+        {
+            detail = result.Value!;
+            reviewNotes = detail.ParentReviewNotes;
+            markPortfolioCandidate = detail.PortfolioCandidate;
+            messages.Clear();
+        }
+        else
+        {
+            detail = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task ReturnWorkAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var result = await Submissions.ReturnSubmissionAsync(
+                Session.CurrentUser,
+                new ReturnSubmissionCommand(SubmissionId, reviewNotes));
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                messages.Add("Work returned to the student with your notes.");
+                await LoadAsync();
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task AcceptWorkAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var result = await Submissions.AcceptSubmissionAsync(
+                Session.CurrentUser,
+                new AcceptSubmissionCommand(SubmissionId, reviewNotes, markPortfolioCandidate));
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                messages.Add("Work accepted as reviewed evidence.");
+                await LoadAsync();
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private static string SubmissionStatusLabel(AssignmentSubmissionStatus status)
+    {
+        return status switch
+        {
+            AssignmentSubmissionStatus.Draft => "Draft",
+            AssignmentSubmissionStatus.Submitted => "Submitted",
+            AssignmentSubmissionStatus.Returned => "Returned",
+            AssignmentSubmissionStatus.Accepted => "Accepted evidence",
+            AssignmentSubmissionStatus.Archived => "Archived",
+            _ => status.ToString()
+        };
+    }
+
+    private static string FileSize(long bytes)
+    {
+        return bytes < 1024 * 1024
+            ? $"{Math.Max(1, bytes / 1024)} KB"
+            : $"{bytes / 1024m / 1024m:0.0} MB";
+    }
+
+    private static string ShortChecksum(string checksum)
+    {
+        return checksum.Length <= 12 ? checksum : checksum[..12];
+    }
+}
