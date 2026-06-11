@@ -14,6 +14,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddHomeschoolManagerInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<SessionState>();
+builder.Services.AddSingleton<PortalState>();
 
 var dataProtectionDirectory = builder.Environment.IsDevelopment()
     ? Path.Combine(builder.Environment.ContentRootPath, ".dev-data", "DataProtection-Keys")
@@ -44,6 +45,26 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+var portalState = app.Services.GetRequiredService<PortalState>();
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    if (IsFrameworkOrAssetPath(path))
+    {
+        await next();
+        return;
+    }
+
+    if (IsStudentPath(path))
+    {
+        var studentPath = path.HasValue ? path.Value : "/student";
+        context.Response.Redirect($"{portalState.StudentPortalBaseUrl}{studentPath}");
+        return;
+    }
+
+    await next();
+});
+
 
 app.UseAntiforgery();
 
@@ -52,3 +73,22 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+static bool IsStudentPath(PathString path)
+{
+    return path == "/student" || path.StartsWithSegments("/student/");
+}
+
+static bool IsFrameworkOrAssetPath(PathString path)
+{
+    var value = path.Value ?? "";
+    return System.IO.Path.HasExtension(value)
+        || value.StartsWith("/_blazor", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/_framework", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/_content", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/icons", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/lib", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/session.js", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/app.css", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("/favicon", StringComparison.OrdinalIgnoreCase);
+}

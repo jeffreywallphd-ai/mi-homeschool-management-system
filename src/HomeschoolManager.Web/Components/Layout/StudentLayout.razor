@@ -1,0 +1,23 @@
+@inherits LayoutComponentBase
+
+<PersistentSession />
+
+<div class="student-shell">
+    <header class="student-topbar">
+        <a class="student-brand" href="student">
+            <img class="hm-icon" src="icons/hm/svg/purple/brand-shield-book.svg" alt="" aria-hidden="true" />
+            <span>Homeschool Manager</span>
+        </a>
+        <HeaderSession />
+    </header>
+
+    <main class="student-main">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">X</span>
+</div>

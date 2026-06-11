@@ -64,6 +64,10 @@ coverage/
 .localappdata/
 .dev-data/
 .run-web.*.log
+.codex-design-skill/
+.codex-build-output/
+.codex-obj/
+src/HomeschoolManager.StudentPortal.Web/wwwroot/
 
 # CMake generated files
 CMakeFiles/

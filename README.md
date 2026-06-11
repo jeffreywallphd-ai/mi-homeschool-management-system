@@ -38,7 +38,7 @@ From Git Bash:
 ./start-dev.sh
 ```
 
-That script restores packages, builds the solution, runs the contract tests, and starts the web app with hot reload.
+That script restores packages, builds the solution, runs the contract tests, and starts the parent/admin web app with hot reload.
 
 To start without hot reload:
 
@@ -50,6 +50,36 @@ From Git Bash:
 
 ```bash
 ./start-dev.sh -NoWatch
+```
+
+The parent/admin area is the `HomeschoolManager.Web` build. It runs on the local computer only:
+
+```text
+http://127.0.0.1:5171
+```
+
+The student portal is the separate `HomeschoolManager.StudentPortal.Web` build. It shares the same core application services and local development data folder, but it serves only student portal routes on port `5172` and is bound for access from another device on the same Wi-Fi network:
+
+```powershell
+.\Start-Dev.ps1 -StudentPortal
+```
+
+If the parent/admin app is already running, the script may reuse existing shared build output for the student portal. You can also request that directly:
+
+```powershell
+.\Start-Dev.ps1 -StudentPortal -SkipBuild
+```
+
+Open the student portal on this computer at:
+
+```text
+http://localhost:5172
+```
+
+From a student device on the same Wi-Fi network, use the parent computer's local network address:
+
+```text
+http://<parent-computer-ip>:5172
 ```
 
 For manual startup:
@@ -64,22 +94,23 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 dotnet restore HomeschoolManager.sln --configfile NuGet.Config
 dotnet build HomeschoolManager.sln --no-restore
 dotnet run --project "./src/HomeschoolManager.Tests/HomeschoolManager.Tests.csproj" --no-build
-dotnet run --project "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" --launch-profile http
+dotnet run --project "./src/HomeschoolManager.Web/HomeschoolManager.Web.csproj" --launch-profile parent-admin-http
+dotnet run --project "./src/HomeschoolManager.StudentPortal.Web/HomeschoolManager.StudentPortal.Web.csproj" --launch-profile student-wifi-http
 ```
 
 Open:
 
 ```text
-http://localhost:5171
+http://127.0.0.1:5171
 ```
 
-Development data is stored under:
+Development data is stored under the shared repo-level development folder:
 
 ```text
-src/HomeschoolManager.Web/.dev-data/HomeschoolManager
+.dev-data/HomeschoolManager
 ```
 
-This folder is ignored by Git.
+When using `Start-Dev.ps1`, both builds also use the repository-local `.localappdata` and `.appdata` folders. Development data folders are ignored by Git.
 
 ## Production Install
 
@@ -101,6 +132,6 @@ Keep that data folder backed up. Future production packaging can wrap the publis
 ## Login
 
 - Parent/admin: uses the current local Windows user as the simple parent/admin session for this slice.
-- Student: uses a local PIN. The development default PIN is `1234`.
+- Student: uses a local PIN on the separate student portal build and port. The development default PIN is `1234`.
 
-Student access cannot perform parent/admin setup actions.
+Student access cannot perform parent/admin setup actions. Parent/admin student preview routes stay inside the parent/admin build under `/student-preview/...`; the true student portal routes are served by the student portal build under `/student/...`.

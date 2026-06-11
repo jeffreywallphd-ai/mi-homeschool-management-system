@@ -1,0 +1,297 @@
+@page "/student"
+@page "/student/{StudentId:guid}"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.StudentPortal.Web.Services
+@using Microsoft.AspNetCore.Components.Rendering
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Student Courses</PageTitle>
+
+@if (!canView)
+{
+    <h1>Student Courses</h1>
+    <div class="alert alert-warning">Sign in to view student courses.</div>
+}
+else if (dashboard is null)
+{
+    <h1>Student Courses</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <section class="student-hero">
+        <span class="hm-icon-tile" aria-hidden="true">
+            <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/student-hero-graduation-cap.svg" alt="" />
+        </span>
+        <div>
+            <h1>Welcome back, @dashboard.StudentFirstName</h1>
+            <p>Choose a course below, then open the syllabus or the next module you need to work on. Each course card shows your current grade status and module count.</p>
+        </div>
+    </section>
+
+    @if (dashboard.Courses.Count == 0)
+    {
+        <section class="status-panel">
+            <h2>No courses yet</h2>
+            <p>Courses created by the parent/admin for this child will appear here.</p>
+        </section>
+    }
+    else if (dashboard.TermNames.Count > 0)
+    {
+        @foreach (var termName in dashboard.TermNames)
+        {
+            var termCourses = CoursesForTerm(termName).ToArray();
+            <section class="student-term-section">
+                <div class="student-term-heading">
+                    <h2>@termName</h2>
+                    <div class="student-term-metrics" aria-label="@($"{termName} summary")">
+                        <span><img class="hm-icon-sm" src="icons/hm/svg/purple/nav-courses-book.svg" alt="" aria-hidden="true" /> @termCourses.Length courses</span>
+                        <span><img class="hm-icon-sm" src="icons/hm/svg/purple/metric-credit-award.svg" alt="" aria-hidden="true" /> @CreditTotal(termCourses) credits</span>
+                        <span><img class="hm-icon-sm" src="icons/hm/svg/purple/metric-modules-cube.svg" alt="" aria-hidden="true" /> @CompletedModuleTotal(termCourses) / @ModuleTotal(termCourses) modules</span>
+                    </div>
+                </div>
+                @if (termCourses.Length == 0)
+                {
+                    <p>No courses are currently placed in this semester.</p>
+                }
+                else
+                {
+                    <div class="student-course-grid" aria-label="@($"{termName} courses")">
+                        @foreach (var course in termCourses)
+                        {
+                            @CourseCard(course)
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        var unplacedCourses = dashboard.Courses
+            .Where(course => course.TermNames.Count == 0)
+            .ToArray();
+        @if (unplacedCourses.Length > 0)
+        {
+            <section class="student-term-section">
+                <h2>Unscheduled</h2>
+                <div class="student-course-grid" aria-label="Unscheduled courses">
+                    @foreach (var course in unplacedCourses)
+                    {
+                        @CourseCard(course)
+                    }
+                </div>
+            </section>
+        }
+    }
+    else
+    {
+        <section class="student-course-grid" aria-label="Student courses">
+            @foreach (var course in dashboard.Courses)
+            {
+                @CourseCard(course)
+            }
+        </section>
+    }
+
+    <section class="student-track-card">
+        <div>
+            <h2>Stay on track</h2>
+            <p>Keep making progress each week. Small steps lead to clear records.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="@RouteBase()">View my plan</a>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentCourseDashboard? dashboard;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.ListCoursesAsync(
+            Session.CurrentUser,
+            StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded && result.Value is not null)
+        {
+            dashboard = result.Value;
+            messages.Clear();
+            if (StudentId == Guid.Empty)
+            {
+                Navigation.NavigateTo($"/student/{dashboard.StudentId}", replace: true);
+            }
+        }
+        else
+        {
+            dashboard = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private IEnumerable<StudentCourseCard> CoursesForTerm(string termName)
+    {
+        return dashboard?.Courses.Where(course =>
+            course.TermNames.Any(name => string.Equals(name, termName, StringComparison.OrdinalIgnoreCase))) ?? [];
+    }
+
+    private RenderFragment CourseCard(StudentCourseCard course) => builder =>
+    {
+        var courseHref = $"student/{course.StudentId}/courses/{course.CourseId}";
+        var syllabusHref = $"{RouteBase(course.StudentId)}/courses/{course.CourseId}/syllabus";
+        courseHref = $"{RouteBase(course.StudentId)}/courses/{course.CourseId}";
+        builder.OpenElement(0, "article");
+        builder.AddAttribute(1, "class", "student-course-card");
+
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "hm-icon-tile");
+        builder.AddAttribute(4, "aria-hidden", "true");
+        builder.OpenElement(5, "img");
+        builder.AddAttribute(6, "class", "hm-icon-lg");
+        builder.AddAttribute(7, "src", $"icons/hm/svg/currentcolor/{CourseIcon(course.Title)}.svg");
+        builder.AddAttribute(8, "alt", "");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(9, "div");
+        builder.OpenElement(10, "div");
+        builder.AddAttribute(11, "class", "student-card-heading");
+        builder.OpenElement(12, "h3");
+        builder.AddContent(13, course.Title);
+        builder.CloseElement();
+        builder.OpenElement(14, "span");
+        builder.AddAttribute(15, "class", "student-grade-pill");
+        builder.AddContent(16, course.CurrentGrade);
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(17, "p");
+        builder.AddAttribute(18, "class", "student-card-description");
+        builder.AddContent(19, course.Description);
+        builder.CloseElement();
+
+        builder.OpenElement(20, "dl");
+        builder.AddAttribute(21, "class", "student-card-facts");
+        Fact(builder, 22, "Length", DurationText(course.Duration));
+        Fact(builder, 28, "Credits", course.PlannedCreditValue.ToString("0.0"));
+        Fact(builder, 34, "Modules", $"{course.CompletedModuleCount} / {course.ModuleCount}");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(40, "div");
+        builder.AddAttribute(41, "class", "student-card-actions");
+        builder.OpenElement(42, "a");
+        builder.AddAttribute(43, "class", IsFirstCourse(course) ? "btn btn-primary" : "btn btn-outline-primary");
+        builder.AddAttribute(44, "href", courseHref);
+        builder.AddContent(45, IsFirstCourse(course) ? "Continue" : "Open course");
+        builder.CloseElement();
+        builder.OpenElement(46, "a");
+        builder.AddAttribute(47, "class", "btn btn-link");
+        builder.AddAttribute(48, "href", syllabusHref);
+        builder.AddContent(49, "View syllabus");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private static void Fact(RenderTreeBuilder builder, int sequence, string label, string value)
+    {
+        builder.OpenElement(sequence, "div");
+        builder.OpenElement(sequence + 1, "dt");
+        builder.AddContent(sequence + 2, label);
+        builder.CloseElement();
+        builder.OpenElement(sequence + 3, "dd");
+        builder.AddContent(sequence + 4, value);
+        builder.CloseElement();
+        builder.CloseElement();
+    }
+
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
+    }
+
+    private string RouteBase(Guid? studentId = null)
+    {
+        var targetStudentId = studentId ?? dashboard?.StudentId ?? StudentId;
+        return $"student/{targetStudentId}";
+    }
+
+    private bool IsFirstCourse(StudentCourseCard course)
+    {
+        return dashboard?.Courses.FirstOrDefault()?.CourseId == course.CourseId;
+    }
+
+    private static string CreditTotal(IEnumerable<StudentCourseCard> courses)
+    {
+        return courses.Sum(course => course.PlannedCreditValue).ToString("0.0");
+    }
+
+    private static int CompletedModuleTotal(IEnumerable<StudentCourseCard> courses)
+    {
+        return courses.Sum(course => course.CompletedModuleCount);
+    }
+
+    private static int ModuleTotal(IEnumerable<StudentCourseCard> courses)
+    {
+        return courses.Sum(course => course.ModuleCount);
+    }
+
+    private static string CourseIcon(string title)
+    {
+        if (title.Contains("English", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Literature", StringComparison.OrdinalIgnoreCase))
+        {
+            return "course-ela-open-book";
+        }
+
+        if (title.Contains("History", StringComparison.OrdinalIgnoreCase))
+        {
+            return "course-history-usa";
+        }
+
+        if (title.Contains("Government", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Civics", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Economics", StringComparison.OrdinalIgnoreCase))
+        {
+            return "course-civics-columns";
+        }
+
+        if (title.Contains("Environment", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Water", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Ecology", StringComparison.OrdinalIgnoreCase))
+        {
+            return "course-environment-water-drop";
+        }
+
+        if (title.Contains("Statistics", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("Algebra", StringComparison.OrdinalIgnoreCase))
+        {
+            return "course-statistics-bars";
+        }
+
+        return "course-agriculture-plant";
+    }
+}

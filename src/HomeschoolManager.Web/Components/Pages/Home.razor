@@ -1,25 +1,164 @@
 @page "/"
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Application.Setup
+@using HomeschoolManager.Domain.Curriculum
 @using HomeschoolManager.Web.Services
 @inject NavigationManager Navigation
 @inject SessionState Session
+@inject SetupService SetupService
+@inject CourseService CourseService
 
 <PageTitle>Home</PageTitle>
 
-@if (Session.IsAuthenticated)
+@if (Session.IsParentAdmin)
 {
-    <h1>Homeschool Manager</h1>
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/brand-shield-book.svg" alt="" />
+            </span>
+            <h1>Homeschool Manager</h1>
+            <p class="lead">Local, parent-owned records for planning, evidence, grades, credits, and family-issued credentials.</p>
+        </div>
+    </div>
 
-    <p class="lead">Local, parent-owned records for planning, evidence, grades, credits, and family-issued credentials.</p>
+    @if (isLoading)
+    {
+        <section class="status-panel">
+            <h2>Loading dashboard</h2>
+            <p>Gathering students, active courses, and planned learning records.</p>
+        </section>
+    }
+    else
+    {
+        <section class="dashboard-metrics" aria-label="Parent dashboard summary">
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/student-banner-people.svg" alt="" aria-hidden="true" />
+                <span>Students</span>
+                <strong>@students.Count</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/nav-courses-book.svg" alt="" aria-hidden="true" />
+                <span>Active courses</span>
+                <strong>@totalCourses</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/metric-credit-award.svg" alt="" aria-hidden="true" />
+                <span>Planned credits</span>
+                <strong>@totalCredits.ToString("0.0")</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/metric-modules-cube.svg" alt="" aria-hidden="true" />
+                <span>Modules marked complete</span>
+                <strong>@completedModules / @totalModules</strong>
+            </article>
+        </section>
 
-    <section class="status-panel">
-        <h2>First setup slice</h2>
-        <p>Complete household, school, student, and school-year setup.</p>
-        <p>The Michigan checklist shows selected subject-area coverage areas. It does not certify legal compliance.</p>
-    </section>
+        <div class="dashboard-grid">
+            <main class="dashboard-main">
+                <section class="hm-card dashboard-card">
+                    <div class="section-heading-row">
+                        <h2>Students and assigned work</h2>
+                        <a class="btn btn-outline-primary btn-sm" href="setup">Manage setup</a>
+                    </div>
+                    @if (students.Count == 0)
+                    {
+                        <p>No students have been configured yet. Add a child in Setup to begin assigning courses.</p>
+                    }
+                    else
+                    {
+                        <div class="dashboard-student-list">
+                            @foreach (var row in studentRows)
+                            {
+                                <article class="dashboard-student-row">
+                                    <div class="dashboard-student-identity">
+                                        <span class="signed-in-avatar" aria-hidden="true">@Initials(row.DisplayName)</span>
+                                        <div>
+                                            <h3>@row.DisplayName</h3>
+                                            <p>Grade @row.GradeLevel</p>
+                                        </div>
+                                    </div>
+                                    <dl class="student-detail-facts">
+                                        <div>
+                                            <dt>Courses</dt>
+                                            <dd>@row.CourseCount</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Credits</dt>
+                                            <dd>@row.PlannedCredits.ToString("0.0")</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Modules</dt>
+                                            <dd>@row.CompletedModules / @row.ModuleCount</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Lessons</dt>
+                                            <dd>@row.LessonCount</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Assignments</dt>
+                                            <dd>@row.AssignmentCount</dd>
+                                        </div>
+                                    </dl>
+                                    <a class="btn btn-outline-primary btn-sm" href="@($"student-preview/{row.StudentId}")">Preview work</a>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+            </main>
+
+            <aside class="dashboard-support">
+                <section class="hm-card dashboard-card">
+                    <h2>Setup status</h2>
+                    @if (summary is null)
+                    {
+                        <p>Setup status is not available yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="dashboard-check-list">
+                            <li class="@StatusClass(summary.HasHousehold)">Household: @Display(summary.HasHousehold, summary.HouseholdName)</li>
+                            <li class="@StatusClass(summary.HasSchoolProfile)">School profile: @Display(summary.HasSchoolProfile, summary.SchoolName)</li>
+                            <li class="@StatusClass(summary.StudentCount > 0)">Students: @(summary.StudentCount == 0 ? "Not set" : $"{summary.StudentCount} configured")</li>
+                            <li class="@StatusClass(summary.HasSchoolYear)">School year: @Display(summary.HasSchoolYear, summary.SchoolYearName)</li>
+                        </ul>
+                    }
+                </section>
+
+                <section class="hm-card dashboard-card">
+                    <h2>Records posture</h2>
+                    <p>Course plans, module outlines, lessons, and assignments are available for parent review. Student submissions are separate from this preview.</p>
+                    <p>The Michigan checklist shows selected subject-area coverage areas. It does not certify legal compliance.</p>
+                    <a class="btn btn-outline-primary btn-sm" href="requirements">View requirements</a>
+                </section>
+            </aside>
+        </div>
+    }
 }
 
 @code {
+    private bool isLoading = true;
+    private SetupSummary? summary;
+    private IReadOnlyList<StudentSetupItem> students = [];
+    private IReadOnlyList<StudentDashboardRow> studentRows = [];
+    private int totalCourses;
+    private decimal totalCredits;
+    private int totalModules;
+    private int completedModules;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsParentAdmin)
+        {
+            isLoading = false;
+            return;
+        }
+
+        await LoadDashboardAsync();
+    }
+
     protected override void OnAfterRender(bool firstRender)
     {
         if (!firstRender)
@@ -38,4 +177,72 @@
             Navigation.NavigateTo("/student", replace: true);
         }
     }
+
+    private async Task LoadDashboardAsync()
+    {
+        summary = await SetupService.GetSummaryAsync();
+        students = await SetupService.ListStudentsAsync();
+
+        var rows = new List<StudentDashboardRow>();
+        foreach (var student in students)
+        {
+            var courses = await CourseService.ListCoursesAsync(student.Id);
+            var details = new List<HomeschoolManager.Application.Courses.CourseDetail>();
+            foreach (var course in courses)
+            {
+                var detail = await CourseService.GetCourseDetailAsync(course.Id);
+                if (detail is not null)
+                {
+                    details.Add(detail);
+                }
+            }
+
+            rows.Add(new StudentDashboardRow(
+                student.Id,
+                student.DisplayName,
+                student.GradeLevel,
+                courses.Count,
+                courses.Sum(course => course.PlannedCreditValue),
+                details.Sum(detail => detail.Modules.Count),
+                details.Sum(detail => detail.Modules.Count(module => module.Status == ModuleStatus.Complete)),
+                details.Sum(detail => detail.Modules.Sum(module => module.Lessons.Count)),
+                details.Sum(detail => detail.Modules.Sum(module => module.Assignments.Count))));
+        }
+
+        studentRows = rows;
+        totalCourses = rows.Sum(row => row.CourseCount);
+        totalCredits = rows.Sum(row => row.PlannedCredits);
+        totalModules = rows.Sum(row => row.ModuleCount);
+        completedModules = rows.Sum(row => row.CompletedModules);
+        isLoading = false;
+    }
+
+    private static string Display(bool configured, string value)
+    {
+        return configured && !string.IsNullOrWhiteSpace(value) ? value : "Not set";
+    }
+
+    private static string StatusClass(bool complete)
+    {
+        return complete ? "dashboard-check-complete" : "dashboard-check-pending";
+    }
+
+    private static string Initials(string displayName)
+    {
+        var parts = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0
+            ? "?"
+            : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+    }
+
+    private sealed record StudentDashboardRow(
+        Guid StudentId,
+        string DisplayName,
+        int GradeLevel,
+        int CourseCount,
+        decimal PlannedCredits,
+        int ModuleCount,
+        int CompletedModules,
+        int LessonCount,
+        int AssignmentCount);
 }

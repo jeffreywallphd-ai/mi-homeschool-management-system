@@ -11,7 +11,10 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Homeschool Manager</a>
+        <a class="navbar-brand" href="">
+            <img class="hm-nav-brand-icon" src="icons/hm/svg/currentcolor/brand-shield-book.svg" alt="" aria-hidden="true" />
+            <span>Homeschool Manager</span>
+        </a>
     </div>
 </div>
 
@@ -23,7 +26,7 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="login">
-                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Login
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/profile-user.svg" alt="" aria-hidden="true" /> Login
                 </NavLink>
             </div>
         }
@@ -31,7 +34,7 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="student">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Student Home
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-home.svg" alt="" aria-hidden="true" /> Student Home
                 </NavLink>
             </div>
         }
@@ -39,31 +42,31 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-home.svg" alt="" aria-hidden="true" /> Home
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="setup">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Setup
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-setup-gear.svg" alt="" aria-hidden="true" /> Setup
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="requirements">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Requirements
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-requirements-clipboard.svg" alt="" aria-hidden="true" /> Requirements
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="courses">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Courses
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" aria-hidden="true" /> Courses
                 </NavLink>
             </div>
 
             <details class="nav-item px-3 student-preview-nav">
                 <summary class="nav-link">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Student Preview
+                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-student-preview-eye.svg" alt="" aria-hidden="true" /> Student Preview
                 </summary>
                 @if (students.Count == 0)
                 {
@@ -73,7 +76,7 @@
                 {
                     @foreach (var student in students)
                     {
-                        <NavLink class="nav-link course-subnav-link" href="@($"student/{student.Id}")">
+                        <NavLink class="nav-link course-subnav-link" href="@($"student-preview/{student.Id}")">
                             @student.DisplayName
                         </NavLink>
                     }
@@ -98,6 +101,13 @@
                     }
                 </div>
             }
+
+            <div class="michigan-plan-card mx-3">
+                <img class="hm-icon" src="icons/hm/svg/currentcolor/nav-michigan-plans-crown.svg" alt="" aria-hidden="true" />
+                <strong>Michigan Plans</strong>
+                <span>Manage curriculum plans and requirement mappings.</span>
+                <NavLink class="michigan-plan-link" href="setup">Go to Setup</NavLink>
+            </div>
         }
     </nav>
 </div>

@@ -1,5 +1,4 @@
-@page "/student/courses/{CourseId:guid}"
-@page "/student/{StudentId:guid}/courses/{CourseId:guid}"
+@page "/student-preview/{StudentId:guid}/courses/{CourseId:guid}"
 @rendermode InteractiveServer
 @using HomeschoolManager.Application.Courses
 @using HomeschoolManager.Domain.Curriculum
@@ -27,6 +26,9 @@ else
 {
     <div class="page-header-bar">
         <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" />
+            </span>
             <h1>@course.Title</h1>
             <p>@DurationText(course.Duration), @course.PlannedCreditValue.ToString("0.0") credits</p>
         </div>
@@ -59,7 +61,7 @@ else
                         }
                     </ul>
                 }
-                <a class="btn btn-primary mt-3" href="@($"student/{course.StudentId}/courses/{CourseId}/syllabus")">Open syllabus</a>
+                <a class="btn btn-primary mt-3" href="@($"{RouteBase(course.StudentId)}/courses/{CourseId}/syllabus")">Open syllabus</a>
             </section>
         </main>
 
@@ -179,7 +181,7 @@ else
         {
             builder.OpenElement(sequence++, "li");
             builder.OpenElement(sequence++, "a");
-            builder.AddAttribute(sequence++, "href", $"student/{course?.StudentId}/courses/{CourseId}/modules/{module.ModuleId}");
+            builder.AddAttribute(sequence++, "href", $"{RouteBase(course?.StudentId)}/courses/{CourseId}/modules/{module.ModuleId}");
             builder.OpenElement(sequence++, "strong");
             builder.AddContent(sequence++, module.Title);
             builder.CloseElement();
@@ -218,5 +220,22 @@ else
             ModuleStatus.Complete => "Complete",
             _ => status.ToString()
         };
+    }
+
+    private string RouteBase(Guid? studentId = null)
+    {
+        var targetStudentId = studentId ?? course?.StudentId ?? StudentId;
+        return IsPreviewRoute()
+            ? $"student-preview/{targetStudentId}"
+            : $"student/{targetStudentId}";
+    }
+
+    private bool IsPreviewRoute()
+    {
+        return Navigation
+            .ToAbsoluteUri(Navigation.Uri)
+            .AbsolutePath
+            .TrimStart('/')
+            .StartsWith("student-preview", StringComparison.OrdinalIgnoreCase);
     }
 }

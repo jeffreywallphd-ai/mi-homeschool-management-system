@@ -16,6 +16,16 @@ The parent/admin login may use Windows credentials or a similarly simple local a
 
 The student may have a simple PIN-based access flow for student-facing work.
 
+The student portal should be served from a separate web build and local listener from the parent/admin area. Development
+uses `HomeschoolManager.Web` for parent/admin on `127.0.0.1:5171` and `HomeschoolManager.StudentPortal.Web` for student
+access on port `5172`, with the student listener bound for same Wi-Fi access. The parent/admin build may redirect true
+student routes to the student portal, and the student build should not serve parent/admin setup, course editing,
+requirement mapping, records, backup/restore, or admin routes.
+
+Parent/admin may have a student preview route inside the admin build. This preview is for reviewing the course, module,
+lesson, and assignment material assigned to a student. It is distinct from the live student portal, runs in the
+parent/admin build, and should not expose student submissions or other student-owned submission activity.
+
 Browser refresh should restore the last selected local role when possible. V1 may keep this as process-wide local session state because the app is designed for one parent-owned PC, not multi-family concurrent hosting. This is local usability state only; application services remain responsible for parent/admin authorization on every mutation.
 
 When no local session is active, startup should route to the login page and the left navigation should expose only Login.

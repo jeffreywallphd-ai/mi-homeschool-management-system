@@ -17,6 +17,9 @@
 
 <div class="page-header-bar">
     <div>
+        <span class="hm-icon-tile" aria-hidden="true">
+            <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" />
+        </span>
         <h1>Courses</h1>
         <p>Courses are the main planning unit for a selected student's records, descriptions, curriculum plans, and Michigan requirement mappings.</p>
     </div>
@@ -160,7 +163,14 @@
                                 <td class="select-cell" @onclick:stopPropagation="true">
                                     <input class="form-check-input" type="checkbox" checked="@selectedCourseIds.Contains(course.Id)" @onchange="eventArgs => ToggleSelectedCourse(course.Id, eventArgs)" aria-label="@($"Select {course.Title}")" />
                                 </td>
-                                <td>@course.Title</td>
+                                <td>
+                                    <span class="course-title-cell">
+                                        <span class="hm-icon-tile hm-icon-tile-sm" aria-hidden="true">
+                                            <img class="hm-icon-sm" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" />
+                                        </span>
+                                        <span>@course.Title</span>
+                                    </span>
+                                </td>
                                 <td>@DisplayDescription(course.Description)</td>
                                 <td>@DurationText(course.Duration)</td>
                                 <td class="credits-cell">@CreditText(course.PlannedCreditValue)</td>

@@ -6,7 +6,14 @@
 <div class="header-actions">
     @if (Session.IsAuthenticated)
     {
-        <span class="signed-in-label">@Session.CurrentUser?.DisplayName</span>
+        <span class="header-notification" aria-hidden="true">
+            <img class="hm-icon-sm" src="icons/hm/svg/purple/utility-bell.svg" alt="" />
+        </span>
+        <span class="signed-in-avatar" aria-hidden="true">@Initials()</span>
+        <span class="signed-in-label">
+            <strong>@Session.CurrentUser?.DisplayName</strong>
+            <small>@RoleText()</small>
+        </span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="SignOut">Sign out</button>
     }
 </div>
@@ -20,6 +27,23 @@
     private void SignOut()
     {
         Session.SignOut();
+    }
+
+    private string Initials()
+    {
+        var displayName = Session.CurrentUser?.DisplayName ?? "";
+        var parts = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return "?";
+        }
+
+        return string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+    }
+
+    private string RoleText()
+    {
+        return Session.IsStudent ? "Student" : "Parent / Admin";
     }
 
     private void OnSessionChanged()

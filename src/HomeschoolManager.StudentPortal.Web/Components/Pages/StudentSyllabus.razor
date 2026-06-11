@@ -1,0 +1,279 @@
+@page "/student/courses/{CourseId:guid}/syllabus"
+@page "/student/{StudentId:guid}/courses/{CourseId:guid}/syllabus"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.StudentPortal.Web.Services
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(syllabus is null ? "Course Syllabus" : $"{syllabus.Title} Syllabus")</PageTitle>
+
+@if (!canView)
+{
+    <h1>Course Syllabus</h1>
+    <div class="alert alert-warning">Sign in to view this syllabus.</div>
+}
+else if (syllabus is null)
+{
+    <h1>Syllabus not found</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/content-syllabus.svg" alt="" />
+            </span>
+            <h1>@syllabus.Title Syllabus</h1>
+            <p>@DurationText(syllabus.Duration), @syllabus.PlannedCreditValue.ToString("0.0") credits</p>
+        </div>
+        <a class="btn btn-outline-primary student-header-action" href="@($"{RouteBase(syllabus.StudentId)}/courses/{CourseId}")">Back to course</a>
+    </div>
+
+    <article class="student-syllabus">
+        <section class="form-section">
+            <h2>Course Purpose</h2>
+            <p>@syllabus.Description</p>
+        </section>
+
+        <div class="student-page-grid student-syllabus-grid">
+            <main class="student-main-column">
+                <section class="form-section">
+                    <h2>Learning Objectives</h2>
+                    @StudentList(syllabus.LearningObjectives, "No learning objectives have been added yet.")
+                </section>
+
+                <section class="form-section">
+                    <h2>Instructional Methods</h2>
+                    @TextOrPlaceholder(syllabus.InstructionalMethods)
+                </section>
+
+                <section class="form-section">
+                    <h2>Assessment and Grading</h2>
+                    <h3>Assessment methods</h3>
+                    @TextOrPlaceholder(syllabus.AssessmentMethods)
+                    <h3>Grading basis</h3>
+                    @TextOrPlaceholder(syllabus.GradingBasis)
+                </section>
+            </main>
+
+            <aside class="student-support-column">
+                <section class="support-card">
+                    <h2>Texts and Resources</h2>
+                    @if (syllabus.TextsAndResources.Count == 0)
+                    {
+                        <p>No texts or resources have been added yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="student-readable-list">
+                            @foreach (var resource in syllabus.TextsAndResources)
+                            {
+                                <li>
+                                    @if (string.IsNullOrWhiteSpace(resource.Link))
+                                    {
+                                        <span>@resource.Name</span>
+                                    }
+                                    else
+                                    {
+                                        <a href="@resource.Link" target="_blank" rel="noopener">@resource.Name</a>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                <section class="support-card">
+                    <h2>Module Outline</h2>
+                    @if (syllabus.Modules.Count == 0)
+                    {
+                        <p>No modules have been added yet.</p>
+                    }
+                    else
+                    {
+                        @if (syllabus.TermNames.Count > 0)
+                        {
+                            @foreach (var termName in syllabus.TermNames)
+                            {
+                                var modules = ModulesForTerm(termName).ToArray();
+                                <div class="student-module-term-group">
+                                    <h3>@termName</h3>
+                                    @if (modules.Length == 0)
+                                    {
+                                        <p>No modules are currently placed in this semester.</p>
+                                    }
+                                    else
+                                    {
+                                        @ModuleList(modules)
+                                    }
+                                </div>
+                            }
+
+                            var unplacedModules = syllabus.Modules
+                                .Where(module => string.IsNullOrWhiteSpace(module.TermName))
+                                .ToArray();
+                            @if (unplacedModules.Length > 0)
+                            {
+                                <div class="student-module-term-group">
+                                    <h3>Unscheduled</h3>
+                                    @ModuleList(unplacedModules)
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            @ModuleList(syllabus.Modules)
+                        }
+                    }
+                </section>
+            </aside>
+        </div>
+
+        <section class="form-section">
+            <h2>Course Plan</h2>
+            <h3>Goals</h3>
+            @TextOrPlaceholder(syllabus.Goals)
+            <h3>Planned sequence</h3>
+            @TextOrPlaceholder(syllabus.PlannedSequence)
+        </section>
+    </article>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentCourseSyllabus? syllabus;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.GetSyllabusAsync(
+            Session.CurrentUser,
+            CourseId,
+            StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded)
+        {
+            syllabus = result.Value;
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private IEnumerable<StudentModuleLink> ModulesForTerm(string termName)
+    {
+        return syllabus?.Modules.Where(module =>
+            string.Equals(module.TermName, termName, StringComparison.OrdinalIgnoreCase)) ?? [];
+    }
+
+    private RenderFragment ModuleList(IReadOnlyList<StudentModuleLink> modules) => builder =>
+    {
+        builder.OpenElement(0, "ol");
+        builder.AddAttribute(1, "class", "student-module-links");
+        var sequence = 2;
+        foreach (var module in modules)
+        {
+            builder.OpenElement(sequence++, "li");
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "href", $"{RouteBase(syllabus?.StudentId)}/courses/{CourseId}/modules/{module.ModuleId}");
+            builder.OpenElement(sequence++, "strong");
+            builder.AddContent(sequence++, module.Title);
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "span");
+            builder.AddContent(sequence++, ModuleMeta(module));
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private static string DurationText(CourseDuration duration)
+    {
+        return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
+    }
+
+    private static string ModuleMeta(StudentModuleLink module)
+    {
+        var parts = new List<string> { StatusText(module.Status) };
+        if (!string.IsNullOrWhiteSpace(module.TermName))
+        {
+            parts.Add(module.TermName);
+        }
+
+        return string.Join(" | ", parts);
+    }
+
+    private static string StatusText(ModuleStatus status)
+    {
+        return status switch
+        {
+            ModuleStatus.Planned => "Planned",
+            ModuleStatus.Active => "Active",
+            ModuleStatus.Complete => "Complete",
+            _ => status.ToString()
+        };
+    }
+
+    private RenderFragment StudentList(IReadOnlyList<string> items, string emptyMessage) => builder =>
+    {
+        if (items.Count == 0)
+        {
+            builder.OpenElement(0, "p");
+            builder.AddContent(1, emptyMessage);
+            builder.CloseElement();
+            return;
+        }
+
+        builder.OpenElement(2, "ul");
+        builder.AddAttribute(3, "class", "student-readable-list");
+        var sequence = 4;
+        foreach (var item in items)
+        {
+            builder.OpenElement(sequence++, "li");
+            builder.AddContent(sequence++, item);
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private RenderFragment TextOrPlaceholder(string value) => builder =>
+    {
+        builder.OpenElement(0, "p");
+        builder.AddContent(1, string.IsNullOrWhiteSpace(value) ? "Not added yet." : value);
+        builder.CloseElement();
+    };
+
+    private string RouteBase(Guid? studentId = null)
+    {
+        var targetStudentId = studentId ?? syllabus?.StudentId ?? StudentId;
+        return $"student/{targetStudentId}";
+    }
+}

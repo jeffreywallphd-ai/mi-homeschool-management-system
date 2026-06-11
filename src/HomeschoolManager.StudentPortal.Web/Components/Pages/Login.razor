@@ -1,0 +1,59 @@
+@page "/login"
+@rendermode InteractiveServer
+@using HomeschoolManager.Infrastructure.Access
+@using HomeschoolManager.StudentPortal.Web.Services
+@inject LocalAccessService AccessService
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Student Login</PageTitle>
+
+<div class="page-header-bar">
+    <div>
+        <span class="hm-icon-tile" aria-hidden="true">
+            <img class="hm-icon" src="icons/hm/svg/currentcolor/profile-user.svg" alt="" />
+        </span>
+        <h1>Student Login</h1>
+        <p>Use the student PIN to open the course portal.</p>
+    </div>
+</div>
+
+@if (Session.IsAuthenticated)
+{
+    <div class="alert alert-success">
+        Signed in as @Session.CurrentUser?.DisplayName.
+    </div>
+    <a class="btn btn-primary" href="student">Open student portal</a>
+}
+else
+{
+    <section class="form-section">
+        <h2>Student PIN</h2>
+        <label for="student-pin" class="form-label">PIN</label>
+        <input id="student-pin" class="form-control" type="password" @bind="studentPin" />
+        <button class="btn btn-primary mt-2" @onclick="SignInStudent">Open student portal</button>
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="validation-message">@error</div>
+        }
+    </section>
+}
+
+@code {
+    private string studentPin = "";
+    private string error = "";
+
+    private void SignInStudent()
+    {
+        var user = AccessService.CreateStudentSession(studentPin);
+        if (user is null)
+        {
+            error = "The student PIN was not recognized.";
+            return;
+        }
+
+        Session.SignIn(user);
+        error = "";
+        Navigation.NavigateTo("/student");
+    }
+}

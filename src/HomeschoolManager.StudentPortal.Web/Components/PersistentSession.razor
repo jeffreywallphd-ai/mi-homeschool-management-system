@@ -1,0 +1,64 @@
+@rendermode InteractiveServer
+@using HomeschoolManager.Domain.Access
+@using HomeschoolManager.StudentPortal.Web.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject SessionState Session
+
+@implements IDisposable
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.Changed += OnSessionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        var stored = await JS.InvokeAsync<StoredSession?>("homeschoolSession.load");
+        if (stored?.Role == nameof(UserRole.Student))
+        {
+            Session.SignIn(UserContext.Student(stored.DisplayName));
+        }
+        else if (stored is not null)
+        {
+            await JS.InvokeVoidAsync("homeschoolSession.clear");
+        }
+    }
+
+    private async void OnSessionChanged()
+    {
+        try
+        {
+            if (Session.CurrentUser?.Role == UserRole.Student)
+            {
+                await JS.InvokeVoidAsync(
+                    "homeschoolSession.save",
+                    Session.CurrentUser.Role.ToString(),
+                    Session.CurrentUser.DisplayName);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("homeschoolSession.clear");
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is unavailable during prerender.
+        }
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+    }
+
+    private sealed record StoredSession(string Role, string DisplayName);
+}

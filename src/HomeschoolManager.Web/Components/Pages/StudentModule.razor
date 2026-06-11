@@ -1,5 +1,4 @@
-@page "/student/courses/{CourseId:guid}/modules/{ModuleId:guid}"
-@page "/student/{StudentId:guid}/courses/{CourseId:guid}/modules/{ModuleId:guid}"
+@page "/student-preview/{StudentId:guid}/courses/{CourseId:guid}/modules/{ModuleId:guid}"
 @rendermode InteractiveServer
 @using HomeschoolManager.Application.Courses
 @using HomeschoolManager.Domain.Curriculum
@@ -28,10 +27,13 @@ else
 {
     <div class="page-header-bar">
         <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-lessons-book.svg" alt="" />
+            </span>
             <h1>@module.SequenceOrder. @module.Title</h1>
             <p>@module.CourseTitle</p>
         </div>
-        <a class="btn btn-outline-primary student-header-action" href="@($"student/{module.StudentId}/courses/{CourseId}")">Back to course</a>
+        <a class="btn btn-outline-primary student-header-action" href="@($"{RouteBase(module.StudentId)}/courses/{CourseId}")">Back to course</a>
     </div>
 
     @if (Session.IsParentAdmin)
@@ -482,11 +484,11 @@ else
             <nav class="student-module-pager" aria-label="Module navigation">
                 @if (module.PreviousModuleId.HasValue)
                 {
-                    <a class="btn btn-outline-secondary" href="@($"student/{module.StudentId}/courses/{CourseId}/modules/{module.PreviousModuleId.Value}")">Previous module</a>
+                    <a class="btn btn-outline-secondary" href="@($"{RouteBase(module.StudentId)}/courses/{CourseId}/modules/{module.PreviousModuleId.Value}")">Previous module</a>
                 }
                 @if (module.NextModuleId.HasValue)
                 {
-                    <a class="btn btn-primary" href="@($"student/{module.StudentId}/courses/{CourseId}/modules/{module.NextModuleId.Value}")">Next module</a>
+                    <a class="btn btn-primary" href="@($"{RouteBase(module.StudentId)}/courses/{CourseId}/modules/{module.NextModuleId.Value}")">Next module</a>
                 }
             </nav>
         </aside>
@@ -699,5 +701,22 @@ else
         }
 
         return (min ?? max)?.ToString() ?? "";
+    }
+
+    private string RouteBase(Guid? studentId = null)
+    {
+        var targetStudentId = studentId ?? module?.StudentId ?? StudentId;
+        return IsPreviewRoute()
+            ? $"student-preview/{targetStudentId}"
+            : $"student/{targetStudentId}";
+    }
+
+    private bool IsPreviewRoute()
+    {
+        return Navigation
+            .ToAbsoluteUri(Navigation.Uri)
+            .AbsolutePath
+            .TrimStart('/')
+            .StartsWith("student-preview", StringComparison.OrdinalIgnoreCase);
     }
 }

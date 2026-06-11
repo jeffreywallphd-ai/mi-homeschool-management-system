@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D575896A-CE8
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Web", "src\HomeschoolManager.Web\HomeschoolManager.Web.csproj", "{26E82016-BEF0-41DF-B182-65BD26375547}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.StudentPortal.Web", "src\HomeschoolManager.StudentPortal.Web\HomeschoolManager.StudentPortal.Web.csproj", "{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Domain", "src\HomeschoolManager.Domain\HomeschoolManager.Domain.csproj", "{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Application", "src\HomeschoolManager.Application\HomeschoolManager.Application.csproj", "{37EFD399-8783-451F-BA88-3406EBF7FAB1}"
@@ -28,6 +30,10 @@ Global
 		{26E82016-BEF0-41DF-B182-65BD26375547}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26E82016-BEF0-41DF-B182-65BD26375547}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{26E82016-BEF0-41DF-B182-65BD26375547}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -47,6 +53,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{26E82016-BEF0-41DF-B182-65BD26375547} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{8A6E127A-5BF7-46B4-AF0E-911C6AE1E394} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 		{A29E4AC0-0788-448A-8E99-DEEF41ED80D9} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 		{37EFD399-8783-451F-BA88-3406EBF7FAB1} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 		{412E240B-0FED-4296-BB59-7C1123417F2F} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
