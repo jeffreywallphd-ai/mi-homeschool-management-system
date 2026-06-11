@@ -39,6 +39,7 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Pack defaults include course description details and curriculum plan fields.
 - Courses own learning modules as instructional topic units; courses remain transcript-facing.
 - Modules include instructions, itemized objectives, source-backed lessons, source-backed assignments, status, optional term placement, and assignment/evidence notes.
+- Courses, modules, and lessons may carry completion status for progress tracking; status must not award credit or create grades.
 - Modules do not include goals; module objectives are sufficient.
 - Modules do not expose major topics in the UI or pack contract.
 - Module objectives may optionally link to course objectives; pack defaults should repeatedly support each course objective.
@@ -59,6 +60,9 @@ Purpose: Course planning, lessons, instruction, activity, reading, project, and 
 - Assignments should carry enough structure to guide and review work: summary, goal, deliverables, submission formats, assignment resources, workflow steps, assessment skills, checklist, portfolio connection, rubric, revision policy, completion criteria, reflection prompts, evidence requirements, and scoring plan.
 - Assignment variants use instructional method profiles, including a hybrid/default option and digital profile.
 - Assignment status and planned points are planning fields, not grades or credit awards.
+- Assignment attempt policy controls student submission workflow only.
+- Assignment submission structure may define a single submission or a multi-draft workflow across linked lessons.
+- Multi-draft assignment draft count defines lesson draft slots; the final linked draft is the final assignment submission.
 - Assignment rubrics, scoring, completion, and evidence requirements are planning support until a parent/admin records an evaluation or evidence item.
 - A `.assignmentpack` is a module-level JSON artifact with one or more assignments; importing appends assignments to the selected module.
 - Assignment pack lesson links use lesson source ids and lesson titles; missing lesson links should not block import.

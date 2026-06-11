@@ -234,6 +234,32 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PortfolioDraftItem>> GetPortfolioDraftItemsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.PortfolioDraftItems
+            .OrderBy(item => item.SortOrder)
+            .ThenByDescending(item => item.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<PortfolioDraftItem?> GetPortfolioDraftItemAsync(Guid portfolioDraftItemId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.PortfolioDraftItems.FirstOrDefault(item => item.Id == portfolioDraftItemId);
+    }
+
+    public async Task SavePortfolioDraftItemAsync(PortfolioDraftItem item, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.PortfolioDraftItems.RemoveAll(existing => existing.Id == item.Id);
+                document.PortfolioDraftItems.Add(item);
+            },
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(cancellationToken);

@@ -48,6 +48,8 @@ obj/
 publish/
 artifacts/
 .verify-output/
+.build/
+.build-tmp/
 tools/
 TestResults/
 coverage/

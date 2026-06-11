@@ -25,9 +25,13 @@ public sealed record AssignmentSubmissionSummary(
     DateTimeOffset SubmittedAtUtc,
     DateTimeOffset? ReturnedAtUtc,
     DateTimeOffset? AcceptedAtUtc,
+    DateTimeOffset? ClearedAtUtc,
     string ParentReviewNotes,
     bool PortfolioCandidate,
-    int AttachmentCount);
+    int AttachmentCount,
+    int DraftNumber,
+    int DraftCount,
+    bool IsFinalDraft);
 
 public sealed record SubmissionReviewDetail(
     Guid SubmissionId,
@@ -46,8 +50,12 @@ public sealed record SubmissionReviewDetail(
     DateTimeOffset SubmittedAtUtc,
     DateTimeOffset? ReturnedAtUtc,
     DateTimeOffset? AcceptedAtUtc,
+    DateTimeOffset? ClearedAtUtc,
     string ParentReviewNotes,
     bool PortfolioCandidate,
+    int DraftNumber,
+    int DraftCount,
+    bool IsFinalDraft,
     IReadOnlyList<SubmissionAttachmentView> Attachments,
     EvidenceRecordView? Evidence);
 

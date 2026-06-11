@@ -10,5 +10,14 @@ public interface ISubmissionFileStore
         AssignmentAttachmentUpload attachment,
         CancellationToken cancellationToken = default);
 
+    Task<StoredSubmissionFileContent?> ReadStoredFileAsync(
+        StoredFileReference file,
+        CancellationToken cancellationToken = default);
+
     Task DeleteStoredFileAsync(StoredFileReference file, CancellationToken cancellationToken = default);
 }
+
+public sealed record StoredSubmissionFileContent(
+    string OriginalFileName,
+    string ContentType,
+    byte[] Content);

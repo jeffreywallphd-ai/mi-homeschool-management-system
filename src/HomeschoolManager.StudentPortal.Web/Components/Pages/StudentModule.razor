@@ -308,6 +308,14 @@ else
                                         <dt>Status</dt>
                                         <dd>@AssignmentStatusLabel(assignment.Status)</dd>
                                     </div>
+                                    <div>
+                                        <dt>Attempts</dt>
+                                        <dd>@AttemptPolicyLabel(assignment.AttemptPolicy)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Submission</dt>
+                                        <dd>@SubmissionStructureLabel(assignment)</dd>
+                                    </div>
                                     @if (!string.IsNullOrWhiteSpace(assignment.EstimatedEffort))
                                     {
                                         <div>
@@ -472,13 +480,13 @@ else
                                 }
                                 <div class="student-nested-panel student-submit-panel">
                                     <div class="section-heading-row">
-                                        <h4>Submit Work</h4>
+                                        <h4>@SubmitHeading(assignment)</h4>
                                     </div>
-                                    @if (LatestSubmission(assignment) is { } latest)
+                                    @if (LatestSubmission(assignment, CurrentDraftNumber(assignment)) is { } latest)
                                     {
                                         <div class="submission-status-strip">
                                             <strong class="hm-chip">@SubmissionStatusLabel(latest.Status)</strong>
-                                            <span>Attempt @latest.AttemptNumber submitted @latest.SubmittedAtUtc.ToLocalTime().ToString("g")</span>
+                                            <span>@SubmissionAttemptLabel(latest) submitted @latest.SubmittedAtUtc.ToLocalTime().ToString("g")</span>
                                             @if (latest.AttachmentCount > 0)
                                             {
                                                 <span>@latest.AttachmentCount attachment(s)</span>
@@ -507,21 +515,22 @@ else
                                     }
                                     @if (CanSubmitWork(assignment))
                                     {
-                                        var form = FormFor(assignment.AssignmentId);
+                                        var formKey = FormKey(assignment);
+                                        var form = FormFor(formKey);
                                         <div class="submission-form">
                                             <div class="submission-field">
-                                                <label class="form-label" for="@ResponseFieldId(assignment.AssignmentId)">Written response</label>
-                                                <textarea id="@ResponseFieldId(assignment.AssignmentId)" class="form-control" rows="5" @bind="form.ResponseText"></textarea>
+                                                <label class="form-label" for="@ResponseFieldId(formKey)">Written response</label>
+                                                <textarea id="@ResponseFieldId(formKey)" class="form-control" rows="5" @bind="form.ResponseText"></textarea>
                                             </div>
 
                                             <div class="submission-field">
-                                                <label class="form-label" for="@NotesFieldId(assignment.AssignmentId)">Notes for parent review</label>
-                                                <textarea id="@NotesFieldId(assignment.AssignmentId)" class="form-control" rows="3" @bind="form.StudentNotes"></textarea>
+                                                <label class="form-label" for="@NotesFieldId(formKey)">Notes for parent review</label>
+                                                <textarea id="@NotesFieldId(formKey)" class="form-control" rows="3" @bind="form.StudentNotes"></textarea>
                                             </div>
 
                                             <div class="submission-field">
-                                                <label class="form-label" for="@FilesFieldId(assignment.AssignmentId)">Attach files</label>
-                                                <InputFile id="@FilesFieldId(assignment.AssignmentId)" class="form-control submission-file-input" OnChange="eventArgs => FilesSelected(assignment.AssignmentId, eventArgs)" multiple />
+                                                <label class="form-label" for="@FilesFieldId(formKey)">Attach files</label>
+                                                <InputFile id="@FilesFieldId(formKey)" class="form-control submission-file-input" OnChange="eventArgs => FilesSelected(formKey, eventArgs)" multiple />
                                                 @if (form.Files.Count > 0)
                                                 {
                                                     <ul class="student-readable-list submission-file-list">
@@ -533,13 +542,13 @@ else
                                                 }
                                             </div>
 
-                                            @if (submissionMessages.TryGetValue(assignment.AssignmentId, out var message))
+                                            @if (submissionMessages.TryGetValue(formKey, out var message))
                                             {
                                                 <div class="alert alert-info mb-0">@message</div>
                                             }
 
                                             <div class="submission-actions">
-                                                <button type="button" class="btn btn-primary" disabled="@IsSubmitting(assignment.AssignmentId)" @onclick="() => SubmitWorkAsync(assignment)">
+                                                <button type="button" class="btn btn-primary" disabled="@IsSubmitting(formKey)" @onclick="() => SubmitWorkAsync(assignment)">
                                                     Submit work
                                                 </button>
                                             </div>
@@ -589,9 +598,9 @@ else
     private StudentModulePage? module;
     private int selectedLessonIndex;
     private readonly List<string> messages = [];
-    private readonly Dictionary<Guid, SubmissionFormState> submissionForms = [];
-    private readonly Dictionary<Guid, string> submissionMessages = [];
-    private readonly HashSet<Guid> submittingAssignments = [];
+    private readonly Dictionary<string, SubmissionFormState> submissionForms = [];
+    private readonly Dictionary<string, string> submissionMessages = [];
+    private readonly HashSet<string> submittingAssignments = [];
     private const long MaxAttachmentBytes = 10 * 1024 * 1024;
 
     protected override async Task OnParametersSetAsync()
@@ -679,22 +688,22 @@ else
         await JS.InvokeVoidAsync("homeschoolScroll.intoViewById", "student-lesson-heading");
     }
 
-    private SubmissionFormState FormFor(Guid assignmentId)
+    private SubmissionFormState FormFor(string formKey)
     {
-        if (!submissionForms.TryGetValue(assignmentId, out var form))
+        if (!submissionForms.TryGetValue(formKey, out var form))
         {
             form = new SubmissionFormState();
-            submissionForms[assignmentId] = form;
+            submissionForms[formKey] = form;
         }
 
         return form;
     }
 
-    private void FilesSelected(Guid assignmentId, InputFileChangeEventArgs args)
+    private void FilesSelected(string formKey, InputFileChangeEventArgs args)
     {
-        var form = FormFor(assignmentId);
+        var form = FormFor(formKey);
         form.Files = args.GetMultipleFiles().ToList();
-        submissionMessages.Remove(assignmentId);
+        submissionMessages.Remove(formKey);
     }
 
     private async Task SubmitWorkAsync(StudentAssignmentView assignment)
@@ -704,15 +713,17 @@ else
             return;
         }
 
-        var form = FormFor(assignment.AssignmentId);
+        var formKey = FormKey(assignment);
+        var draftNumber = CurrentDraftNumber(assignment);
+        var form = FormFor(formKey);
         if (string.IsNullOrWhiteSpace(form.ResponseText) && form.Files.Count == 0)
         {
-            submissionMessages[assignment.AssignmentId] = "Add a written response or attach a file before submitting.";
+            submissionMessages[formKey] = "Add a written response or attach a file before submitting.";
             return;
         }
 
-        submittingAssignments.Add(assignment.AssignmentId);
-        submissionMessages.Remove(assignment.AssignmentId);
+        submittingAssignments.Add(formKey);
+        submissionMessages.Remove(formKey);
         try
         {
             var attachments = new List<AssignmentAttachmentUpload>();
@@ -733,54 +744,63 @@ else
                     form.ResponseText,
                     form.StudentNotes,
                     attachments,
-                    module.StudentId));
+                    module.StudentId,
+                    draftNumber));
 
             if (result.Succeeded)
             {
-                submissionForms.Remove(assignment.AssignmentId);
-                submissionMessages[assignment.AssignmentId] = "Work submitted for parent review.";
+                submissionForms.Remove(formKey);
+                submissionMessages[formKey] = "Work submitted for parent review.";
                 await OnParametersSetAsync();
             }
             else
             {
-                submissionMessages[assignment.AssignmentId] = string.Join(" ", result.Errors);
+                submissionMessages[formKey] = string.Join(" ", result.Errors);
             }
         }
         catch (IOException)
         {
-            submissionMessages[assignment.AssignmentId] = "One of the files could not be read. Try a smaller file or attach it again.";
+            submissionMessages[formKey] = "One of the files could not be read. Try a smaller file or attach it again.";
         }
         finally
         {
-            submittingAssignments.Remove(assignment.AssignmentId);
+            submittingAssignments.Remove(formKey);
         }
     }
 
-    private static StudentAssignmentSubmissionView? LatestSubmission(StudentAssignmentView assignment)
+    private static StudentAssignmentSubmissionView? LatestSubmission(StudentAssignmentView assignment, int draftNumber)
     {
         return assignment.Submissions
+            .Where(submission => submission.DraftNumber == draftNumber)
             .OrderByDescending(submission => submission.SubmittedAtUtc)
             .FirstOrDefault();
     }
 
-    private static bool CanSubmitWork(StudentAssignmentView assignment)
+    private bool CanSubmitWork(StudentAssignmentView assignment)
     {
-        var latest = LatestSubmission(assignment);
-        return latest is null || latest.Status == AssignmentSubmissionStatus.Returned;
+        var latest = LatestSubmission(assignment, CurrentDraftNumber(assignment));
+        if (latest is null || latest.Status is AssignmentSubmissionStatus.Returned or AssignmentSubmissionStatus.Cleared)
+        {
+            return true;
+        }
+
+        return assignment.AttemptPolicy == AssignmentAttemptPolicy.MultipleAttempts &&
+            latest.Status is not AssignmentSubmissionStatus.Submitted;
     }
 
-    private bool IsSubmitting(Guid assignmentId)
+    private bool IsSubmitting(string formKey)
     {
-        return submittingAssignments.Contains(assignmentId);
+        return submittingAssignments.Contains(formKey);
     }
 
-    private static string SubmissionClosedMessage(StudentAssignmentView assignment)
+    private string SubmissionClosedMessage(StudentAssignmentView assignment)
     {
-        return LatestSubmission(assignment)?.Status switch
+        return LatestSubmission(assignment, CurrentDraftNumber(assignment))?.Status switch
         {
             AssignmentSubmissionStatus.Submitted => "Submitted work is waiting for parent review.",
             AssignmentSubmissionStatus.Accepted => "This work has been accepted as reviewed evidence.",
             AssignmentSubmissionStatus.Archived => "This submission has been archived.",
+            AssignmentSubmissionStatus.Cleared => "This submission was cleared. You can submit again.",
             _ => "Submission is not available right now."
         };
     }
@@ -794,8 +814,70 @@ else
             AssignmentSubmissionStatus.Returned => "Returned for revision",
             AssignmentSubmissionStatus.Accepted => "Accepted as evidence",
             AssignmentSubmissionStatus.Archived => "Archived",
+            AssignmentSubmissionStatus.Cleared => "Cleared",
             _ => status.ToString()
         };
+    }
+
+    private static string AttemptPolicyLabel(AssignmentAttemptPolicy policy)
+    {
+        return policy switch
+        {
+            AssignmentAttemptPolicy.SingleAttempt => "Single accepted attempt",
+            AssignmentAttemptPolicy.MultipleAttempts => "Multiple reviewed attempts",
+            _ => policy.ToString()
+        };
+    }
+
+    private int CurrentDraftNumber(StudentAssignmentView assignment)
+    {
+        if (assignment.SubmissionStructure != AssignmentSubmissionStructure.MultiDraft || CurrentLesson is null)
+        {
+            return 1;
+        }
+
+        var index = assignment.RelatedLessonIds.ToList().FindIndex(id => id == CurrentLesson.LessonId);
+        return index < 0
+            ? 1
+            : Math.Min(index + 1, assignment.DraftCount);
+    }
+
+    private bool CurrentDraftIsFinal(StudentAssignmentView assignment)
+    {
+        return assignment.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft &&
+            CurrentDraftNumber(assignment) == assignment.DraftCount;
+    }
+
+    private string FormKey(StudentAssignmentView assignment)
+    {
+        return $"{assignment.AssignmentId:N}-{CurrentDraftNumber(assignment)}";
+    }
+
+    private string SubmitHeading(StudentAssignmentView assignment)
+    {
+        if (assignment.SubmissionStructure != AssignmentSubmissionStructure.MultiDraft)
+        {
+            return "Submit Work";
+        }
+
+        var draftNumber = CurrentDraftNumber(assignment);
+        return CurrentDraftIsFinal(assignment)
+            ? $"Submit Final Draft ({draftNumber} of {assignment.DraftCount})"
+            : $"Submit Draft {draftNumber} of {assignment.DraftCount}";
+    }
+
+    private static string SubmissionAttemptLabel(StudentAssignmentSubmissionView submission)
+    {
+        return submission.IsFinalDraft
+            ? $"Final draft attempt {submission.AttemptNumber}"
+            : $"Draft {submission.DraftNumber} attempt {submission.AttemptNumber}";
+    }
+
+    private static string SubmissionStructureLabel(StudentAssignmentView assignment)
+    {
+        return assignment.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft
+            ? $"{assignment.DraftCount} lesson drafts"
+            : "Single submission";
     }
 
     private static int DefaultLessonIndex(StudentModulePage module)
@@ -913,11 +995,11 @@ else
             : $"{bytes / 1024m / 1024m:0.0} MB";
     }
 
-    private static string ResponseFieldId(Guid assignmentId) => $"response-{assignmentId:N}";
+    private static string ResponseFieldId(string formKey) => $"response-{formKey}";
 
-    private static string NotesFieldId(Guid assignmentId) => $"notes-{assignmentId:N}";
+    private static string NotesFieldId(string formKey) => $"notes-{formKey}";
 
-    private static string FilesFieldId(Guid assignmentId) => $"files-{assignmentId:N}";
+    private static string FilesFieldId(string formKey) => $"files-{formKey}";
 
     private string RouteBase(Guid? studentId = null)
     {

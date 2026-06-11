@@ -3,6 +3,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <DefaultItemExcludes>$(DefaultItemExcludes);**/artifacts/**;**/.verify-output/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/artifacts/**;**/.verify-output/**;**/.build/**;**/.build/**/*;**/.build-tmp/**;**/.build-tmp/**/*;**/.codex-build-output/**;**/.codex-build-output/**/*;**/.codex-obj/**;**/.codex-obj/**/*</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

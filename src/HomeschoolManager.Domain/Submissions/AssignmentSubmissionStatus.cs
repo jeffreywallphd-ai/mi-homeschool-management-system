@@ -6,5 +6,6 @@ public enum AssignmentSubmissionStatus
     Submitted = 2,
     Returned = 3,
     Accepted = 4,
-    Archived = 5
+    Archived = 5,
+    Cleared = 6
 }

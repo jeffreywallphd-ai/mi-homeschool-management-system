@@ -1,11 +1,11 @@
 # Portfolio Evidence Rules
 
 - Status: accepted
-- Last reviewed: 2026-06-06
+- Last reviewed: 2026-06-11
 - Canonical for: portfolio artifacts, evidence tags, collections, and exports
 - Related ADRs: [ADR-0003](../adr/ADR-0003-records-and-credentials-module-from-start.md)
 - Related docs: [Homesteading Portfolio Use Cases](../product/homesteading-portfolio-use-cases.md), [File and Artifact Taxonomy](file-and-artifact-taxonomy.md)
-- Related tests: not yet implemented
+- Related tests: `src/HomeschoolManager.Tests/Program.cs`
 - Supersedes: none
 
 ## Portfolio Purpose
@@ -51,6 +51,14 @@ Collections group artifacts for review or export. Examples:
 Assignments may be marked as portfolio candidates when their expected output is likely to become useful evidence. That marker does not create a portfolio artifact by itself.
 
 Creating a portfolio artifact should remain a separate parent/admin action so the parent can confirm the actual work, context, date, files, tags, and export selection.
+
+## Student Portfolio Drafts
+
+Students may curate a draft portfolio entry from already accepted evidence in the true student portal. Student draft metadata may include display title, section, reflection, reason for choosing the work, skills shown, draft sort order, and whether the item should be included in the draft.
+
+Student portfolio drafts do not create official records, grades, credits, transcripts, diplomas, or export packets. They reference existing accepted evidence records and must not duplicate files or bypass the evidence review workflow.
+
+Parent/admin review is required before a student-curated portfolio entry is treated as approved for a parent portfolio packet. Parent/admin may approve an item, request revision, or exclude it from the reviewed portfolio set.
 
 ## Export Rule
 

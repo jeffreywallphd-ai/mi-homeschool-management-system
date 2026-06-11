@@ -68,9 +68,8 @@ public sealed class LocalSubmissionFileStore : ISubmissionFileStore
 
     public Task DeleteStoredFileAsync(StoredFileReference file, CancellationToken cancellationToken = default)
     {
-        var fullPath = Path.GetFullPath(Path.Combine(paths.DataRoot, file.StoredPath));
-        var rootPath = Path.GetFullPath(paths.FilesDirectory);
-        if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+        var fullPath = ResolveStoredPath(file);
+        if (fullPath is null)
         {
             return Task.CompletedTask;
         }
@@ -83,9 +82,34 @@ public sealed class LocalSubmissionFileStore : ISubmissionFileStore
         return Task.CompletedTask;
     }
 
+    public async Task<StoredSubmissionFileContent?> ReadStoredFileAsync(
+        StoredFileReference file,
+        CancellationToken cancellationToken = default)
+    {
+        var fullPath = ResolveStoredPath(file);
+        if (fullPath is null || !File.Exists(fullPath))
+        {
+            return null;
+        }
+
+        return new StoredSubmissionFileContent(
+            file.OriginalFileName,
+            file.ContentType,
+            await File.ReadAllBytesAsync(fullPath, cancellationToken));
+    }
+
     private string RelativePath(string fullPath)
     {
         return Path.GetRelativePath(paths.DataRoot, fullPath).Replace(Path.DirectorySeparatorChar, '/');
+    }
+
+    private string? ResolveStoredPath(StoredFileReference file)
+    {
+        var fullPath = Path.GetFullPath(Path.Combine(paths.DataRoot, file.StoredPath));
+        var rootPath = Path.GetFullPath(paths.FilesDirectory);
+        return fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase)
+            ? fullPath
+            : null;
     }
 
     private static string SafeExtension(string fileName)

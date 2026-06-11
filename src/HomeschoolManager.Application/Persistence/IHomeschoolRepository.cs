@@ -59,6 +59,12 @@ public interface IHomeschoolRepository
 
     Task SaveEvidenceRecordAsync(EvidenceRecord evidenceRecord, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PortfolioDraftItem>> GetPortfolioDraftItemsAsync(CancellationToken cancellationToken = default);
+
+    Task<PortfolioDraftItem?> GetPortfolioDraftItemAsync(Guid portfolioDraftItemId, CancellationToken cancellationToken = default);
+
+    Task SavePortfolioDraftItemAsync(PortfolioDraftItem item, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default);
 
     Task<AssessmentRecord?> GetAssessmentRecordAsync(Guid assessmentId, CancellationToken cancellationToken = default);

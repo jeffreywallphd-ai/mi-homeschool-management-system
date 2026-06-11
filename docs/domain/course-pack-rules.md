@@ -1,7 +1,7 @@
 # Course Pack Rules
 
 - Status: accepted
-- Last reviewed: 2026-06-07
+- Last reviewed: 2026-06-11
 - Canonical for: importable course pack contracts and default pack behavior
 - Related ADRs: [ADR-0002](../adr/ADR-0002-michigan-as-seeded-jurisdiction-not-hardcoded-app.md), [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md)
 - Related docs: [Curriculum Planning Rules](curriculum-planning-rules.md), [Requirement Mapping Rules](../legal-requirements/requirement-mapping-rules.md), [Michigan Requirement Areas](../legal-requirements/michigan-requirement-areas.md)
@@ -167,11 +167,13 @@ An assignment pack is a smaller module-level import/export artifact, not a cours
 - Pack name and description.
 - One or more assignments.
 
-Each assignment should include stable source assignment id, sequence order, title, assignment type, instructional method profile, summary, student-facing goal, instructions, estimated effort label, optional minimum and maximum minutes, timing label, optional due date, linked module objectives, linked lesson source ids, linked lesson titles, required output, required deliverables, submission formats, optional assignment resources, ordered assignment steps, assessment skills, student checklist, portfolio connection, embedded rubric or linked rubric id, revision policy, completion criteria, reflection prompts, evidence requirements, structured scoring plan, parent notes, portfolio-candidate marker, planned points or weight, and status.
+Each assignment should include stable source assignment id, sequence order, title, assignment type, instructional method profile, summary, student-facing goal, instructions, estimated effort label, optional minimum and maximum minutes, timing label, optional due date, linked module objectives, linked lesson source ids, linked lesson titles, required output, required deliverables, submission formats, optional assignment resources, ordered assignment steps, assessment skills, student checklist, portfolio connection, embedded rubric or linked rubric id, revision policy, completion criteria, reflection prompts, evidence requirements, structured scoring plan, parent notes, portfolio-candidate marker, planned points or weight, status, attempt policy, submission structure, and draft count.
 
 Assignment resources are assignment-specific supports. They may supplement lesson resources but must not replace lesson links when the assignment depends on particular lessons.
 
 Assignment rubrics and scoring plans are planning support. They do not create grades until the parent explicitly records a grade or evaluation in a later workflow.
+
+Multi-draft assignment packs may define one assignment linked to multiple lessons. When `submissionStructure` is `MultiDraft`, `draftCount` defines the number of draft submission slots. The linked lesson order represents draft order, and the last draft is the final assignment submission.
 
 Supported assignment submission formats include written response, worked solutions, spreadsheet, graph, data table, field notes, photo evidence, portfolio entry, decision memo, budget, reflection, presentation, practical demonstration, written memo, written analysis, optional spreadsheet, and optional graph.
 

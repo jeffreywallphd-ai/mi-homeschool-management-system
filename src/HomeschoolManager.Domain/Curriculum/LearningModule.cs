@@ -22,6 +22,7 @@ public sealed record LearningModule
     public IReadOnlyList<ModuleAssignment> Assignments { get; init; }
     public string AssignmentEvidencePlaceholder { get; init; }
     public ModuleStatus Status { get; init; }
+    public CompletionStatus CompletionStatus { get; init; }
 
     public LearningModule(
         Guid id,
@@ -41,7 +42,8 @@ public sealed record LearningModule
         IReadOnlyList<ModuleLearningObjective>? learningObjectiveItems = null,
         IReadOnlyList<ModuleResource>? resourceItems = null,
         IReadOnlyList<Lesson>? lessons = null,
-        IReadOnlyList<ModuleAssignment>? assignments = null)
+        IReadOnlyList<ModuleAssignment>? assignments = null,
+        CompletionStatus completionStatus = CompletionStatus.NotStarted)
     {
         if (courseId == Guid.Empty)
         {
@@ -56,6 +58,11 @@ public sealed record LearningModule
         if (!Enum.IsDefined(status))
         {
             throw new DomainException("Module status is not recognized.");
+        }
+
+        if (!Enum.IsDefined(completionStatus))
+        {
+            throw new DomainException("Module completion status is not recognized.");
         }
 
         Id = id == Guid.Empty ? Guid.NewGuid() : id;
@@ -77,6 +84,7 @@ public sealed record LearningModule
         Lessons = NormalizeLessonAssignmentLinks(normalizedLessons, Assignments);
         AssignmentEvidencePlaceholder = assignmentEvidencePlaceholder.Trim();
         Status = status;
+        CompletionStatus = completionStatus;
     }
 
     public LearningModule WithLessons(IReadOnlyList<Lesson> lessons)

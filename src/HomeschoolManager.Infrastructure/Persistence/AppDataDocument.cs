@@ -32,6 +32,8 @@ public sealed class AppDataDocument
 
     public List<EvidenceRecord> EvidenceRecords { get; set; } = [];
 
+    public List<PortfolioDraftItem> PortfolioDraftItems { get; set; } = [];
+
     public List<AssessmentRecord> AssessmentRecords { get; set; } = [];
 
     public List<CoursePackDefinition> InstalledCoursePacks { get; set; } = [];

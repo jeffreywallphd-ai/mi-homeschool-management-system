@@ -1,12 +1,16 @@
 @page "/gradebook"
 @rendermode InteractiveServer
 @using HomeschoolManager.Application.Assessments
+@using HomeschoolManager.Application.Submissions
 @using HomeschoolManager.Domain.Assessments
 @using HomeschoolManager.Domain.Submissions
 @using HomeschoolManager.Web.Services
 @inject GradebookService GradebookService
+@inject AssignmentSubmissionService SubmissionService
+@inject SubmissionFilePreviewService FilePreviewService
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Gradebook</PageTitle>
 
@@ -136,7 +140,7 @@ else
                                                 <span class="submission-status-pill">@SourceLabel(row)</span>
                                                 @if (row.LatestSubmittedAtUtc.HasValue)
                                                 {
-                                                    <small>@row.LatestSubmittedAtUtc.Value.ToLocalTime().ToString("g")</small>
+                                                    <small>@SubmissionDraftLabel(row) | @row.LatestSubmittedAtUtc.Value.ToLocalTime().ToString("g")</small>
                                                 }
                                             </td>
                                             <td>
@@ -150,12 +154,42 @@ else
                                                 <small>@PlanningLabel(row)</small>
                                             </td>
                                             <td class="text-end">
-                                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SelectRow(row)">Assess</button>
+                                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => SelectRowAsync(row)">Assess</button>
                                             </td>
                                         </tr>
                                     }
                                 </tbody>
                             </table>
+                        </div>
+                    }
+                </section>
+
+                <section class="hm-card dashboard-card gradebook-preview-card">
+                    <div class="section-heading-row">
+                        <h2>Preview</h2>
+                        @if (selectedRow is not null)
+                        {
+                            <span class="hm-chip">@selectedRow.AssignmentTitle</span>
+                        }
+                    </div>
+
+                    @foreach (var message in fileMessages)
+                    {
+                        <div class="alert alert-warning">@message</div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(previewDataUrl))
+                    {
+                        <iframe
+                            class="gradebook-file-preview"
+                            title="@previewTitle"
+                            src="@previewDataUrl">
+                        </iframe>
+                    }
+                    else
+                    {
+                        <div class="gradebook-file-preview-placeholder">
+                            Select Preview from a submitted file to view it here.
                         </div>
                     }
                 </section>
@@ -174,6 +208,61 @@ else
                             <strong>@selectedRow.AssignmentTitle</strong>
                             <p>@selectedRow.ModuleTitle</p>
                             <small>@SourceLabel(selectedRow)</small>
+                        </div>
+
+                        <div class="gradebook-attachment-panel">
+                            <div class="section-heading-row">
+                                <h3>Assignment Submissions</h3>
+                                <span class="hm-chip">@SubmissionCountLabel(selectedRow)</span>
+                            </div>
+
+                            @if (selectedRow.ActiveSubmissions.Count == 0)
+                            {
+                                <p class="student-muted">No active student submission is linked to this assessment row yet.</p>
+                            }
+                            else
+                            {
+                                <div class="gradebook-submission-stack">
+                                    @foreach (var submission in selectedRow.ActiveSubmissions)
+                                    {
+                                        <section class="gradebook-submission-card">
+                                            <div class="section-heading-row">
+                                                <div>
+                                                    <h4>@DraftLabel(submission)</h4>
+                                                    <small>@SubmissionStatusLabel(submission.Status) | @submission.SubmittedAtUtc.ToLocalTime().ToString("g") | Attempt @submission.AttemptNumber</small>
+                                                </div>
+                                                @if (CanClearSubmission(submission))
+                                                {
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => ClearSubmissionAsync(submission)" disabled="@isSaving">Clear this draft</button>
+                                                }
+                                            </div>
+
+                                            @if (submission.Attachments.Count == 0)
+                                            {
+                                                <p class="student-muted">This draft did not include attached files.</p>
+                                            }
+                                            else
+                                            {
+                                                <ul class="submission-file-list gradebook-file-list">
+                                                    @foreach (var attachment in submission.Attachments)
+                                                    {
+                                                        <li>
+                                                            <div>
+                                                                <strong>@attachment.OriginalFileName</strong>
+                                                                <small>@FileSize(attachment.SizeBytes) | @attachment.ContentType | SHA-256 @ShortChecksum(attachment.ChecksumSha256)</small>
+                                                            </div>
+                                                            <div class="gradebook-file-actions">
+                                                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => PreviewFileAsync(submission, attachment)" disabled="@isLoadingFile">Preview</button>
+                                                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => DownloadFileAsync(submission, attachment)" disabled="@isLoadingFile">Download</button>
+                                                            </div>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                        </section>
+                                    }
+                                </div>
+                            }
                         </div>
 
                         <div class="gradebook-editor-form">
@@ -265,6 +354,22 @@ else
                                     <button type="button" class="btn btn-outline-danger" @onclick="ArchiveAssessmentAsync" disabled="@isSaving">Archive</button>
                                 }
                             </div>
+
+                            @if (selectedRow.ActiveSubmissions.Any(CanClearSubmission))
+                            {
+                                <div class="inline-entry-form">
+                                    <h3>Clear a Draft Submission</h3>
+                                    <p class="student-muted">Add notes and type Clear, then use Clear this draft on the specific draft above. Clearing removes only that draft from active review and reopens that draft for the student. Submission history and uploaded files are retained.</p>
+                                    <div class="submission-field">
+                                        <label class="form-label" for="clear-notes">Clear notes <span class="required-marker">*</span></label>
+                                        <textarea id="clear-notes" class="form-control" rows="3" @bind="clearNotes"></textarea>
+                                    </div>
+                                    <div class="submission-field">
+                                        <label class="form-label" for="clear-confirmation">Type Clear <span class="required-marker">*</span></label>
+                                        <input id="clear-confirmation" class="form-control" @bind="clearConfirmation" />
+                                    </div>
+                                </div>
+                            }
                         </div>
                     }
                 </section>
@@ -283,13 +388,19 @@ else
     private bool canView;
     private bool isLoading = true;
     private bool isSaving;
+    private bool isLoadingFile;
     private bool lastSaveSucceeded;
     private GradebookPage? gradebook;
     private GradebookAssessmentRow? selectedRow;
     private string selectedStudentId = "";
     private string selectedCourseId = "";
     private readonly List<string> messages = [];
+    private readonly List<string> fileMessages = [];
     private AssessmentEditorModel editor = new();
+    private string clearNotes = "";
+    private string clearConfirmation = "";
+    private string previewDataUrl = "";
+    private string previewTitle = "Assignment file preview";
 
     protected override async Task OnInitializedAsync()
     {
@@ -369,11 +480,22 @@ else
         }
     }
 
-    private void SelectRow(GradebookAssessmentRow row)
+    private async Task SelectRowAsync(GradebookAssessmentRow row)
     {
         selectedRow = row;
         editor = AssessmentEditorModel.From(row);
+        clearNotes = "";
+        clearConfirmation = "";
+        previewDataUrl = "";
+        previewTitle = "Assignment file preview";
+        fileMessages.Clear();
         messages.Clear();
+
+        var firstSubmissionWithFile = row.ActiveSubmissions.FirstOrDefault(submission => submission.Attachments.Count > 0);
+        if (firstSubmissionWithFile is not null)
+        {
+            await PreviewFileAsync(firstSubmissionWithFile, firstSubmissionWithFile.Attachments[0]);
+        }
     }
 
     private async Task SaveAssessmentAsync()
@@ -464,6 +586,104 @@ else
         }
     }
 
+    private async Task ClearSubmissionAsync(GradebookSubmissionView submission)
+    {
+        if (Session.CurrentUser is null || selectedRow is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        lastSaveSucceeded = false;
+        try
+        {
+            var result = await SubmissionService.ClearSubmissionAsync(
+                Session.CurrentUser,
+                new ClearSubmissionCommand(submission.SubmissionId, clearNotes, clearConfirmation));
+
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                lastSaveSucceeded = true;
+                messages.Add($"{DraftLabel(submission)} cleared from the active review workflow. The student can submit that draft again.");
+                var selectedAssignmentId = selectedRow.AssignmentId;
+                await LoadAsync(selectedRow.StudentId, selectedRow.CourseId);
+                selectedRow = gradebook?.Rows.FirstOrDefault(row => row.AssignmentId == selectedAssignmentId);
+                editor = selectedRow is null ? new AssessmentEditorModel() : AssessmentEditorModel.From(selectedRow);
+                clearNotes = "";
+                clearConfirmation = "";
+                previewDataUrl = "";
+                fileMessages.Clear();
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task PreviewFileAsync(GradebookSubmissionView submission, GradebookSubmissionAttachment attachment)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        isLoadingFile = true;
+        fileMessages.Clear();
+        try
+        {
+            var result = await FilePreviewService.GetPreviewAsync(Session.CurrentUser, submission.SubmissionId, attachment.FileId);
+            if (result.Succeeded)
+            {
+                var file = result.Value!;
+                previewDataUrl = DataUrl(file);
+                previewTitle = $"{DraftLabel(submission)} {attachment.OriginalFileName} preview";
+            }
+            else
+            {
+                previewDataUrl = "";
+                fileMessages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isLoadingFile = false;
+        }
+    }
+
+    private async Task DownloadFileAsync(GradebookSubmissionView submission, GradebookSubmissionAttachment attachment)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        isLoadingFile = true;
+        fileMessages.Clear();
+        try
+        {
+            var result = await FilePreviewService.GetDownloadAsync(Session.CurrentUser, submission.SubmissionId, attachment.FileId);
+            if (result.Succeeded)
+            {
+                var file = result.Value!;
+                await JS.InvokeVoidAsync("homeschoolFiles.downloadBase64", file.OriginalFileName, file.ContentType, Convert.ToBase64String(file.Content));
+            }
+            else
+            {
+                fileMessages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isLoadingFile = false;
+        }
+    }
+
     private GradebookAssessmentRow? ResolveSelectedRow()
     {
         return selectedRow is null
@@ -515,6 +735,7 @@ else
             AssignmentSubmissionStatus.Returned => "Returned",
             AssignmentSubmissionStatus.Accepted => "Accepted",
             AssignmentSubmissionStatus.Archived => "Archived",
+            AssignmentSubmissionStatus.Cleared => "Cleared",
             _ => status.ToString()
         };
     }
@@ -533,6 +754,67 @@ else
         }
 
         return parts.Count == 0 ? "No planning values" : string.Join(" | ", parts);
+    }
+
+    private static string SubmissionDraftLabel(GradebookAssessmentRow row)
+    {
+        if (row.DraftCount <= 1 || !row.LatestSubmissionDraftNumber.HasValue)
+        {
+            return "Attempt source";
+        }
+
+        return row.LatestSubmissionIsFinalDraft
+            ? "Final draft"
+            : $"Draft {row.LatestSubmissionDraftNumber.Value}";
+    }
+
+    private static string DraftLabel(GradebookSubmissionView submission)
+    {
+        if (submission.DraftCount <= 1)
+        {
+            return "Submission";
+        }
+
+        return submission.IsFinalDraft
+            ? "Final draft"
+            : $"Draft {submission.DraftNumber}";
+    }
+
+    private static string SubmissionCountLabel(GradebookAssessmentRow row)
+    {
+        if (row.ActiveSubmissions.Count == 0)
+        {
+            return "0 submissions";
+        }
+
+        if (row.DraftCount > 1)
+        {
+            return $"{row.ActiveSubmissions.Count} of {row.DraftCount} drafts";
+        }
+
+        return row.ActiveSubmissions.Count == 1 ? "1 submission" : $"{row.ActiveSubmissions.Count} submissions";
+    }
+
+    private static string DataUrl(SubmissionFileResponse file)
+    {
+        return $"data:{file.ContentType};base64,{Convert.ToBase64String(file.Content)}";
+    }
+
+    private static bool CanClearSubmission(GradebookSubmissionView submission)
+    {
+        return submission.Status is AssignmentSubmissionStatus.Submitted or AssignmentSubmissionStatus.Returned;
+    }
+
+    private static string FileSize(long bytes)
+    {
+        return bytes < 1024 * 1024
+            ? $"{Math.Max(1, bytes / 1024)} KB"
+            : $"{bytes / 1024m / 1024m:0.0} MB";
+    }
+
+    private static string ShortChecksum(string checksum)
+    {
+        return checksum.Length <= 12 ? checksum : checksum[..12];
     }
 
     private static string ResultLabel(AssessmentDetail detail)

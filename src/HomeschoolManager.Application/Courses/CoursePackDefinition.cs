@@ -134,7 +134,9 @@ public sealed record CourseTemplateAssignmentVariantDefinition(
     AssignmentCompletionCriteria? CompletionCriteria = null,
     IReadOnlyList<string>? ReflectionPrompts = null,
     AssignmentEvidenceRequirements? EvidenceRequirements = null,
-    AssignmentScoring? Scoring = null);
+    AssignmentScoring? Scoring = null,
+    AssignmentSubmissionStructure SubmissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+    int DraftCount = 1);
 
 public sealed record CourseTemplateRequirementMapping(
     string RequirementAreaView,

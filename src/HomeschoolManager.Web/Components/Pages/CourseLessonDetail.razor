@@ -86,6 +86,15 @@ else
                         </select>
                     </div>
                     <div>
+                        <label class="form-label" for="lesson-completion-status">Completion status</label>
+                        <select id="lesson-completion-status" class="form-select" disabled="@(!CanEdit)" @bind="lessonForm.CompletionStatus" @bind:after="AutoSaveLessonCompletionStatus">
+                            @foreach (var status in Enum.GetValues<CompletionStatus>())
+                            {
+                                <option value="@status">@CompletionStatusLabel(status)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
                         <label class="form-label" for="lesson-minutes">Estimated minutes</label>
                         <input id="lesson-minutes" class="form-control" type="number" min="0" disabled="@(!CanEdit)" @bind="lessonForm.EstimatedMinutes" @bind:after="AutoSaveLesson" />
                     </div>
@@ -704,6 +713,18 @@ else
                 lessonForm.LinkedAssignmentIds.ToArray())));
     }
 
+    private async Task AutoSaveLessonCompletionStatus()
+    {
+        if (!CanEdit || lesson is null)
+        {
+            return;
+        }
+
+        await AutoSave(() => CourseService.UpdateLessonCompletionStatusAsync(
+            ParentUser(),
+            new UpdateLessonCompletionStatusCommand(CourseId, ModuleId, LessonId, lessonForm.CompletionStatus)));
+    }
+
     private async Task MoveLesson(Guid lessonId, int direction)
     {
         if (!CanEdit || module is null)
@@ -762,6 +783,7 @@ else
                 EstimatedMinutes = lesson.EstimatedMinutes,
                 SuggestedDays = lesson.SuggestedDays,
                 DifficultyLevel = lesson.DifficultyLevel,
+                CompletionStatus = lesson.CompletionStatus,
                 SubjectAreas = lesson.SubjectAreas.ToList(),
                 Tags = lesson.Tags.ToList(),
                 Prerequisites = lesson.Prerequisites.ToList(),
@@ -1363,6 +1385,19 @@ else
         return System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
     }
 
+    private static string CompletionStatusLabel(CompletionStatus status)
+    {
+        return status switch
+        {
+            CompletionStatus.NotStarted => "Not started",
+            CompletionStatus.InProgress => "In progress",
+            CompletionStatus.Completed => "Completed",
+            CompletionStatus.NeedsReview => "Needs review",
+            CompletionStatus.Skipped => "Skipped",
+            _ => status.ToString()
+        };
+    }
+
     private sealed record PageMessage(string Text, string CssClass);
     private sealed record LessonObjectiveFormItem(string ObjectiveId, string Text, BloomLevel BloomLevel);
     private sealed record StandardFormItem(string Framework, string Code, string Description);
@@ -1396,6 +1431,7 @@ else
         public int EstimatedMinutes { get; set; }
         public int SuggestedDays { get; set; }
         public LessonDifficultyLevel DifficultyLevel { get; set; } = LessonDifficultyLevel.StandardHighSchool;
+        public CompletionStatus CompletionStatus { get; set; } = CompletionStatus.NotStarted;
         public List<string> SubjectAreas { get; set; } = [];
         public List<string> Tags { get; set; } = [];
         public List<string> Prerequisites { get; set; } = [];

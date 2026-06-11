@@ -51,9 +51,32 @@ public sealed record GradebookAssessmentRow(
     Guid? LatestSubmissionId,
     AssignmentSubmissionStatus? LatestSubmissionStatus,
     DateTimeOffset? LatestSubmittedAtUtc,
+    int? LatestSubmissionDraftNumber,
+    int DraftCount,
+    bool LatestSubmissionIsFinalDraft,
+    IReadOnlyList<GradebookSubmissionAttachment> LatestSubmissionAttachments,
+    IReadOnlyList<GradebookSubmissionView> ActiveSubmissions,
     Guid? EvidenceRecordId,
     AssessmentDetail? Assessment,
     AssessmentState EffectiveState);
+
+public sealed record GradebookSubmissionView(
+    Guid SubmissionId,
+    AssignmentSubmissionStatus Status,
+    DateTimeOffset SubmittedAtUtc,
+    int AttemptNumber,
+    int DraftNumber,
+    int DraftCount,
+    bool IsFinalDraft,
+    IReadOnlyList<GradebookSubmissionAttachment> Attachments);
+
+public sealed record GradebookSubmissionAttachment(
+    Guid FileId,
+    string OriginalFileName,
+    string ContentType,
+    long SizeBytes,
+    string ChecksumSha256,
+    DateTimeOffset CreatedAtUtc);
 
 public sealed record AssessmentDetail(
     Guid AssessmentId,

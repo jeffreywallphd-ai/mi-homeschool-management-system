@@ -11,6 +11,7 @@ public sealed record StudentCourseCard(
     string Description,
     CourseDuration Duration,
     decimal PlannedCreditValue,
+    CompletionStatus CompletionStatus,
     string CurrentGrade,
     int ModuleCount,
     int CompletedModuleCount,
@@ -24,6 +25,7 @@ public sealed record StudentCoursePage(
     string Description,
     CourseDuration Duration,
     decimal PlannedCreditValue,
+    CompletionStatus CompletionStatus,
     string CurrentGrade,
     IReadOnlyList<string> TermNames,
     IReadOnlyList<string> LearningObjectives,
@@ -36,6 +38,7 @@ public sealed record StudentCourseSyllabus(
     string Description,
     CourseDuration Duration,
     decimal PlannedCreditValue,
+    CompletionStatus CompletionStatus,
     string InstructionalMethods,
     IReadOnlyList<StudentResourceView> TextsAndResources,
     string AssessmentMethods,
@@ -60,6 +63,7 @@ public sealed record StudentModulePage(
     string TermName,
     string EstimatedLength,
     ModuleStatus Status,
+    CompletionStatus CompletionStatus,
     string Instructions,
     IReadOnlyList<StudentModuleObjectiveView> LearningObjectives,
     IReadOnlyList<StudentModuleResourceView> Resources,
@@ -72,7 +76,8 @@ public sealed record StudentModuleLink(
     int SequenceOrder,
     string Title,
     string TermName,
-    ModuleStatus Status);
+    ModuleStatus Status,
+    CompletionStatus CompletionStatus);
 
 public sealed record StudentCourseDashboard(
     Guid StudentId,
@@ -100,6 +105,7 @@ public sealed record StudentLessonView(
     int EstimatedMinutes,
     int SuggestedDays,
     LessonDifficultyLevel DifficultyLevel,
+    CompletionStatus CompletionStatus,
     IReadOnlyList<string> SubjectAreas,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Prerequisites,
@@ -195,6 +201,11 @@ public sealed record StudentAssignmentView(
     string RequiredOutput,
     bool IsPortfolioCandidate,
     AssignmentStatus Status,
+    AssignmentAttemptPolicy AttemptPolicy,
+    AssignmentSubmissionStructure SubmissionStructure,
+    int DraftCount,
+    int CurrentDraftNumber,
+    bool CurrentDraftIsFinal,
     string AssignmentSummary,
     string StudentFacingGoal,
     IReadOnlyList<string> RequiredDeliverables,
@@ -221,8 +232,11 @@ public sealed record StudentAssignmentSubmissionView(
     DateTimeOffset SubmittedAtUtc,
     DateTimeOffset? ReturnedAtUtc,
     DateTimeOffset? AcceptedAtUtc,
+    DateTimeOffset? ClearedAtUtc,
     string ParentReviewNotes,
     bool PortfolioCandidate,
+    int DraftNumber,
+    bool IsFinalDraft,
     int AttachmentCount);
 
 public sealed record StudentAssignmentAssessmentFeedbackView(

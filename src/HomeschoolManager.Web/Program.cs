@@ -1,5 +1,6 @@
 using HomeschoolManager.Web.Components;
 using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Application.Submissions;
 using HomeschoolManager.Infrastructure;
 using HomeschoolManager.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -67,6 +68,50 @@ app.Use(async (context, next) =>
 
 
 app.UseAntiforgery();
+
+app.MapGet("/gradebook/submission-files/{submissionId:guid}/{fileId:guid}/preview", async (
+    Guid submissionId,
+    Guid fileId,
+    SessionState session,
+    SubmissionFilePreviewService previewService,
+    CancellationToken cancellationToken) =>
+{
+    if (session.CurrentUser is null || !session.IsParentAdmin)
+    {
+        return Results.Forbid();
+    }
+
+    var result = await previewService.GetPreviewAsync(session.CurrentUser, submissionId, fileId, cancellationToken);
+    if (!result.Succeeded)
+    {
+        return Results.NotFound(string.Join(Environment.NewLine, result.Errors));
+    }
+
+    var file = result.Value!;
+    return Results.File(file.Content, file.ContentType, file.OriginalFileName, enableRangeProcessing: true);
+});
+
+app.MapGet("/gradebook/submission-files/{submissionId:guid}/{fileId:guid}/download", async (
+    Guid submissionId,
+    Guid fileId,
+    SessionState session,
+    SubmissionFilePreviewService previewService,
+    CancellationToken cancellationToken) =>
+{
+    if (session.CurrentUser is null || !session.IsParentAdmin)
+    {
+        return Results.Forbid();
+    }
+
+    var result = await previewService.GetDownloadAsync(session.CurrentUser, submissionId, fileId, cancellationToken);
+    if (!result.Succeeded)
+    {
+        return Results.NotFound(string.Join(Environment.NewLine, result.Errors));
+    }
+
+    var file = result.Value!;
+    return Results.File(file.Content, file.ContentType, file.OriginalFileName);
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

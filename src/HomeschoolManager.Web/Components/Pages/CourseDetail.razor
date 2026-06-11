@@ -64,6 +64,13 @@ else
             <label class="form-label" for="credit">Planned credit value <span class="required-marker">*</span></label>
             <input id="credit" class="form-control" type="number" step="0.25" min="0.25" max="3" @bind="courseForm.PlannedCreditValue" @bind:after="AutoSaveCourse" />
             @ValidationFor("course.PlannedCreditValue")
+            <label class="form-label" for="course-completion-status">Completion status</label>
+            <select id="course-completion-status" class="form-select" @bind="courseForm.CompletionStatus" @bind:after="AutoSaveCourseCompletionStatus">
+                @foreach (var status in Enum.GetValues<CompletionStatus>())
+                {
+                    <option value="@status">@CompletionStatusLabel(status)</option>
+                }
+            </select>
                 </section>
 
                 <section class="form-section">
@@ -286,6 +293,13 @@ else
             new UpdateCourseCommand(CourseId, courseForm.Title, [], courseForm.Duration, courseForm.PlannedCreditValue)));
     }
 
+    private async Task AutoSaveCourseCompletionStatus()
+    {
+        await AutoSave(() => CourseService.UpdateCourseCompletionStatusAsync(
+            ParentUser(),
+            new UpdateCourseCompletionStatusCommand(CourseId, courseForm.CompletionStatus)));
+    }
+
     private async Task AutoSaveDescription()
     {
         await AutoSave(() => CourseService.SaveCourseDescriptionAsync(
@@ -381,7 +395,8 @@ else
         {
             Title = detail.Title,
             Duration = detail.Duration,
-            PlannedCreditValue = detail.PlannedCreditValue
+            PlannedCreditValue = detail.PlannedCreditValue,
+            CompletionStatus = detail.CompletionStatus
         };
         descriptionForm = new DescriptionFormModel
         {
@@ -421,6 +436,19 @@ else
         return string.IsNullOrWhiteSpace(course.StudentName)
             ? "Selected student"
             : course.StudentName;
+    }
+
+    private static string CompletionStatusLabel(CompletionStatus status)
+    {
+        return status switch
+        {
+            CompletionStatus.NotStarted => "Not started",
+            CompletionStatus.InProgress => "In progress",
+            CompletionStatus.Completed => "Completed",
+            CompletionStatus.NeedsReview => "Needs review",
+            CompletionStatus.Skipped => "Skipped",
+            _ => status.ToString()
+        };
     }
 
     private async Task ChangeInstructionalMethod(ChangeEventArgs eventArgs)
@@ -1000,6 +1028,7 @@ else
         public string Title { get; set; } = "";
         public CourseDuration Duration { get; set; } = CourseDuration.TwoSemesters;
         public decimal PlannedCreditValue { get; set; } = 1;
+        public CompletionStatus CompletionStatus { get; set; } = CompletionStatus.NotStarted;
     }
 
     private sealed class DescriptionFormModel

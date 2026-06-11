@@ -60,7 +60,7 @@ else
                 <dl class="student-detail-facts">
                     <div>
                         <dt>Attempt</dt>
-                        <dd>@detail.AttemptNumber</dd>
+                        <dd>@SubmissionAttemptLabel(detail.DraftNumber, detail.DraftCount, detail.IsFinalDraft, detail.AttemptNumber)</dd>
                     </div>
                     <div>
                         <dt>Submitted</dt>
@@ -129,6 +129,12 @@ else
                     <button type="button" class="btn btn-outline-primary" @onclick="ReturnWorkAsync" disabled="@isSaving">Return to student</button>
                     <button type="button" class="btn btn-primary" @onclick="AcceptWorkAsync" disabled="@isSaving">Accept as evidence</button>
                 </div>
+
+                <div class="inline-entry-form mt-3">
+                    <label for="clear-confirmation">Clear active submission</label>
+                    <input id="clear-confirmation" @bind="clearConfirmation" placeholder="Type Clear" />
+                    <button type="button" class="btn btn-outline-danger" @onclick="ClearWorkAsync" disabled="@isSaving">Clear submission</button>
+                </div>
             </section>
         </aside>
     </div>
@@ -142,6 +148,7 @@ else
     private bool isSaving;
     private SubmissionReviewDetail? detail;
     private string reviewNotes = "";
+    private string clearConfirmation = "";
     private bool markPortfolioCandidate;
     private readonly List<string> messages = [];
 
@@ -174,6 +181,7 @@ else
         {
             detail = result.Value!;
             reviewNotes = detail.ParentReviewNotes;
+            clearConfirmation = "";
             markPortfolioCandidate = detail.PortfolioCandidate;
             messages.Clear();
         }
@@ -245,6 +253,36 @@ else
         }
     }
 
+    private async Task ClearWorkAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var result = await Submissions.ClearSubmissionAsync(
+                Session.CurrentUser,
+                new ClearSubmissionCommand(SubmissionId, reviewNotes, clearConfirmation));
+            messages.Clear();
+            if (result.Succeeded)
+            {
+                messages.Add("Submission cleared from the active review workflow.");
+                await LoadAsync();
+            }
+            else
+            {
+                messages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
     private static string SubmissionStatusLabel(AssignmentSubmissionStatus status)
     {
         return status switch
@@ -254,8 +292,16 @@ else
             AssignmentSubmissionStatus.Returned => "Returned",
             AssignmentSubmissionStatus.Accepted => "Accepted evidence",
             AssignmentSubmissionStatus.Archived => "Archived",
+            AssignmentSubmissionStatus.Cleared => "Cleared",
             _ => status.ToString()
         };
+    }
+
+    private static string SubmissionAttemptLabel(int draftNumber, int draftCount, bool isFinalDraft, int attemptNumber)
+    {
+        return draftCount > 1
+            ? $"{(isFinalDraft ? "Final draft" : $"Draft {draftNumber}")} attempt {attemptNumber}"
+            : attemptNumber.ToString();
     }
 
     private static string FileSize(long bytes)

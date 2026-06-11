@@ -19,8 +19,10 @@ public sealed record AssignmentSubmission
     public DateTimeOffset UpdatedAtUtc { get; init; }
     public DateTimeOffset? ReturnedAtUtc { get; init; }
     public DateTimeOffset? AcceptedAtUtc { get; init; }
+    public DateTimeOffset? ClearedAtUtc { get; init; }
     public string ParentReviewNotes { get; init; }
     public bool PortfolioCandidate { get; init; }
+    public int DraftNumber { get; init; }
 
     public AssignmentSubmission(
         Guid id,
@@ -39,7 +41,9 @@ public sealed record AssignmentSubmission
         DateTimeOffset? returnedAtUtc,
         DateTimeOffset? acceptedAtUtc,
         string parentReviewNotes,
-        bool portfolioCandidate)
+        bool portfolioCandidate,
+        DateTimeOffset? clearedAtUtc = null,
+        int draftNumber = 1)
     {
         if (studentId == Guid.Empty)
         {
@@ -54,6 +58,11 @@ public sealed record AssignmentSubmission
         if (attemptNumber < 1)
         {
             throw new DomainException("Submission attempt number must be one or greater.");
+        }
+
+        if (draftNumber < 1)
+        {
+            throw new DomainException("Submission draft number must be one or greater.");
         }
 
         if (!Enum.IsDefined(status))
@@ -78,7 +87,9 @@ public sealed record AssignmentSubmission
         UpdatedAtUtc = updatedAtUtc == default ? SubmittedAtUtc : updatedAtUtc;
         ReturnedAtUtc = returnedAtUtc;
         AcceptedAtUtc = acceptedAtUtc;
+        ClearedAtUtc = clearedAtUtc;
         ParentReviewNotes = string.IsNullOrWhiteSpace(parentReviewNotes) ? "" : parentReviewNotes.Trim();
         PortfolioCandidate = portfolioCandidate;
+        DraftNumber = draftNumber;
     }
 }

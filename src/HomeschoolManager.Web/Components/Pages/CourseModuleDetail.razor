@@ -108,6 +108,13 @@ else
                         <option value="@ModuleStatus.Active">Active</option>
                         <option value="@ModuleStatus.Complete">Complete</option>
                     </select>
+                    <label class="form-label" for="module-completion-status">Completion status</label>
+                    <select id="module-completion-status" class="form-select" disabled="@(!CanEdit)" @bind="moduleForm.CompletionStatus" @bind:after="AutoSaveModuleCompletionStatus">
+                        @foreach (var status in Enum.GetValues<CompletionStatus>())
+                        {
+                            <option value="@status">@CompletionStatusLabel(status)</option>
+                        }
+                    </select>
                     <label class="form-label" for="module-estimated-length">Estimated length</label>
                     <input id="module-estimated-length" class="form-control" disabled="@(!CanEdit)" @bind="moduleForm.EstimatedLength" @bind:after="AutoSaveModule" />
                     <label class="form-label" for="module-description">Description</label>
@@ -1113,8 +1120,21 @@ else
                     .Select(item => new ResourceFormItem(item.Name, item.Link, item.FilePath, item.IsPhysicalResource))
                     .ToList(),
                 AssignmentEvidencePlaceholder = selectedModule.AssignmentEvidencePlaceholder,
-                Status = selectedModule.Status
+                Status = selectedModule.Status,
+                CompletionStatus = selectedModule.CompletionStatus
             };
+    }
+
+    private async Task AutoSaveModuleCompletionStatus()
+    {
+        if (!CanEdit || selectedModule is null)
+        {
+            return;
+        }
+
+        await AutoSave(() => CourseService.UpdateModuleCompletionStatusAsync(
+            ParentUser(),
+            new UpdateModuleCompletionStatusCommand(CourseId, selectedModule.Id, moduleForm.CompletionStatus)));
     }
 
     private IEnumerable<LearningModuleView> OrderedModules()
@@ -1262,5 +1282,19 @@ else
         public bool NewResourceIsPhysical { get; set; }
         public string AssignmentEvidencePlaceholder { get; set; } = "";
         public ModuleStatus Status { get; set; } = ModuleStatus.Planned;
+        public CompletionStatus CompletionStatus { get; set; } = CompletionStatus.NotStarted;
+    }
+
+    private static string CompletionStatusLabel(CompletionStatus status)
+    {
+        return status switch
+        {
+            CompletionStatus.NotStarted => "Not started",
+            CompletionStatus.InProgress => "In progress",
+            CompletionStatus.Completed => "Completed",
+            CompletionStatus.NeedsReview => "Needs review",
+            CompletionStatus.Skipped => "Skipped",
+            _ => status.ToString()
+        };
     }
 }

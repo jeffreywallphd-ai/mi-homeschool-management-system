@@ -41,6 +41,9 @@ public sealed record ModuleAssignment
     public decimal? PlannedPoints { get; init; }
     public decimal? PlannedWeight { get; init; }
     public AssignmentStatus Status { get; init; }
+    public AssignmentAttemptPolicy AttemptPolicy { get; init; }
+    public AssignmentSubmissionStructure SubmissionStructure { get; init; }
+    public int DraftCount { get; init; }
 
     public ModuleAssignment(
         Guid id,
@@ -79,7 +82,10 @@ public sealed record ModuleAssignment
         AssignmentCompletionCriteria? completionCriteria = null,
         IReadOnlyList<string>? reflectionPrompts = null,
         AssignmentEvidenceRequirements? evidenceRequirements = null,
-        AssignmentScoring? scoring = null)
+        AssignmentScoring? scoring = null,
+        AssignmentAttemptPolicy attemptPolicy = AssignmentAttemptPolicy.SingleAttempt,
+        AssignmentSubmissionStructure submissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+        int draftCount = 1)
     {
         if (moduleId == Guid.Empty)
         {
@@ -104,6 +110,26 @@ public sealed record ModuleAssignment
         if (!Enum.IsDefined(status))
         {
             throw new DomainException("Assignment status is not recognized.");
+        }
+
+        if (!Enum.IsDefined(attemptPolicy))
+        {
+            throw new DomainException("Assignment attempt policy is not recognized.");
+        }
+
+        if (!Enum.IsDefined(submissionStructure))
+        {
+            throw new DomainException("Assignment submission structure is not recognized.");
+        }
+
+        if (draftCount < 1)
+        {
+            throw new DomainException("Assignment draft count must be one or greater.");
+        }
+
+        if (submissionStructure == AssignmentSubmissionStructure.MultiDraft && draftCount < 2)
+        {
+            throw new DomainException("Multi-draft assignments must have at least two drafts.");
         }
 
         if (plannedPoints.HasValue && plannedPoints.Value < 0)
@@ -166,6 +192,9 @@ public sealed record ModuleAssignment
         PlannedPoints = plannedPoints;
         PlannedWeight = plannedWeight;
         Status = status;
+        AttemptPolicy = attemptPolicy;
+        SubmissionStructure = submissionStructure;
+        DraftCount = submissionStructure == AssignmentSubmissionStructure.MultiDraft ? draftCount : 1;
     }
 
     private static IReadOnlyList<string> NormalizeObjectives(IReadOnlyList<string>? objectives)

@@ -15,8 +15,13 @@ Purpose: Grades, GPA, tests, credit awards, course completion, and graduation pl
 - Assessment records are parent-owned review records, not final course grades by themselves.
 - Assignment status and planned points do not create grades.
 - Assignment status may prepare later evidence or grading workflows only after explicit parent/admin action.
+- Assignment attempt policy controls student submission workflow only; it does not create grades, evidence, credits, or completion records.
+- Multi-draft assignment structure controls draft submission slots only; it does not create grades, evidence, credits, or completion records.
+- Accepted work for one draft must not block later draft slots in the same multi-draft assignment.
+- Clearing a submission retains history and must not delete accepted evidence, assessment records, files, or official-record inputs.
 - Student-facing feedback must be explicitly marked visible by the parent/admin.
 - Credit awards are parent decisions.
+- Course/module/lesson completion status is progress tracking only unless a later parent/admin credit workflow explicitly uses reviewed evidence.
 - Diploma generation requires accepted parent-defined graduation standards.
 
 ## Common Failure Modes

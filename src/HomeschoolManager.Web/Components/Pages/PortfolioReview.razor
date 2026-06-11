@@ -1,0 +1,319 @@
+@page "/portfolio"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Portfolio
+@using HomeschoolManager.Domain.Submissions
+@using HomeschoolManager.Web.Services
+@inject PortfolioService Portfolio
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Portfolio Review</PageTitle>
+
+@if (!canView)
+{
+    <h1>Portfolio Review</h1>
+    <div class="alert alert-warning">Sign in as parent/admin to review portfolio items.</div>
+}
+else if (workspace is null)
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
+            </span>
+            <h1>Portfolio Review</h1>
+            <p>Review student-curated portfolio draft items.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
+            </span>
+            <h1>Portfolio Review</h1>
+            <p>Review student reflections and decide which evidence is ready for the parent portfolio packet.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-info">@message</div>
+    }
+
+    <section class="dashboard-metrics" aria-label="Portfolio review summary">
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/form-assignment-clipboard.svg" alt="" aria-hidden="true" />
+            <span>Awaiting review</span>
+            <strong>@CountByStatus(PortfolioDraftStatus.SubmittedForReview)</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/status-alert-triangle.svg" alt="" aria-hidden="true" />
+            <span>Needs revision</span>
+            <strong>@CountByStatus(PortfolioDraftStatus.NeedsRevision)</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/metric-credit-award.svg" alt="" aria-hidden="true" />
+            <span>Approved</span>
+            <strong>@CountByStatus(PortfolioDraftStatus.ParentApproved)</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/nav-student-preview-eye.svg" alt="" aria-hidden="true" />
+            <span>Drafts visible</span>
+            <strong>@CountByStatus(PortfolioDraftStatus.Draft)</strong>
+        </article>
+    </section>
+
+    <div class="dashboard-grid">
+        <main class="dashboard-main">
+            <section class="hm-card dashboard-card">
+                <div class="section-heading-row">
+                    <h2>Student Portfolio Items</h2>
+                    <span class="submission-status-pill">@workspace.Items.Count total</span>
+                </div>
+
+                @if (workspace.Items.Count == 0)
+                {
+                    <p>No student portfolio draft items have been created yet.</p>
+                }
+                else
+                {
+                    <div class="dashboard-student-list">
+                        @foreach (var item in OrderedItems)
+                        {
+                            var edit = NotesFor(item);
+                            <article class="dashboard-student-row">
+                                <div class="dashboard-student-identity">
+                                    <span class="hm-icon-tile" aria-hidden="true">
+                                        <img class="hm-icon" src="icons/hm/svg/currentcolor/form-assignment-clipboard.svg" alt="" />
+                                    </span>
+                                    <div>
+                                        <h3>@item.DisplayTitle</h3>
+                                        <p>@item.StudentName</p>
+                                    </div>
+                                </div>
+                                <dl class="student-detail-facts">
+                                    <div>
+                                        <dt>Status</dt>
+                                        <dd>@StatusText(item.Status)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Course</dt>
+                                        <dd>@item.CourseTitle</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Section</dt>
+                                        <dd>@(string.IsNullOrWhiteSpace(item.PortfolioSection) ? "Not set" : item.PortfolioSection)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Files</dt>
+                                        <dd>@item.FileCount</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Order</dt>
+                                        <dd>@item.SortOrder</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Included</dt>
+                                        <dd>@(item.IncludeInDraft ? "Yes" : "No")</dd>
+                                    </div>
+                                </dl>
+                                <a class="btn btn-outline-primary btn-sm" href="@($"student-preview/{item.StudentId}/courses/{item.CourseId}/modules/{item.ModuleId}")">Preview context</a>
+                            </article>
+
+                            <article class="hm-card dashboard-card">
+                                <div class="section-heading-row">
+                                    <div>
+                                        <h3>@item.AssignmentTitle</h3>
+                                        <small>@item.ModuleTitle</small>
+                                    </div>
+                                    <span class="submission-status-pill">@StatusText(item.Status)</span>
+                                </div>
+                                <div class="student-nested-panel">
+                                    <strong>Student reflection</strong>
+                                    <p>@(string.IsNullOrWhiteSpace(item.StudentReflection) ? "No reflection added yet." : item.StudentReflection)</p>
+                                </div>
+                                <div class="student-nested-panel">
+                                    <strong>Why the student chose this</strong>
+                                    <p>@(string.IsNullOrWhiteSpace(item.ChosenReason) ? "No reason added yet." : item.ChosenReason)</p>
+                                </div>
+                                @if (item.SkillsShown.Count > 0)
+                                {
+                                    <div class="submission-status-strip">
+                                        @foreach (var skill in item.SkillsShown)
+                                        {
+                                            <span class="submission-status-pill">@skill</span>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="inline-entry-form mt-3">
+                                    <label class="form-label" for="@($"portfolio-review-notes-{item.PortfolioDraftItemId}")">Parent review notes</label>
+                                    <textarea id="@($"portfolio-review-notes-{item.PortfolioDraftItemId}")" class="form-control" rows="4" @bind="edit.ParentReviewNotes"></textarea>
+                                    @if (item.Status == PortfolioDraftStatus.Draft)
+                                    {
+                                        <p class="form-text">The student has not submitted this item for review yet.</p>
+                                    }
+                                    <div class="review-action-row">
+                                        <button type="button" class="btn btn-primary" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.ParentApproved)">Approve</button>
+                                        <button type="button" class="btn btn-outline-primary" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.NeedsRevision)">Needs revision</button>
+                                        <button type="button" class="btn btn-outline-danger" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.Excluded)">Exclude</button>
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </main>
+
+        <aside class="dashboard-support">
+            <section class="hm-card dashboard-card">
+                <h2>Review Posture</h2>
+                <p>Student portfolio entries are draft curation records until parent/admin review marks them approved.</p>
+                <p>Approving a portfolio item does not change grades, credits, course completion, or the accepted evidence record.</p>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    private bool canView;
+    private PortfolioReviewWorkspace? workspace;
+    private readonly List<string> messages = [];
+    private readonly Dictionary<Guid, PortfolioReviewEditModel> noteModels = [];
+
+    private IEnumerable<PortfolioDraftItemView> OrderedItems => workspace is null
+        ? []
+        : workspace.Items
+            .OrderBy(item => item.Status == PortfolioDraftStatus.SubmittedForReview ? 0 : 1)
+            .ThenBy(item => item.StudentName)
+            .ThenBy(item => item.SortOrder)
+            .ThenBy(item => item.DisplayTitle);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsParentAdmin;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await Portfolio.GetReviewWorkspaceAsync(Session.CurrentUser);
+        if (result.Succeeded && result.Value is not null)
+        {
+            workspace = result.Value;
+            messages.Clear();
+            SyncNotes();
+        }
+        else
+        {
+            workspace = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task Review(Guid itemId, PortfolioDraftStatus status)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var notes = noteModels.TryGetValue(itemId, out var edit)
+            ? edit.ParentReviewNotes
+            : "";
+        var result = await Portfolio.ReviewDraftItemAsync(Session.CurrentUser, new ReviewPortfolioDraftItemCommand(itemId, status, notes));
+        messages.Clear();
+        if (result.Succeeded)
+        {
+            messages.Add($"Portfolio item marked {StatusText(status).ToLowerInvariant()}.");
+            await LoadAsync();
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private PortfolioReviewEditModel NotesFor(PortfolioDraftItemView item)
+    {
+        if (!noteModels.TryGetValue(item.PortfolioDraftItemId, out var edit))
+        {
+            edit = new PortfolioReviewEditModel { ParentReviewNotes = item.ParentReviewNotes };
+            noteModels[item.PortfolioDraftItemId] = edit;
+        }
+
+        return edit;
+    }
+
+    private void SyncNotes()
+    {
+        if (workspace is null)
+        {
+            noteModels.Clear();
+            return;
+        }
+
+        foreach (var item in workspace.Items)
+        {
+            if (!noteModels.ContainsKey(item.PortfolioDraftItemId))
+            {
+                noteModels[item.PortfolioDraftItemId] = new PortfolioReviewEditModel { ParentReviewNotes = item.ParentReviewNotes };
+            }
+        }
+    }
+
+    private int CountByStatus(PortfolioDraftStatus status)
+    {
+        return workspace?.Items.Count(item => item.Status == status) ?? 0;
+    }
+
+    private static bool IsDraft(PortfolioDraftItemView item)
+    {
+        return item.Status == PortfolioDraftStatus.Draft;
+    }
+
+    private static string StatusText(PortfolioDraftStatus status)
+    {
+        return status switch
+        {
+            PortfolioDraftStatus.SubmittedForReview => "In review",
+            PortfolioDraftStatus.NeedsRevision => "Needs revision",
+            PortfolioDraftStatus.ParentApproved => "Approved",
+            PortfolioDraftStatus.Excluded => "Excluded",
+            _ => "Draft"
+        };
+    }
+
+    private sealed class PortfolioReviewEditModel
+    {
+        public string ParentReviewNotes { get; set; } = "";
+    }
+}

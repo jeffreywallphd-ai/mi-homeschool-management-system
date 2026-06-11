@@ -67,6 +67,12 @@ public sealed record ReorderLearningModulesCommand(Guid CourseId, IReadOnlyList<
 
 public sealed record DeleteLearningModuleCommand(Guid CourseId, Guid ModuleId, string ConfirmationText);
 
+public sealed record UpdateCourseCompletionStatusCommand(Guid CourseId, CompletionStatus CompletionStatus);
+
+public sealed record UpdateModuleCompletionStatusCommand(Guid CourseId, Guid ModuleId, CompletionStatus CompletionStatus);
+
+public sealed record UpdateLessonCompletionStatusCommand(Guid CourseId, Guid ModuleId, Guid LessonId, CompletionStatus CompletionStatus);
+
 public sealed record ModuleLearningObjectiveCommand(string Text, string LinkedCourseObjective);
 
 public sealed record ModuleResourceCommand(string Name, string Link, string FilePath, bool IsPhysicalResource);
@@ -231,7 +237,10 @@ public sealed record CreateAssignmentCommand(
     AssignmentCompletionCriteriaCommand? CompletionCriteria = null,
     IReadOnlyList<string>? ReflectionPrompts = null,
     AssignmentEvidenceRequirementsCommand? EvidenceRequirements = null,
-    AssignmentScoringCommand? Scoring = null);
+    AssignmentScoringCommand? Scoring = null,
+    AssignmentAttemptPolicy AttemptPolicy = AssignmentAttemptPolicy.SingleAttempt,
+    AssignmentSubmissionStructure SubmissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+    int DraftCount = 1);
 
 public sealed record UpdateAssignmentCommand(
     Guid CourseId,
@@ -269,7 +278,10 @@ public sealed record UpdateAssignmentCommand(
     AssignmentCompletionCriteriaCommand? CompletionCriteria = null,
     IReadOnlyList<string>? ReflectionPrompts = null,
     AssignmentEvidenceRequirementsCommand? EvidenceRequirements = null,
-    AssignmentScoringCommand? Scoring = null);
+    AssignmentScoringCommand? Scoring = null,
+    AssignmentAttemptPolicy AttemptPolicy = AssignmentAttemptPolicy.SingleAttempt,
+    AssignmentSubmissionStructure SubmissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+    int DraftCount = 1);
 
 public sealed record AssignmentPortfolioConnectionCommand(
     bool IsPortfolioCandidate,

@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using HomeschoolManager.Application.Assessments
 @using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Application.Portfolio
 @using HomeschoolManager.Application.Setup
 @using HomeschoolManager.Application.Submissions
 @using HomeschoolManager.Domain.Curriculum
@@ -12,6 +13,7 @@
 @inject CourseService CourseService
 @inject AssignmentSubmissionService SubmissionService
 @inject GradebookService GradebookService
+@inject PortfolioService PortfolioService
 
 <PageTitle>Home</PageTitle>
 
@@ -66,6 +68,11 @@
                 <img class="hm-icon" src="icons/hm/svg/purple/status-alert-triangle.svg" alt="" aria-hidden="true" />
                 <span>Needs assessment</span>
                 <strong>@(gradebookSummary?.NeedsReviewCount ?? 0)</strong>
+            </article>
+            <article class="hm-card dashboard-metric-card">
+                <img class="hm-icon" src="icons/hm/svg/purple/form-course-description-document.svg" alt="" aria-hidden="true" />
+                <span>Portfolio review</span>
+                <strong>@pendingPortfolioItems.Count</strong>
             </article>
         </section>
 
@@ -145,9 +152,35 @@
                                 <li>
                                     <div>
                                         <strong>@submission.AssignmentTitle</strong>
-                                        <small>@submission.StudentName | @submission.CourseTitle</small>
+                                        <small>@submission.StudentName | @submission.CourseTitle | @SubmissionAttemptLabel(submission)</small>
                                     </div>
                                     <a class="btn btn-outline-primary btn-sm" href="@($"submissions/{submission.SubmissionId}")">Review</a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                <section class="hm-card dashboard-card">
+                    <div class="section-heading-row">
+                        <h2>Portfolio review</h2>
+                        <a class="btn btn-outline-primary btn-sm" href="portfolio">Open portfolio</a>
+                    </div>
+                    @if (pendingPortfolioItems.Count == 0)
+                    {
+                        <p>No student portfolio items are waiting for review.</p>
+                    }
+                    else
+                    {
+                        <ul class="dashboard-review-list">
+                            @foreach (var item in pendingPortfolioItems.Take(5))
+                            {
+                                <li>
+                                    <div>
+                                        <strong>@item.DisplayTitle</strong>
+                                        <small>@item.StudentName | @item.CourseTitle</small>
+                                    </div>
+                                    <a class="btn btn-outline-primary btn-sm" href="portfolio">Review</a>
                                 </li>
                             }
                         </ul>
@@ -219,6 +252,7 @@
     private int completedModules;
     private IReadOnlyList<AssignmentSubmissionSummary> pendingSubmissions = [];
     private GradebookDashboardSummary? gradebookSummary;
+    private IReadOnlyList<PortfolioDraftItemView> pendingPortfolioItems = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -260,6 +294,12 @@
             pendingSubmissions = pendingResult.Succeeded ? pendingResult.Value ?? [] : [];
             var gradebookResult = await GradebookService.GetDashboardSummaryAsync(Session.CurrentUser);
             gradebookSummary = gradebookResult.Succeeded ? gradebookResult.Value : null;
+            var portfolioResult = await PortfolioService.GetReviewWorkspaceAsync(Session.CurrentUser);
+            pendingPortfolioItems = portfolioResult.Succeeded
+                ? portfolioResult.Value?.Items
+                    .Where(item => item.Status == HomeschoolManager.Domain.Submissions.PortfolioDraftStatus.SubmittedForReview)
+                    .ToArray() ?? []
+                : [];
         }
 
         var rows = new List<StudentDashboardRow>();
@@ -313,6 +353,13 @@
         return parts.Length == 0
             ? "?"
             : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+    }
+
+    private static string SubmissionAttemptLabel(AssignmentSubmissionSummary submission)
+    {
+        return submission.DraftCount > 1
+            ? submission.IsFinalDraft ? "Final draft" : $"Draft {submission.DraftNumber}"
+            : $"Attempt {submission.AttemptNumber}";
     }
 
     private sealed record StudentDashboardRow(

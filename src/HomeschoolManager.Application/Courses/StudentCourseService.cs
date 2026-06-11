@@ -48,9 +48,10 @@ public sealed class StudentCourseService
                 course.Description.Description,
                 course.Duration,
                 course.PlannedCreditValue,
+                course.CompletionStatus,
                 NoGradeYet,
                 course.Modules.Count,
-                course.Modules.Count(module => module.Status == ModuleStatus.Complete),
+                course.Modules.Count(module => module.CompletionStatus == CompletionStatus.Completed),
                 CourseTermNames(course, schoolYear)))
             .ToArray();
 
@@ -94,6 +95,7 @@ public sealed class StudentCourseService
             course.Description.Description,
             course.Duration,
             course.PlannedCreditValue,
+            course.CompletionStatus,
             NoGradeYet,
             TermNames(schoolYear),
             SplitLines(course.CurriculumPlan.LearningObjectives).ToArray(),
@@ -132,6 +134,7 @@ public sealed class StudentCourseService
             course.Description.Description,
             course.Duration,
             course.PlannedCreditValue,
+            course.CompletionStatus,
             course.Description.InstructionalMethods,
             ParseResources(course.Description.TextsAndResources).ToArray(),
             course.Description.AssessmentMethods,
@@ -197,6 +200,7 @@ public sealed class StudentCourseService
             TermName(module.TermId, schoolYear),
             module.EstimatedLength,
             module.Status,
+            module.CompletionStatus,
             module.Instructions,
             module.LearningObjectiveItems
                 .Select(objective => new StudentModuleObjectiveView(objective.Text, objective.LinkedCourseObjective))
@@ -220,6 +224,7 @@ public sealed class StudentCourseService
                     lesson.EstimatedMinutes,
                     lesson.SuggestedDays,
                     lesson.DifficultyLevel,
+                    lesson.CompletionStatus,
                     lesson.SubjectAreas,
                     lesson.Tags,
                     lesson.Prerequisites,
@@ -317,6 +322,11 @@ public sealed class StudentCourseService
                     assignment.RequiredOutput,
                     assignment.IsPortfolioCandidate,
                     assignment.Status,
+                    assignment.AttemptPolicy,
+                    assignment.SubmissionStructure,
+                    assignment.DraftCount,
+                    DraftNumberForLesson(assignment, lessonId: null),
+                    DraftNumberForLesson(assignment, lessonId: null) == assignment.DraftCount,
                     assignment.AssignmentSummary,
                     assignment.StudentFacingGoal,
                     assignment.RequiredDeliverables,
@@ -333,7 +343,7 @@ public sealed class StudentCourseService
                     assignment.EvidenceRequirements,
                     assignment.Scoring,
                     assignment.Id,
-                    AssignmentSubmissionsFor(submissions, student.Id, course.Id, module.Id, assignment.Id),
+                    AssignmentSubmissionsFor(submissions, student.Id, course.Id, module.Id, assignment.Id, assignment.DraftCount),
                     AssignmentFeedbackFor(assessmentRecords, student.Id, course.Id, module.Id, assignment.Id)))
                 .ToArray(),
             module.AssignmentEvidencePlaceholder));
@@ -355,7 +365,8 @@ public sealed class StudentCourseService
                 module.SequenceOrder,
                 module.Title,
                 TermName(module.TermId, schoolYear),
-                module.Status))
+                module.Status,
+                module.CompletionStatus))
             .ToArray();
     }
 
@@ -400,7 +411,8 @@ public sealed class StudentCourseService
         Guid studentId,
         Guid courseId,
         Guid moduleId,
-        Guid assignmentId)
+        Guid assignmentId,
+        int draftCount)
     {
         return submissions
             .Where(submission => submission.StudentId == studentId)
@@ -415,10 +427,31 @@ public sealed class StudentCourseService
                 submission.SubmittedAtUtc,
                 submission.ReturnedAtUtc,
                 submission.AcceptedAtUtc,
+                submission.ClearedAtUtc,
                 submission.ParentReviewNotes,
                 submission.PortfolioCandidate,
+                submission.DraftNumber,
+                submission.DraftNumber == draftCount,
                 submission.Attachments.Count))
             .ToArray();
+    }
+
+    private static int DraftNumberForLesson(ModuleAssignment assignment, Guid? lessonId)
+    {
+        if (assignment.SubmissionStructure != AssignmentSubmissionStructure.MultiDraft)
+        {
+            return 1;
+        }
+
+        if (!lessonId.HasValue)
+        {
+            return 1;
+        }
+
+        var index = assignment.LinkedLessonIds.ToList().FindIndex(id => id == lessonId.Value);
+        return index < 0
+            ? 1
+            : Math.Min(index + 1, assignment.DraftCount);
     }
 
     private static IReadOnlyList<StudentAssignmentAssessmentFeedbackView> AssignmentFeedbackFor(

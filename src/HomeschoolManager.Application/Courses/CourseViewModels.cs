@@ -10,6 +10,7 @@ public sealed record CourseListItem(
     IReadOnlyList<string> SubjectAreas,
     CourseDuration Duration,
     decimal PlannedCreditValue,
+    CompletionStatus CompletionStatus,
     int MappingCount);
 
 public sealed record CourseListActionResult(
@@ -33,6 +34,7 @@ public sealed record CourseDetail(
     IReadOnlyList<string> SubjectAreas,
     CourseDuration Duration,
     decimal PlannedCreditValue,
+    CompletionStatus CompletionStatus,
     string Description,
     string InstructionalMethods,
     string MajorTopics,
@@ -68,6 +70,7 @@ public sealed record LearningModuleView(
     IReadOnlyList<ModuleResourceView> ResourceItems,
     string AssignmentEvidencePlaceholder,
     ModuleStatus Status,
+    CompletionStatus CompletionStatus,
     IReadOnlyList<LessonView> Lessons,
     IReadOnlyList<AssignmentView> Assignments,
     IReadOnlyList<AssignmentVariantView> AssignmentVariants);
@@ -88,6 +91,7 @@ public sealed record LessonView(
     int EstimatedMinutes,
     int SuggestedDays,
     LessonDifficultyLevel DifficultyLevel,
+    CompletionStatus CompletionStatus,
     IReadOnlyList<string> SubjectAreas,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Prerequisites,
@@ -194,6 +198,9 @@ public sealed record AssignmentView(
     decimal? PlannedPoints,
     decimal? PlannedWeight,
     AssignmentStatus Status,
+    AssignmentAttemptPolicy AttemptPolicy,
+    AssignmentSubmissionStructure SubmissionStructure,
+    int DraftCount,
     string AssignmentSummary,
     string StudentFacingGoal,
     int? EstimatedMinutesMin,
@@ -230,6 +237,9 @@ public sealed record AssignmentVariantView(
     decimal? PlannedPoints,
     decimal? PlannedWeight,
     AssignmentStatus Status,
+    AssignmentAttemptPolicy AttemptPolicy,
+    AssignmentSubmissionStructure SubmissionStructure,
+    int DraftCount,
     string AssignmentSummary,
     string StudentFacingGoal,
     int? EstimatedMinutesMin,

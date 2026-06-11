@@ -29,6 +29,7 @@ public sealed record Lesson
     public IReadOnlyList<string> ReflectionPrompts { get; init; }
     public LessonInstructorNotes? InstructorNotes { get; init; }
     public IReadOnlyList<Guid> LinkedAssignmentIds { get; init; }
+    public CompletionStatus CompletionStatus { get; init; }
 
     public Lesson(
         Guid id,
@@ -55,7 +56,8 @@ public sealed record Lesson
         LessonRubric? rubric = null,
         IReadOnlyList<string>? reflectionPrompts = null,
         LessonInstructorNotes? instructorNotes = null,
-        IReadOnlyList<Guid>? linkedAssignmentIds = null)
+        IReadOnlyList<Guid>? linkedAssignmentIds = null,
+        CompletionStatus completionStatus = CompletionStatus.NotStarted)
     {
         if (moduleId == Guid.Empty)
         {
@@ -87,6 +89,11 @@ public sealed record Lesson
             throw new DomainException("Lesson suggested days cannot be negative.");
         }
 
+        if (!Enum.IsDefined(completionStatus))
+        {
+            throw new DomainException("Lesson completion status is not recognized.");
+        }
+
         Id = id == Guid.Empty ? Guid.NewGuid() : id;
         ModuleId = moduleId;
         SourceLessonId = string.IsNullOrWhiteSpace(sourceLessonId) ? "" : sourceLessonId.Trim();
@@ -112,6 +119,7 @@ public sealed record Lesson
         ReflectionPrompts = NormalizeTextList(reflectionPrompts);
         InstructorNotes = NormalizeInstructorNotes(instructorNotes);
         LinkedAssignmentIds = NormalizeAssignmentIds(linkedAssignmentIds);
+        CompletionStatus = completionStatus;
     }
 
     private static IReadOnlyList<LessonResource> NormalizeResources(IReadOnlyList<LessonResource>? resources)

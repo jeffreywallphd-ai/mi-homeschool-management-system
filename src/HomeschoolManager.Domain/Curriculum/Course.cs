@@ -20,6 +20,7 @@ public sealed record Course
     public IReadOnlyList<LearningModule> Modules { get; init; }
     public bool IsArchived { get; init; }
     public DateTimeOffset? ArchivedAtUtc { get; init; }
+    public CompletionStatus CompletionStatus { get; init; }
 
     public Course(
         Guid id,
@@ -36,7 +37,8 @@ public sealed record Course
         IReadOnlyList<RequirementMapping>? requirementMappings,
         IReadOnlyList<LearningModule>? modules = null,
         bool isArchived = false,
-        DateTimeOffset? archivedAtUtc = null)
+        DateTimeOffset? archivedAtUtc = null,
+        CompletionStatus completionStatus = CompletionStatus.NotStarted)
     {
         if (studentId == Guid.Empty)
         {
@@ -56,6 +58,11 @@ public sealed record Course
         if (!Enum.IsDefined(duration))
         {
             throw new DomainException("Course duration is not recognized.");
+        }
+
+        if (!Enum.IsDefined(completionStatus))
+        {
+            throw new DomainException("Course completion status is not recognized.");
         }
 
         var normalizedSubjects = subjectAreas
@@ -84,6 +91,7 @@ public sealed record Course
         Modules = NormalizeModules(ModulesForCourse(modules ?? [], Id));
         IsArchived = isArchived;
         ArchivedAtUtc = isArchived ? archivedAtUtc ?? DateTimeOffset.UtcNow : null;
+        CompletionStatus = completionStatus;
     }
 
     public Course WithDescription(CourseDescription description)

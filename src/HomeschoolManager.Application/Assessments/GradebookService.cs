@@ -281,7 +281,14 @@ public sealed class GradebookService
                         .Where(submission => submission.AssignmentId == assignment.Id)
                         .OrderByDescending(submission => submission.SubmittedAtUtc)
                         .ToArray();
-                    var latestSubmission = assignmentSubmissions.FirstOrDefault();
+                    var activeSubmissions = assignmentSubmissions
+                        .Where(IsActiveReviewSubmission)
+                        .OrderBy(submission => submission.DraftNumber)
+                        .ThenByDescending(submission => submission.SubmittedAtUtc)
+                        .ToArray();
+                    var latestSubmission = activeSubmissions
+                        .OrderByDescending(submission => submission.SubmittedAtUtc)
+                        .FirstOrDefault();
                     var evidence = evidenceRecords
                         .Where(record => record.StudentId == course.StudentId)
                         .Where(record => record.CourseId == course.Id)
@@ -313,6 +320,13 @@ public sealed class GradebookService
                         latestSubmission?.Id,
                         latestSubmission?.Status,
                         latestSubmission?.SubmittedAtUtc,
+                        latestSubmission?.DraftNumber,
+                        assignment.DraftCount,
+                        latestSubmission is not null &&
+                            assignment.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft &&
+                            latestSubmission.DraftNumber == assignment.DraftCount,
+                        latestSubmission?.Attachments.Select(ToAttachment).ToArray() ?? [],
+                        activeSubmissions.Select(submission => ToSubmissionView(assignment, submission)).ToArray(),
                         evidence?.Id,
                         detail,
                         detail?.State ?? EffectiveState(latestSubmission, evidence));
@@ -350,6 +364,11 @@ public sealed class GradebookService
         return AssessmentState.NotAssessed;
     }
 
+    private static bool IsActiveReviewSubmission(AssignmentSubmission submission)
+    {
+        return submission.Status is not (AssignmentSubmissionStatus.Archived or AssignmentSubmissionStatus.Cleared);
+    }
+
     private static AssessmentDetail ToDetail(AssessmentRecord record)
     {
         return new AssessmentDetail(
@@ -367,6 +386,31 @@ public sealed class GradebookService
             record.StudentFeedback,
             record.FeedbackVisibleToStudent,
             record.UpdatedAtUtc);
+    }
+
+    private static GradebookSubmissionAttachment ToAttachment(StoredFileReference file)
+    {
+        return new GradebookSubmissionAttachment(
+            file.Id,
+            file.OriginalFileName,
+            file.ContentType,
+            file.SizeBytes,
+            file.ChecksumSha256,
+            file.CreatedAtUtc);
+    }
+
+    private static GradebookSubmissionView ToSubmissionView(ModuleAssignment assignment, AssignmentSubmission submission)
+    {
+        return new GradebookSubmissionView(
+            submission.Id,
+            submission.Status,
+            submission.SubmittedAtUtc,
+            submission.AttemptNumber,
+            submission.DraftNumber,
+            assignment.DraftCount,
+            assignment.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft &&
+                submission.DraftNumber == assignment.DraftCount,
+            submission.Attachments.Select(ToAttachment).ToArray());
     }
 
     private static StudentAssessmentFeedbackView ToStudentFeedback(AssessmentRecord record)

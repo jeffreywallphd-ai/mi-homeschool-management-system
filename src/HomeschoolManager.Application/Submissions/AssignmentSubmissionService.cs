@@ -45,11 +45,22 @@ public sealed class AssignmentSubmissionService
         }
 
         var existing = await repository.GetAssignmentSubmissionsAsync(cancellationToken);
-        var attemptNumber = existing.Count(submission =>
+        var draftNumber = ResolveDraftNumber(context.Assignment, command.DraftNumber);
+        var assignmentSubmissions = existing
+            .Where(submission =>
             submission.StudentId == context.StudentId &&
             submission.CourseId == context.Course.Id &&
             submission.ModuleId == context.Module.Id &&
-            submission.AssignmentId == context.Assignment.Id) + 1;
+            submission.AssignmentId == context.Assignment.Id)
+            .ToArray();
+
+        var attemptCheck = CanSubmitAttempt(context.Assignment, assignmentSubmissions, draftNumber);
+        if (!attemptCheck.Succeeded)
+        {
+            return OperationResult<Guid>.Failure(attemptCheck.Errors.ToArray());
+        }
+
+        var attemptNumber = assignmentSubmissions.Count(submission => submission.DraftNumber == draftNumber) + 1;
 
         var now = DateTimeOffset.UtcNow;
         var submissionId = Guid.NewGuid();
@@ -83,7 +94,8 @@ public sealed class AssignmentSubmissionService
                 null,
                 null,
                 "",
-                context.Assignment.IsPortfolioCandidate);
+                context.Assignment.IsPortfolioCandidate,
+                draftNumber: draftNumber);
 
             await repository.SaveAssignmentSubmissionAsync(submission, cancellationToken);
             return OperationResult<Guid>.Success(submission.Id);
@@ -127,6 +139,55 @@ public sealed class AssignmentSubmissionService
             Status = AssignmentSubmissionStatus.Returned,
             ParentReviewNotes = command.ParentReviewNotes.Trim(),
             ReturnedAtUtc = now,
+            UpdatedAtUtc = now
+        }, cancellationToken);
+
+        return OperationResult.Success();
+    }
+
+    public async Task<OperationResult> ClearSubmissionAsync(
+        UserContext user,
+        ClearSubmissionCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!string.Equals(command.ConfirmationText, "Clear", StringComparison.Ordinal))
+        {
+            return OperationResult.Failure("Type Clear to confirm submission clearing.");
+        }
+
+        if (string.IsNullOrWhiteSpace(command.ParentReviewNotes))
+        {
+            return OperationResult.Failure("Add parent review notes before clearing the submission.");
+        }
+
+        var submission = await repository.GetAssignmentSubmissionAsync(command.SubmissionId, cancellationToken);
+        if (submission is null)
+        {
+            return OperationResult.Failure("Submission was not found.");
+        }
+
+        if (submission.Status == AssignmentSubmissionStatus.Accepted)
+        {
+            return OperationResult.Failure("Accepted evidence cannot be cleared from the active review workflow.");
+        }
+
+        if (submission.Status is AssignmentSubmissionStatus.Archived or AssignmentSubmissionStatus.Cleared)
+        {
+            return OperationResult.Failure("This submission is not active in the review workflow.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        await repository.SaveAssignmentSubmissionAsync(submission with
+        {
+            Status = AssignmentSubmissionStatus.Cleared,
+            ParentReviewNotes = command.ParentReviewNotes.Trim(),
+            ClearedAtUtc = now,
             UpdatedAtUtc = now
         }, cancellationToken);
 
@@ -341,9 +402,13 @@ public sealed class AssignmentSubmissionService
                 detail.SubmittedAtUtc,
                 detail.ReturnedAtUtc,
                 detail.AcceptedAtUtc,
+                detail.ClearedAtUtc,
                 detail.ParentReviewNotes,
                 detail.PortfolioCandidate,
-                detail.Attachments.Count);
+                detail.Attachments.Count,
+                detail.DraftNumber,
+                detail.DraftCount,
+                detail.IsFinalDraft);
     }
 
     private async Task<SubmissionReviewDetail?> ToDetailAsync(
@@ -382,8 +447,12 @@ public sealed class AssignmentSubmissionService
             submission.SubmittedAtUtc,
             submission.ReturnedAtUtc,
             submission.AcceptedAtUtc,
+            submission.ClearedAtUtc,
             submission.ParentReviewNotes,
             submission.PortfolioCandidate,
+            submission.DraftNumber,
+            context.Assignment.DraftCount,
+            IsFinalDraft(context.Assignment, submission.DraftNumber),
             submission.Attachments.Select(ToAttachmentView).ToArray(),
             evidence is null ? null : ToEvidenceView(evidence));
     }
@@ -416,6 +485,45 @@ public sealed class AssignmentSubmissionService
     {
         var output = string.IsNullOrWhiteSpace(requiredOutput) ? "Student-submitted assignment work." : requiredOutput.Trim();
         return $"{courseTitle} | {moduleTitle} | {output}";
+    }
+
+    private static OperationResult CanSubmitAttempt(
+        ModuleAssignment assignment,
+        IReadOnlyList<AssignmentSubmission> submissions,
+        int draftNumber)
+    {
+        var draftSubmissions = submissions
+            .Where(submission => submission.DraftNumber == draftNumber)
+            .ToArray();
+
+        if (draftSubmissions.Any(submission => submission.Status == AssignmentSubmissionStatus.Submitted))
+        {
+            return OperationResult.Failure("Submitted work is already waiting for parent review.");
+        }
+
+        if (assignment.AttemptPolicy == AssignmentAttemptPolicy.SingleAttempt &&
+            draftSubmissions.Any(submission => submission.Status == AssignmentSubmissionStatus.Accepted))
+        {
+            return OperationResult.Failure("This draft is configured for one accepted submission.");
+        }
+
+        return OperationResult.Success();
+    }
+
+    private static int ResolveDraftNumber(ModuleAssignment assignment, int requestedDraftNumber)
+    {
+        if (assignment.SubmissionStructure != AssignmentSubmissionStructure.MultiDraft)
+        {
+            return 1;
+        }
+
+        return Math.Clamp(requestedDraftNumber, 1, assignment.DraftCount);
+    }
+
+    private static bool IsFinalDraft(ModuleAssignment assignment, int draftNumber)
+    {
+        return assignment.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft &&
+            draftNumber == assignment.DraftCount;
     }
 
     private sealed record AssignmentContext(

@@ -688,6 +688,7 @@ scoring fields:
                 course.SubjectAreas,
                 course.Duration,
                 course.PlannedCreditValue,
+                course.CompletionStatus,
                 course.RequirementMappings.Count))
             .ToArray();
     }
@@ -792,7 +793,10 @@ scoring fields:
                 existing.Description,
                 existing.CurriculumPlan,
                 existing.RequirementMappings,
-                existing.Modules);
+                existing.Modules,
+                existing.IsArchived,
+                existing.ArchivedAtUtc,
+                existing.CompletionStatus);
 
             await repository.SaveCourseAsync(updated, cancellationToken);
             CourseNavigationChanged?.Invoke();
@@ -802,6 +806,33 @@ scoring fields:
         {
             return OperationResult.Failure(ex.Message);
         }
+    }
+
+    public async Task<OperationResult> UpdateCourseCompletionStatusAsync(
+        UserContext user,
+        UpdateCourseCompletionStatusCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!Enum.IsDefined(command.CompletionStatus))
+        {
+            return OperationResult.Failure("Course completion status is not recognized.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        if (course is null)
+        {
+            return OperationResult.Failure("Course was not found.");
+        }
+
+        await repository.SaveCourseAsync(course with { CompletionStatus = command.CompletionStatus }, cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
     }
 
     public async Task<OperationResult<CourseListActionResult>> DeleteCoursesAsync(
@@ -1734,7 +1765,8 @@ scoring fields:
                 BuildObjectiveItems(command.LearningObjectives),
                 BuildResourceItems(command.Resources),
                 existing.Lessons,
-                existing.Assignments);
+                existing.Assignments,
+                existing.CompletionStatus);
             var modules = course.Modules
                 .Select(module => module.Id == command.ModuleId ? updatedModule : module)
                 .ToArray();
@@ -1746,6 +1778,34 @@ scoring fields:
         {
             return OperationResult.Failure(ex.Message);
         }
+    }
+
+    public async Task<OperationResult> UpdateModuleCompletionStatusAsync(
+        UserContext user,
+        UpdateModuleCompletionStatusCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!Enum.IsDefined(command.CompletionStatus))
+        {
+            return OperationResult.Failure("Module completion status is not recognized.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        if (course is null || module is null)
+        {
+            return OperationResult.Failure("Learning module was not found.");
+        }
+
+        await SaveModuleAsync(course, module with { CompletionStatus = command.CompletionStatus }, cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
     }
 
     public async Task<OperationResult> ReorderLearningModulesAsync(
@@ -1951,7 +2011,7 @@ scoring fields:
                 module.Id,
                 existing.SourceLessonId,
                 existing.SequenceOrder,
-                command);
+                command) with { CompletionStatus = existing.CompletionStatus };
             var lessons = module.Lessons
                 .Select(lesson => lesson.Id == command.LessonId ? updatedLesson : lesson)
                 .ToArray();
@@ -1963,6 +2023,38 @@ scoring fields:
         {
             return OperationResult.Failure(ex.Message);
         }
+    }
+
+    public async Task<OperationResult> UpdateLessonCompletionStatusAsync(
+        UserContext user,
+        UpdateLessonCompletionStatusCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        if (!Enum.IsDefined(command.CompletionStatus))
+        {
+            return OperationResult.Failure("Lesson completion status is not recognized.");
+        }
+
+        var course = await repository.GetCourseAsync(command.CourseId, cancellationToken);
+        var module = course?.Modules.FirstOrDefault(item => item.Id == command.ModuleId);
+        var lesson = module?.Lessons.FirstOrDefault(item => item.Id == command.LessonId);
+        if (course is null || module is null || lesson is null)
+        {
+            return OperationResult.Failure("Lesson was not found.");
+        }
+
+        var lessons = module.Lessons
+            .Select(item => item.Id == command.LessonId ? item with { CompletionStatus = command.CompletionStatus } : item)
+            .ToArray();
+        await SaveModuleAsync(course, module.WithLessons(lessons), cancellationToken);
+        CourseNavigationChanged?.Invoke();
+        return OperationResult.Success();
     }
 
     public async Task<OperationResult> ReorderLessonsAsync(
@@ -2110,7 +2202,10 @@ scoring fields:
                 BuildCompletionCriteria(command.CompletionCriteria),
                 command.ReflectionPrompts,
                 BuildEvidenceRequirements(command.EvidenceRequirements),
-                BuildScoring(command.Scoring));
+                BuildScoring(command.Scoring),
+                command.AttemptPolicy,
+                command.SubmissionStructure,
+                command.DraftCount);
             await SaveModuleAsync(course, module.WithAssignments(module.Assignments.Concat([assignment]).ToArray()), cancellationToken);
             CourseNavigationChanged?.Invoke();
             return OperationResult<Guid>.Success(assignment.Id);
@@ -2265,7 +2360,10 @@ scoring fields:
                 BuildCompletionCriteria(command.CompletionCriteria),
                 command.ReflectionPrompts,
                 BuildEvidenceRequirements(command.EvidenceRequirements),
-                BuildScoring(command.Scoring)) with { Id = existing.Id };
+                BuildScoring(command.Scoring),
+                command.AttemptPolicy,
+                command.SubmissionStructure,
+                command.DraftCount) with { Id = existing.Id };
             var assignments = module.Assignments
                 .Select(assignment => assignment.Id == command.AssignmentId ? updatedAssignment : assignment)
                 .ToArray();
@@ -2460,6 +2558,7 @@ scoring fields:
             course.SubjectAreas,
             course.Duration,
             course.PlannedCreditValue,
+            course.CompletionStatus,
             course.Description.Description,
             course.Description.InstructionalMethods,
             course.Description.MajorTopics,
@@ -2571,6 +2670,7 @@ scoring fields:
                 .ToArray(),
             module.AssignmentEvidencePlaceholder,
             module.Status,
+            module.CompletionStatus,
             module.Lessons.Select(ToLessonView).ToArray(),
             module.Assignments.Select(ToAssignmentView).ToArray(),
             AssignmentVariantsFor(course, module, availablePacks ?? DefaultCoursePacks.All));
@@ -2590,6 +2690,7 @@ scoring fields:
             lesson.EstimatedMinutes,
             lesson.SuggestedDays,
             lesson.DifficultyLevel,
+            lesson.CompletionStatus,
             lesson.SubjectAreas,
             lesson.Tags,
             lesson.Prerequisites,
@@ -2693,6 +2794,9 @@ scoring fields:
             assignment.PlannedPoints,
             assignment.PlannedWeight,
             assignment.Status,
+            assignment.AttemptPolicy,
+            assignment.SubmissionStructure,
+            assignment.DraftCount,
             assignment.AssignmentSummary,
             assignment.StudentFacingGoal,
             assignment.EstimatedMinutesMin,
@@ -2750,6 +2854,9 @@ scoring fields:
                     variant.PlannedPoints,
                     variant.PlannedWeight,
                     variant.Status,
+                    AssignmentAttemptPolicy.SingleAttempt,
+                    variant.SubmissionStructure,
+                    variant.DraftCount,
                     variant.AssignmentSummary,
                     variant.StudentFacingGoal,
                     variant.EstimatedMinutesMin,
@@ -2807,7 +2914,10 @@ scoring fields:
         AssignmentCompletionCriteria? completionCriteria = null,
         IReadOnlyList<string>? reflectionPrompts = null,
         AssignmentEvidenceRequirements? evidenceRequirements = null,
-        AssignmentScoring? scoring = null)
+        AssignmentScoring? scoring = null,
+        AssignmentAttemptPolicy attemptPolicy = AssignmentAttemptPolicy.SingleAttempt,
+        AssignmentSubmissionStructure submissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+        int draftCount = 1)
     {
         return new ModuleAssignment(
             Guid.NewGuid(),
@@ -2846,7 +2956,10 @@ scoring fields:
             completionCriteria,
             reflectionPrompts,
             evidenceRequirements,
-            scoring);
+            scoring,
+            attemptPolicy,
+            submissionStructure,
+            draftCount);
     }
 
     private static ModuleAssignment BuildImportedAssignment(
@@ -2891,7 +3004,10 @@ scoring fields:
             assignment.CompletionCriteria,
             assignment.ReflectionPrompts,
             assignment.EvidenceRequirements,
-            assignment.Scoring);
+            assignment.Scoring,
+            assignment.AttemptPolicy,
+            assignment.SubmissionStructure,
+            assignment.DraftCount);
     }
 
     private static string UniqueAssignmentSourceId(string sourceAssignmentId, HashSet<string> existingSourceIds)
@@ -3569,7 +3685,10 @@ scoring fields:
                 description,
                 curriculumPlan,
                 mappings,
-                modules);
+                modules,
+                course.IsArchived,
+                course.ArchivedAtUtc,
+                course.CompletionStatus);
 
             await repository.SaveCourseAsync(updated, cancellationToken);
         }
@@ -4489,7 +4608,10 @@ scoring fields:
                         variant.CompletionCriteria,
                         variant.ReflectionPrompts,
                         variant.EvidenceRequirements,
-                        variant.Scoring);
+                        variant.Scoring,
+                        AssignmentAttemptPolicy.SingleAttempt,
+                        variant.SubmissionStructure,
+                        variant.DraftCount);
                 })
                 .ToArray(),
             sourceIdentity,
@@ -5609,7 +5731,10 @@ scoring fields:
         AssignmentCompletionCriteria? CompletionCriteria = null,
         IReadOnlyList<string>? ReflectionPrompts = null,
         AssignmentEvidenceRequirements? EvidenceRequirements = null,
-        AssignmentScoring? Scoring = null);
+        AssignmentScoring? Scoring = null,
+        AssignmentAttemptPolicy AttemptPolicy = AssignmentAttemptPolicy.SingleAttempt,
+        AssignmentSubmissionStructure SubmissionStructure = AssignmentSubmissionStructure.SingleSubmission,
+        int DraftCount = 1);
 
     private sealed record ModulePackEnvelope(
         string Format,

@@ -1,5 +1,6 @@
 using HomeschoolManager.Application.Assessments;
 using HomeschoolManager.Application.Courses;
+using HomeschoolManager.Application.Portfolio;
 using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Application.Setup;
 using HomeschoolManager.Application.Submissions;
@@ -214,6 +215,52 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual(AssessmentState.Assessed, assessedRow.EffectiveState, "Recorded assessment should set explicit assessed state.");
         AssertEqual(AssessmentResultType.Points, assessedRow.Assessment?.ResultType ?? AssessmentResultType.NotGraded, "Assessment result type should be points.");
         AssertEqual(1, after.Value?.Summary?.AssessedCount ?? 0, "Summary should count explicit assessments.");
+    })),
+    ("Gradebook exposes submitted files and parent preview renders markdown attachments", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var fileStore = new LocalSubmissionFileStore(paths);
+        var submissionService = new AssignmentSubmissionService(repository, fileStore);
+        var previewService = new SubmissionFilePreviewService(repository, fileStore);
+        var gradebookService = new GradebookService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+        var attachmentBytes = System.Text.Encoding.UTF8.GetBytes("# Acceptable Values\n\nEvidence paragraph with details for review.");
+
+        var submitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "Please review the attached work.",
+                "",
+                [new AssignmentAttachmentUpload("acceptable-values.md", "text/markdown", attachmentBytes)],
+                setup.Student.Id));
+        AssertTrue(submitted.Succeeded, "Student submission with attachment should succeed.");
+
+        var gradebook = await gradebookService.GetGradebookAsync(parent, setup.Student.Id, setup.Course.Id);
+        AssertTrue(gradebook.Succeeded, "Gradebook should load submitted file metadata.");
+        var row = gradebook.Value!.Rows.Single();
+        AssertEqual(submitted.Value, row.LatestSubmissionId ?? Guid.Empty, "Gradebook row should point to the latest submission.");
+        AssertEqual(1, row.LatestSubmissionAttachments.Count, "Gradebook row should include submitted attachment metadata.");
+        AssertEqual("acceptable-values.md", row.LatestSubmissionAttachments[0].OriginalFileName, "Attachment filename should be visible in gradebook.");
+
+        var preview = await previewService.GetPreviewAsync(parent, submitted.Value, row.LatestSubmissionAttachments[0].FileId);
+        AssertTrue(preview.Succeeded, "Parent should be able to preview the submitted attachment.");
+        AssertEqual("text/html", preview.Value!.ContentType, "Markdown attachment preview should render as HTML.");
+        var previewHtml = System.Text.Encoding.UTF8.GetString(preview.Value.Content);
+        AssertTrue(previewHtml.Contains("<h1>Acceptable Values</h1>", StringComparison.Ordinal), "Markdown heading should render as a level-one heading.");
+        AssertFalse(previewHtml.Contains("# Acceptable Values", StringComparison.Ordinal), "Markdown preview should not show heading markup.");
+
+        var download = await previewService.GetDownloadAsync(parent, submitted.Value, row.LatestSubmissionAttachments[0].FileId);
+        AssertTrue(download.Succeeded, "Parent should be able to download the original attachment.");
+        AssertEqual("text/markdown", download.Value!.ContentType, "Download should keep the original content type.");
+        AssertTrue(download.Value.Content.SequenceEqual(attachmentBytes), "Download should return the original attachment bytes.");
+
+        var studentPreview = await previewService.GetPreviewAsync(studentUser, submitted.Value, row.LatestSubmissionAttachments[0].FileId);
+        AssertFalse(studentPreview.Succeeded, "Student should not use the admin gradebook file preview route.");
     })),
     ("Assessment records persist and reload", (Func<Task>)(async () =>
     {
@@ -1980,6 +2027,391 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         var acceptedSubmission = await repository.GetAssignmentSubmissionAsync(secondSubmit.Value);
         AssertTrue(acceptedSubmission!.Status == AssignmentSubmissionStatus.Accepted, "Accepted submission should have accepted workflow status.");
+
+        var thirdSubmit = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                course.Value,
+                module.Value,
+                assignment.Value,
+                "Trying another accepted attempt.",
+                "",
+                Array.Empty<AssignmentAttachmentUpload>(),
+                student.Id));
+        AssertFalse(thirdSubmit.Succeeded, "Single-attempt assignments should block another attempt after accepted evidence.");
+    })),
+    ("Multi-draft assignment accepts separate lesson draft submissions", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var courseService = new CourseService(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var gradebookService = new GradebookService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+
+        var course = await courseService.CreateCourseAsync(parent, new CreateCourseCommand("Agro Business", "Business planning.", ["Business"], CourseDuration.OneSemester, 0.5m, student.Id));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await courseService.CreateLearningModuleAsync(parent, new CreateLearningModuleCommand(
+            course.Value,
+            "Business Plan",
+            "Build a business plan in stages.",
+            null,
+            "3 lessons",
+            "Complete one draft per lesson.",
+            Objectives("Develop a complete business plan."),
+            Resources("Business plan guide"),
+            "Retain final plan and drafts.",
+            ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson1 = await courseService.CreateLessonAsync(parent, new CreateLessonCommand(course.Value, module.Value, "Market analysis", "Draft the market analysis.", "Develop a complete business plan.", LessonResources("Market guide")));
+        var lesson2 = await courseService.CreateLessonAsync(parent, new CreateLessonCommand(course.Value, module.Value, "Budget plan", "Draft the budget plan.", "Develop a complete business plan.", LessonResources("Budget guide")));
+        var lesson3 = await courseService.CreateLessonAsync(parent, new CreateLessonCommand(course.Value, module.Value, "Final plan", "Submit the final plan.", "Develop a complete business plan.", LessonResources("Final plan checklist")));
+        AssertTrue(lesson1.Succeeded && lesson2.Succeeded && lesson3.Succeeded, "Lessons should be created.");
+
+        var assignment = await courseService.CreateAssignmentAsync(parent, new CreateAssignmentCommand(
+            course.Value,
+            module.Value,
+            "Agro-business plan",
+            AssignmentType.Project,
+            InstructionalMethodProfile.ProjectBasedApplied,
+            "Submit the business plan draft for the current lesson.",
+            "One lesson",
+            "After each lesson",
+            null,
+            ["Develop a complete business plan."],
+            [lesson1.Value, lesson2.Value, lesson3.Value],
+            "Business plan draft or final plan.",
+            "",
+            true,
+            100,
+            null,
+            AssignmentStatus.Assigned,
+            AssignmentSummary: "Build one larger assignment across three lesson drafts.",
+            StudentFacingGoal: "Improve the plan across three drafts.",
+            AttemptPolicy: AssignmentAttemptPolicy.SingleAttempt,
+            SubmissionStructure: AssignmentSubmissionStructure.MultiDraft,
+            DraftCount: 3));
+        AssertTrue(assignment.Succeeded, "Multi-draft assignment create failed.");
+
+        var draft1 = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Draft 1 market analysis.",
+            "",
+            [],
+            student.Id,
+            1));
+        AssertTrue(draft1.Succeeded, "Draft 1 should submit.");
+
+        var duplicatePendingDraft1 = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Duplicate draft 1.",
+            "",
+            [],
+            student.Id,
+            1));
+        AssertFalse(duplicatePendingDraft1.Succeeded, "Same draft should not allow duplicate pending work.");
+
+        var acceptedDraft1 = await submissionService.AcceptSubmissionAsync(parent, new AcceptSubmissionCommand(draft1.Value, "Draft 1 accepted.", true));
+        AssertTrue(acceptedDraft1.Succeeded, "Parent should accept draft 1.");
+
+        var secondDraft1 = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Second draft 1.",
+            "",
+            [],
+            student.Id,
+            1));
+        AssertFalse(secondDraft1.Succeeded, "Single-attempt draft 1 should not reopen after accepted evidence.");
+
+        var draft2 = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Draft 2 budget plan.",
+            "",
+            [],
+            student.Id,
+            2));
+        AssertTrue(draft2.Succeeded, "Accepted draft 1 should not block draft 2.");
+
+        var finalDraft = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Final business plan.",
+            "",
+            [],
+            student.Id,
+            3));
+        AssertTrue(finalDraft.Succeeded, "Earlier drafts should not block final draft submission.");
+
+        var storedDrafts = await repository.GetAssignmentSubmissionsAsync();
+        AssertEqual(3, storedDrafts.Count(submission => submission.AssignmentId == assignment.Value), "Three draft submissions should be retained.");
+        AssertTrue(storedDrafts.Any(submission => submission.DraftNumber == 3), "Final draft should be stored with draft number 3.");
+
+        var gradebook = await gradebookService.GetGradebookAsync(parent, student.Id, course.Value);
+        AssertTrue(gradebook.Succeeded, "Gradebook should load multi-draft submissions.");
+        var row = gradebook.Value!.Rows.Single();
+        AssertEqual(3, row.ActiveSubmissions.Count, "Gradebook should show every active submitted draft for a multi-draft assignment.");
+        AssertTrue(row.ActiveSubmissions.Any(submission => submission.DraftNumber == 1 && submission.Status == AssignmentSubmissionStatus.Accepted), "Accepted draft 1 should remain visible in the submission area.");
+        AssertTrue(row.ActiveSubmissions.Any(submission => submission.DraftNumber == 2 && submission.Status == AssignmentSubmissionStatus.Submitted), "Submitted draft 2 should remain visible after later drafts.");
+        AssertTrue(row.ActiveSubmissions.Any(submission => submission.DraftNumber == 3 && submission.IsFinalDraft), "Final draft should be labeled as the final draft.");
+
+        var clearDraft2 = await submissionService.ClearSubmissionAsync(parent, new ClearSubmissionCommand(draft2.Value, "Clearing draft 2 for a corrected upload.", "Clear"));
+        AssertTrue(clearDraft2.Succeeded, "Parent should clear a specific multi-draft submission.");
+
+        var afterClear = await gradebookService.GetGradebookAsync(parent, student.Id, course.Value);
+        AssertTrue(afterClear.Succeeded, "Gradebook should reload after clearing one draft.");
+        var rowAfterClear = afterClear.Value!.Rows.Single();
+        AssertEqual(2, rowAfterClear.ActiveSubmissions.Count, "Clearing draft 2 should remove only that draft from active gradebook submissions.");
+        AssertFalse(rowAfterClear.ActiveSubmissions.Any(submission => submission.SubmissionId == draft2.Value), "Cleared draft 2 should not remain active in the gradebook submission area.");
+        AssertTrue(rowAfterClear.ActiveSubmissions.Any(submission => submission.DraftNumber == 1), "Draft 1 should remain active after clearing draft 2.");
+        AssertTrue(rowAfterClear.ActiveSubmissions.Any(submission => submission.DraftNumber == 3), "Final draft should remain active after clearing draft 2.");
+
+        var correctedDraft2 = await submissionService.SubmitAssignmentAsync(studentUser, new SubmitAssignmentCommand(
+            course.Value,
+            module.Value,
+            assignment.Value,
+            "Corrected draft 2 budget plan.",
+            "",
+            [],
+            student.Id,
+            2));
+        AssertTrue(correctedDraft2.Succeeded, "Clearing draft 2 should reopen draft 2 for student submission.");
+    })),
+    ("Student configures portfolio draft from accepted evidence and parent reviews it", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var portfolioService = new PortfolioService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+
+        var submitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "This analysis explains why the evidence matters.",
+                "",
+                [],
+                setup.Student.Id));
+        AssertTrue(submitted.Succeeded, "Student submission should succeed before evidence can be curated.");
+
+        var accepted = await submissionService.AcceptSubmissionAsync(parent, new AcceptSubmissionCommand(submitted.Value, "Accepted as portfolio evidence.", true));
+        AssertTrue(accepted.Succeeded, "Parent acceptance should create evidence.");
+        var evidenceBefore = await repository.GetEvidenceRecordsAsync();
+        var assessmentsBefore = await repository.GetAssessmentRecordsAsync();
+
+        var parentAdd = await portfolioService.AddDraftItemAsync(parent, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
+        AssertFalse(parentAdd.Succeeded, "Parent/admin should not create student portfolio draft entries.");
+
+        var added = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
+        AssertTrue(added.Succeeded, "Student should add accepted evidence to a portfolio draft.");
+
+        var duplicate = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
+        AssertTrue(duplicate.Succeeded, "Re-adding accepted evidence should be idempotent.");
+        AssertEqual(added.Value, duplicate.Value, "Duplicate add should return the existing draft item id.");
+
+        var updated = await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
+            added.Value,
+            "Evidence analysis portfolio artifact",
+            "Science",
+            "This shows I can explain evidence carefully.",
+            "It is one of my stronger written analyses.",
+            ["Evidence", "Analysis"],
+            2,
+            true));
+        AssertTrue(updated.Succeeded, "Student should configure draft portfolio metadata.");
+
+        var submitForReview = await portfolioService.SubmitDraftItemAsync(studentUser, new SubmitPortfolioDraftItemCommand(added.Value));
+        AssertTrue(submitForReview.Succeeded, "Student should submit configured portfolio item for parent review.");
+
+        var studentReview = await portfolioService.ReviewDraftItemAsync(studentUser, new ReviewPortfolioDraftItemCommand(
+            added.Value,
+            PortfolioDraftStatus.ParentApproved,
+            "Trying to approve."));
+        AssertFalse(studentReview.Succeeded, "Student should not review or approve portfolio draft entries.");
+
+        var revision = await portfolioService.ReviewDraftItemAsync(parent, new ReviewPortfolioDraftItemCommand(
+            added.Value,
+            PortfolioDraftStatus.NeedsRevision,
+            "Add one more concrete skill."));
+        AssertTrue(revision.Succeeded, "Parent should be able to request portfolio revisions.");
+
+        var revised = await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
+            added.Value,
+            "Evidence analysis portfolio artifact",
+            "Science",
+            "This shows I can explain evidence carefully.",
+            "It shows evidence interpretation and revision.",
+            ["Evidence", "Analysis", "Revision"],
+            2,
+            true));
+        AssertTrue(revised.Succeeded, "Student should revise an item returned by the parent.");
+
+        var resubmitted = await portfolioService.SubmitDraftItemAsync(studentUser, new SubmitPortfolioDraftItemCommand(added.Value));
+        AssertTrue(resubmitted.Succeeded, "Student should resubmit revised portfolio item.");
+
+        var approved = await portfolioService.ReviewDraftItemAsync(parent, new ReviewPortfolioDraftItemCommand(
+            added.Value,
+            PortfolioDraftStatus.ParentApproved,
+            "Ready for parent portfolio review packet."));
+        AssertTrue(approved.Succeeded, "Parent should approve a student-curated portfolio item.");
+
+        var workspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertTrue(workspace.Succeeded, "Student portfolio workspace should load.");
+        AssertEqual(1, workspace.Value!.DraftItems.Count, "Student workspace should include the curated draft item.");
+        AssertTrue(workspace.Value.DraftItems[0].Status == PortfolioDraftStatus.ParentApproved, "Approved status should be visible to the student.");
+        AssertTrue(workspace.Value.AvailableEvidence[0].AlreadyAdded, "Accepted evidence should show that it has already been added.");
+
+        var reviewWorkspace = await portfolioService.GetReviewWorkspaceAsync(parent);
+        AssertTrue(reviewWorkspace.Succeeded, "Parent portfolio review workspace should load.");
+        AssertEqual(1, reviewWorkspace.Value!.Items.Count, "Parent review workspace should include the draft item.");
+
+        var evidenceAfter = await repository.GetEvidenceRecordsAsync();
+        var assessmentsAfter = await repository.GetAssessmentRecordsAsync();
+        var courseAfter = await repository.GetCourseAsync(setup.Course.Id);
+        AssertEqual(evidenceBefore.Count, evidenceAfter.Count, "Portfolio drafting should not duplicate evidence records.");
+        AssertEqual(assessmentsBefore.Count, assessmentsAfter.Count, "Portfolio drafting should not create assessment records.");
+        AssertEqual(setup.Course.PlannedCreditValue, courseAfter!.PlannedCreditValue, "Portfolio drafting should not alter course credits.");
+    })),
+    ("Parent can clear active submission and reopen a single-attempt assignment", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var courseService = new CourseService(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+
+        var course = await courseService.CreateCourseAsync(parent, new CreateCourseCommand("Writing", "Composition.", ["English"], CourseDuration.OneSemester, 0.5m, student.Id));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await courseService.CreateLearningModuleAsync(parent, new CreateLearningModuleCommand(
+            course.Value,
+            "Essay",
+            "Essay module.",
+            null,
+            "1 week",
+            "Draft and submit.",
+            Objectives("Write a clear argument."),
+            Resources("Writing handbook"),
+            "Essay evidence.",
+            ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var assignment = await courseService.CreateAssignmentAsync(parent, new CreateAssignmentCommand(
+            course.Value,
+            module.Value,
+            "Argument paragraph",
+            AssignmentType.Reflection,
+            InstructionalMethodProfile.Hybrid,
+            "Write one paragraph.",
+            "30 minutes",
+            "After drafting",
+            null,
+            ["Write a clear argument."],
+            [],
+            "One paragraph.",
+            "",
+            false,
+            10,
+            null,
+            AssignmentStatus.Assigned));
+        AssertTrue(assignment.Succeeded, "Assignment create failed.");
+
+        var firstSubmit = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(course.Value, module.Value, assignment.Value, "Initial paragraph.", "", [], student.Id));
+        AssertTrue(firstSubmit.Succeeded, "Student submit failed.");
+
+        var blockedWhileSubmitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(course.Value, module.Value, assignment.Value, "Second paragraph.", "", [], student.Id));
+        AssertFalse(blockedWhileSubmitted.Succeeded, "Pending submitted work should block a duplicate submission.");
+
+        var deniedClear = await submissionService.ClearSubmissionAsync(
+            studentUser,
+            new ClearSubmissionCommand(firstSubmit.Value, "Student cannot clear.", "Clear"));
+        AssertFalse(deniedClear.Succeeded, "Student should not clear submissions.");
+
+        var clear = await submissionService.ClearSubmissionAsync(
+            parent,
+            new ClearSubmissionCommand(firstSubmit.Value, "Cleared so the student can submit a replacement.", "Clear"));
+        AssertTrue(clear.Succeeded, "Parent should clear active submitted work.");
+        var cleared = await repository.GetAssignmentSubmissionAsync(firstSubmit.Value);
+        AssertTrue(cleared!.Status == AssignmentSubmissionStatus.Cleared, "Cleared submission should retain history with cleared status.");
+
+        var pending = await submissionService.ListPendingReviewsAsync(parent);
+        AssertEqual(0, pending.Value!.Count, "Cleared submissions should leave pending review.");
+
+        var gradebook = await new GradebookService(repository).GetGradebookAsync(parent, student.Id, course.Value);
+        AssertTrue(gradebook.Succeeded, "Gradebook should load after clearing.");
+        var rowAfterClear = gradebook.Value!.Rows.Single();
+        AssertTrue(rowAfterClear.LatestSubmissionId is null, "Cleared submission should not remain active in the gradebook editor.");
+        AssertEqual(0, rowAfterClear.LatestSubmissionAttachments.Count, "Cleared submission files should not remain in the active gradebook file panel.");
+
+        var secondSubmit = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(course.Value, module.Value, assignment.Value, "Replacement paragraph.", "", [], student.Id));
+        AssertTrue(secondSubmit.Succeeded, "Cleared single-attempt assignment should reopen submission.");
+        var replacement = await repository.GetAssignmentSubmissionAsync(secondSubmit.Value);
+        AssertEqual(2, replacement!.AttemptNumber, "Replacement submission should keep the next attempt number.");
+    })),
+    ("Completion statuses update without changing planned credit", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+        var parent = UserContext.ParentAdmin("Parent");
+        var courseService = new CourseService(repository);
+        var studentCourseService = new StudentCourseService(repository);
+
+        var course = await courseService.CreateCourseAsync(parent, new CreateCourseCommand("Ecology", "Local ecology.", ["Science"], CourseDuration.OneSemester, 0.5m, student.Id));
+        AssertTrue(course.Succeeded, "Course create failed.");
+        var module = await courseService.CreateLearningModuleAsync(parent, new CreateLearningModuleCommand(
+            course.Value,
+            "Field notes",
+            "Observe and summarize.",
+            null,
+            "1 week",
+            "Complete the field notes module.",
+            Objectives("Summarize field observations."),
+            Resources("Field guide"),
+            "Field note evidence.",
+            ModuleStatus.Active));
+        AssertTrue(module.Succeeded, "Module create failed.");
+        var lesson = await courseService.CreateLessonAsync(parent, new CreateLessonCommand(
+            course.Value,
+            module.Value,
+            "Observation walk",
+            "Observe the site.",
+            "Summarize field observations.",
+            LessonResources("Field guide")));
+        AssertTrue(lesson.Succeeded, "Lesson create failed.");
+
+        AssertTrue((await courseService.UpdateLessonCompletionStatusAsync(parent, new UpdateLessonCompletionStatusCommand(course.Value, module.Value, lesson.Value, CompletionStatus.Completed))).Succeeded, "Lesson completion update failed.");
+        AssertTrue((await courseService.UpdateModuleCompletionStatusAsync(parent, new UpdateModuleCompletionStatusCommand(course.Value, module.Value, CompletionStatus.Completed))).Succeeded, "Module completion update failed.");
+        AssertTrue((await courseService.UpdateCourseCompletionStatusAsync(parent, new UpdateCourseCompletionStatusCommand(course.Value, CompletionStatus.Completed))).Succeeded, "Course completion update failed.");
+
+        var detail = await courseService.GetCourseDetailAsync(course.Value);
+        AssertEqual(CompletionStatus.Completed, detail!.CompletionStatus, "Course completion status should persist.");
+        AssertEqual(0.5m, detail.PlannedCreditValue, "Completion status should not alter planned credit value.");
+        AssertEqual(CompletionStatus.Completed, detail.Modules.Single().CompletionStatus, "Module completion status should persist.");
+        AssertEqual(CompletionStatus.Completed, detail.Modules.Single().Lessons.Single().CompletionStatus, "Lesson completion status should persist.");
+
+        var dashboard = await studentCourseService.ListCoursesAsync(UserContext.Student("Student"), student.Id);
+        AssertEqual(1, dashboard.Value!.Courses.Single().CompletedModuleCount, "Student dashboard should count completed modules from completion status.");
     })),
     ("Admin courses are scoped to the selected student", async () =>
     {

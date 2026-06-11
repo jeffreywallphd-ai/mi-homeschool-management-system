@@ -87,6 +87,26 @@ else
                     }
                 </select>
 
+                <label class="form-label" for="assignment-attempt-policy">Student attempts</label>
+                <select id="assignment-attempt-policy" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.AttemptPolicy" @bind:after="AutoSaveAssignment">
+                    <option value="@AssignmentAttemptPolicy.SingleAttempt">Single accepted attempt</option>
+                    <option value="@AssignmentAttemptPolicy.MultipleAttempts">Multiple reviewed attempts</option>
+                </select>
+
+                <label class="form-label" for="assignment-submission-structure">Submission structure</label>
+                <select id="assignment-submission-structure" class="form-select" disabled="@(!CanEdit)" @bind="assignmentForm.SubmissionStructure" @bind:after="AutoSaveAssignment">
+                    <option value="@AssignmentSubmissionStructure.SingleSubmission">Single submission</option>
+                    <option value="@AssignmentSubmissionStructure.MultiDraft">Multi-draft assignment</option>
+                </select>
+
+                @if (assignmentForm.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft)
+                {
+                    <label class="form-label" for="assignment-draft-count">Draft count</label>
+                    <input id="assignment-draft-count" class="form-control" type="number" min="2" step="1" disabled="@(!CanEdit)" @bind="assignmentForm.DraftCount" @bind:after="AutoSaveAssignment" />
+                    @ValidationFor("assignment.DraftCount")
+                    <div class="form-text">Link this assignment to the lessons that represent each draft. The final linked lesson is treated as the final submission.</div>
+                }
+
                 <label class="form-label" for="assignment-summary">Summary</label>
                 <textarea id="assignment-summary" class="form-control" rows="3" disabled="@(!CanEdit)" @bind="assignmentForm.AssignmentSummary" @bind:after="AutoSaveAssignment"></textarea>
 
@@ -582,7 +602,10 @@ else
                 RequiresParentEvaluation = assignment.EvidenceRequirements?.RequiresParentEvaluation ?? false,
                 GradingMode = assignment.Scoring?.GradingMode ?? AssignmentGradingMode.Points,
                 CountsTowardGrade = assignment.Scoring?.CountsTowardGrade ?? true,
-                AllowPartialCredit = assignment.Scoring?.AllowPartialCredit ?? true
+                AllowPartialCredit = assignment.Scoring?.AllowPartialCredit ?? true,
+                AttemptPolicy = assignment.AttemptPolicy,
+                SubmissionStructure = assignment.SubmissionStructure,
+                DraftCount = assignment.DraftCount
             };
     }
 
@@ -631,7 +654,10 @@ else
                 BuildCompletionCommand(),
                 assignmentForm.ReflectionPrompts,
                 BuildEvidenceCommand(),
-                BuildScoringCommand())));
+                BuildScoringCommand(),
+                assignmentForm.AttemptPolicy,
+                assignmentForm.SubmissionStructure,
+                assignmentForm.DraftCount)));
     }
 
     private async Task ApplyVariant(ChangeEventArgs eventArgs)
@@ -661,6 +687,9 @@ else
         assignmentForm.PlannedPoints = variant.PlannedPoints;
         assignmentForm.PlannedWeight = variant.PlannedWeight;
         assignmentForm.Status = variant.Status;
+        assignmentForm.AttemptPolicy = variant.AttemptPolicy;
+        assignmentForm.SubmissionStructure = variant.SubmissionStructure;
+        assignmentForm.DraftCount = variant.DraftCount;
         assignmentForm.AssignmentSummary = variant.AssignmentSummary;
         assignmentForm.StudentFacingGoal = variant.StudentFacingGoal;
         assignmentForm.EstimatedMinutesMin = variant.EstimatedMinutesMin;
@@ -950,6 +979,11 @@ else
             fieldErrors["assignment.RequiredOutput"] = "Required output is required.";
         }
 
+        if (assignmentForm.SubmissionStructure == AssignmentSubmissionStructure.MultiDraft && assignmentForm.DraftCount < 2)
+        {
+            fieldErrors["assignment.DraftCount"] = "Multi-draft assignments need at least two drafts.";
+        }
+
         if (fieldErrors.Count == 0)
         {
             return true;
@@ -1191,6 +1225,9 @@ else
         public decimal? PlannedPoints { get; set; }
         public decimal? PlannedWeight { get; set; }
         public AssignmentStatus Status { get; set; } = AssignmentStatus.Planned;
+        public AssignmentAttemptPolicy AttemptPolicy { get; set; } = AssignmentAttemptPolicy.SingleAttempt;
+        public AssignmentSubmissionStructure SubmissionStructure { get; set; } = AssignmentSubmissionStructure.SingleSubmission;
+        public int DraftCount { get; set; } = 1;
         public bool ShowAssignmentStepForm { get; set; }
         public string NewStepTitle { get; set; } = "";
         public string NewStepInstructions { get; set; } = "";

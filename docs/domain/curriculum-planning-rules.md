@@ -1,7 +1,7 @@
 # Curriculum Planning Rules
 
 - Status: accepted
-- Last reviewed: 2026-06-07
+- Last reviewed: 2026-06-11
 - Canonical for: course-first curriculum planning behavior
 - Related ADRs: [ADR-0002](../adr/ADR-0002-michigan-as-seeded-jurisdiction-not-hardcoded-app.md)
 - Related docs: [Course Pack Rules](course-pack-rules.md), [Requirement Mapping Rules](../legal-requirements/requirement-mapping-rules.md), [Domain Module Map](../architecture/domain-module-map.md)
@@ -21,6 +21,8 @@ Courses may be archived. Archived courses remain retained records with modules, 
 Course deletion is for active planning records that do not have student work attached. If student work exists, deletion should fail for that course and direct the parent to archive it instead. Bulk delete actions may continue deleting other eligible courses.
 
 Learning modules are course-owned instructional units inside a course. They organize the course into teachable topic arcs while the course remains the transcript-facing record. Lessons inside modules provide the concrete instructional steps and resources.
+
+Courses, modules, and lessons may carry completion status for parent/admin progress tracking. Completion status is distinct from grading, evidence acceptance, credit awards, report cards, transcripts, and diploma readiness.
 
 Module packs are course-level artifacts for moving a module shell between courses or systems. They may include module details and lightweight lesson or assignment sequencing references, but they must not embed lesson or assignment bodies.
 
@@ -69,6 +71,7 @@ A learning module may include:
 - Lessons tied to module learning objectives.
 - Module-owned assignments tied to objectives and, where useful, lessons.
 - Status of planned, active, or complete.
+- Completion status for progress tracking.
 - Assignment/evidence notes for later evidence workflows.
 
 Learning modules must not include a separate goals field. Module learning objectives are the purpose statement for the module.
@@ -99,6 +102,7 @@ A lesson may include:
 - Reflection prompts.
 - Parent/instructor notes.
 - Optional links to module assignments.
+- Completion status for progress tracking.
 
 Lesson resources may be readings, textbook chapters, articles, videos, websites, files, or physical resources.
 
@@ -145,10 +149,15 @@ An assignment may include:
 - Portfolio-candidate marker.
 - Planned points or planned weight.
 - Status.
+- Attempt policy for student submission workflow.
+- Submission structure for single-submission or multi-draft workflows.
+- Draft count when the assignment is intentionally built across lesson drafts.
 
 Assignment status and planned points are planning fields. They must not create a grade, credit award, or evidence record without a later explicit parent/admin action.
 
 Assignment rubrics, scoring plans, completion criteria, and evidence requirements are planning and review support. They must not create grades, completion evidence, or retained records without a later explicit parent/admin action.
+
+Multi-draft assignments are still one module-owned assignment. Linked lessons may represent draft slots for that larger assignment. The final linked draft is treated as the final assignment submission for workflow labeling, but grades, evidence, credits, and completion still require later explicit parent/admin action.
 
 Assignment packs are module-level artifacts. A `.assignmentpack` may contain one or more assignment definitions and imports by appending assignments to the selected module, not by replacing existing module assignments.
 
