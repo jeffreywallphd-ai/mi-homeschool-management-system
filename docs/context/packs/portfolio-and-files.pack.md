@@ -14,9 +14,13 @@ Purpose: Portfolio artifacts, evidence tags, stored files, and artifact exports.
 - Files are content; artifacts are educational evidence.
 - Assignment portfolio-candidate markers do not create artifacts automatically.
 - Portfolio artifacts require explicit parent/admin confirmation of actual work and context.
-- Students may curate portfolio draft entries from accepted evidence in the true student portal.
-- Student portfolio drafts require parent/admin review before approval for a parent packet.
-- Draft portfolio curation must not change grades, credits, assessments, official records, or evidence records.
+- For grade 6 and above, students may author the working portfolio design in the true student portal: sections, headings, introductions, narrative text, item placement, reflections, and assignment/evidence suggestions.
+- For K-5 students, parent/admin may fully control portfolio authoring and organization.
+- Student-authored portfolio designs require parent/admin review and final approval before export or reviewed packet use.
+- Parent/admin approval creates a versioned portfolio snapshot; later edits return the working design to Working and must not silently alter the approved snapshot.
+- Official portfolio archive exports are generated from approved snapshots only.
+- Student role may view approved portfolio previews but must not create official portfolio exports or archive packets.
+- Student portfolio authoring must not change grades, credits, assessments, evidence-record facts, generated packets, or final official-record history.
 - Exports preserve artifact context and metadata.
 - Practical work can support academic evidence through course descriptions and tags.
 
@@ -24,5 +28,7 @@ Purpose: Portfolio artifacts, evidence tags, stored files, and artifact exports.
 
 - Exporting files without context.
 - Treating planned assignments as completed evidence.
-- Treating student-curated draft metadata as parent-approved portfolio artifacts.
+- Treating student-authored working portfolio content as parent-approved export content before final approval.
+- Exporting the current working draft instead of the approved snapshot.
+- Silently omitting missing evidence files from an archive packet.
 - Using file paths as domain identity.

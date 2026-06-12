@@ -5,6 +5,7 @@ using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Domain.Submissions;
 using HomeschoolManager.Domain.Assessments;
+using HomeschoolManager.Domain.Records;
 
 namespace HomeschoolManager.Infrastructure.Persistence;
 
@@ -22,6 +23,8 @@ public sealed class AppDataDocument
 
     public SchoolYear? SchoolYear { get; set; }
 
+    public List<SchoolYear> SchoolYears { get; set; } = [];
+
     public List<RequirementSet> RequirementSets { get; set; } = [];
 
     public List<RequirementArea> RequirementAreas { get; set; } = [];
@@ -34,7 +37,11 @@ public sealed class AppDataDocument
 
     public List<PortfolioDraftItem> PortfolioDraftItems { get; set; } = [];
 
+    public List<PortfolioDesign> PortfolioDesigns { get; set; } = [];
+
     public List<AssessmentRecord> AssessmentRecords { get; set; } = [];
+
+    public List<TranscriptCourseRecord> TranscriptCourseRecords { get; set; } = [];
 
     public List<CoursePackDefinition> InstalledCoursePacks { get; set; } = [];
 }

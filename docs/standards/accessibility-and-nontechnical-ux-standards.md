@@ -35,4 +35,4 @@ For form-heavy planning screens, place the main form and primary records on the 
 
 ## Student Workflows
 
-Student-facing screens should focus on courses, assignments, submissions, feedback, and portfolio review. Parent-owned finalization remains separate.
+Student-facing screens should focus on courses, assignments, submissions, feedback, and portfolio creation. Parent-owned final approval remains separate for reviewed portfolio packets and other official family-issued output.

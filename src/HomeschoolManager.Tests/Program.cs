@@ -1,6 +1,7 @@
 using HomeschoolManager.Application.Assessments;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Portfolio;
+using HomeschoolManager.Application.Records;
 using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Application.Setup;
 using HomeschoolManager.Application.Submissions;
@@ -16,6 +17,7 @@ using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using HomeschoolManager.Infrastructure.Configuration;
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 
 var tests = new List<(string Name, Func<Task> Test)>
@@ -216,6 +218,131 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual(AssessmentResultType.Points, assessedRow.Assessment?.ResultType ?? AssessmentResultType.NotGraded, "Assessment result type should be points.");
         AssertEqual(1, after.Value?.Summary?.AssessedCount ?? 0, "Summary should count explicit assessments.");
     })),
+    ("Submitted work counts as needing assessment in gradebook summaries", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new GradebookService(repository);
+        var submittedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
+        await repository.SaveAssignmentSubmissionAsync(new AssignmentSubmission(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            setup.Assignment.Id,
+            1,
+            AssignmentSubmissionStatus.Submitted,
+            "Ready for review.",
+            "",
+            [],
+            submittedAt,
+            submittedAt,
+            submittedAt,
+            null,
+            null,
+            "",
+            false));
+
+        var gradebook = await service.GetGradebookAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id, setup.Course.Id);
+        AssertTrue(gradebook.Succeeded, "Gradebook should load submitted work.");
+        AssertEqual(AssessmentState.NeedsReview, gradebook.Value!.Rows.Single().EffectiveState, "Submitted work should need assessment.");
+        AssertEqual(1, gradebook.Value.Summary?.NeedsReviewCount ?? 0, "Course gradebook summary should count submitted work as needing assessment.");
+
+        var dashboard = await service.GetDashboardSummaryAsync(UserContext.ParentAdmin("Parent"));
+        AssertTrue(dashboard.Succeeded, "Gradebook dashboard should load submitted work.");
+        AssertEqual(1, dashboard.Value!.NeedsReviewCount, "Gradebook dashboard should count submitted work as needing assessment.");
+    })),
+    ("Student gradebook groups upcoming submitted and graded assignments", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var course = setup.Course;
+        var module = setup.Module;
+        var submittedAt = DateTimeOffset.UtcNow.AddMinutes(-4);
+        await repository.SaveAssignmentSubmissionAsync(new AssignmentSubmission(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            course.Id,
+            module.Id,
+            setup.Assignment.Id,
+            1,
+            AssignmentSubmissionStatus.Submitted,
+            "Submitted work.",
+            "",
+            [],
+            submittedAt,
+            submittedAt,
+            submittedAt,
+            null,
+            null,
+            "",
+            false));
+
+        var gradedAssignment = new ModuleAssignment(
+            Guid.NewGuid(),
+            module.Id,
+            "graded-source",
+            2,
+            "Reviewed analysis",
+            AssignmentType.Project,
+            InstructionalMethodProfile.Hybrid,
+            "Submit a reviewed analysis.",
+            "One lesson",
+            "After review",
+            null,
+            ["Explain evidence clearly."],
+            [],
+            "Written analysis",
+            "",
+            false,
+            10,
+            20,
+            AssignmentStatus.Assigned);
+        await repository.SaveCourseAsync(course with
+        {
+            Modules =
+            [
+                module with
+                {
+                    Assignments = module.Assignments.Concat([gradedAssignment]).ToArray()
+                }
+            ]
+        });
+
+        await repository.SaveAssessmentRecordAsync(new AssessmentRecord(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            course.Id,
+            module.Id,
+            gradedAssignment.Id,
+            null,
+            null,
+            AssessmentSourceType.Assignment,
+            AssessmentState.Assessed,
+            AssessmentResultType.Points,
+            "",
+            9,
+            10,
+            null,
+            "",
+            "",
+            "Parent note.",
+            "Strong explanation.",
+            true,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow));
+
+        var studentGradebook = await new StudentCourseService(repository).GetGradebookAsync(UserContext.Student("Student"), setup.Student.Id);
+        AssertTrue(studentGradebook.Succeeded, "Student gradebook should load for student portal.");
+        AssertEqual(0, studentGradebook.Value!.UpcomingCount, "All assignments in this fixture should have submission or visible feedback.");
+        AssertEqual(1, studentGradebook.Value.SubmittedCount, "Submitted assignment should appear in the submitted group.");
+        AssertEqual(1, studentGradebook.Value.GradedCount, "Visible parent feedback should appear in the graded group.");
+        AssertTrue(studentGradebook.Value.Assignments.Any(row => row.GradebookStatus == StudentGradebookStatus.Submitted && row.AssignmentId == setup.Assignment.Id), "Submitted assignment should be listed.");
+        AssertTrue(studentGradebook.Value.Assignments.Any(row => row.GradebookStatus == StudentGradebookStatus.Graded && row.AssignmentId == gradedAssignment.Id), "Graded assignment should be listed.");
+
+        var parentGradebook = await new StudentCourseService(repository).GetGradebookAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id);
+        AssertFalse(parentGradebook.Succeeded, "Admin preview should not use the true student gradebook.");
+    })),
     ("Gradebook exposes submitted files and parent preview renders markdown attachments", (Func<Task>)(async () =>
     {
         var (repository, paths) = await CreateRepositoryWithPathsAsync();
@@ -261,6 +388,42 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         var studentPreview = await previewService.GetPreviewAsync(studentUser, submitted.Value, row.LatestSubmissionAttachments[0].FileId);
         AssertFalse(studentPreview.Succeeded, "Student should not use the admin gradebook file preview route.");
+    })),
+    ("Parent preview keeps browser media attachments playable", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var fileStore = new LocalSubmissionFileStore(paths);
+        var submissionService = new AssignmentSubmissionService(repository, fileStore);
+        var previewService = new SubmissionFilePreviewService(repository, fileStore);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+        var mediaBytes = new byte[] { 0, 1, 2, 3, 4 };
+
+        var submitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "Please review the attached media.",
+                "",
+                [
+                    new AssignmentAttachmentUpload("field-photo.png", "image/png", mediaBytes),
+                    new AssignmentAttachmentUpload("field-video.mp4", "video/mp4", mediaBytes),
+                    new AssignmentAttachmentUpload("field-audio.mp3", "audio/mpeg", mediaBytes)
+                ],
+                setup.Student.Id));
+        AssertTrue(submitted.Succeeded, "Student submission with media attachments should succeed.");
+
+        var submission = await repository.GetAssignmentSubmissionAsync(submitted.Value);
+        foreach (var attachment in submission!.Attachments)
+        {
+            var preview = await previewService.GetPreviewAsync(parent, submitted.Value, attachment.Id);
+            AssertTrue(preview.Succeeded, $"Parent should preview {attachment.OriginalFileName}.");
+            AssertEqual(attachment.ContentType, preview.Value!.ContentType, "Media preview should keep the browser-playable content type.");
+            AssertTrue(preview.Value.Content.SequenceEqual(mediaBytes), "Media preview should return the original bytes.");
+        }
     })),
     ("Assessment records persist and reload", (Func<Task>)(async () =>
     {
@@ -2187,6 +2350,104 @@ var tests = new List<(string Name, Func<Task> Test)>
             2));
         AssertTrue(correctedDraft2.Succeeded, "Clearing draft 2 should reopen draft 2 for student submission.");
     })),
+    ("Student portfolio suggestion requires parent acceptance before portfolio item approval", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var portfolioService = new PortfolioService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+
+        var suggested = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "This may fit the portfolio.",
+                "I think this is a good portfolio piece.",
+                [],
+                setup.Student.Id,
+                MarkPortfolioCandidate: true));
+        AssertTrue(suggested.Succeeded, "Student should submit work with a portfolio suggestion.");
+
+        var storedSuggested = await repository.GetAssignmentSubmissionAsync(suggested.Value);
+        AssertTrue(storedSuggested!.StudentPortfolioCandidate, "Submission should retain the student's portfolio suggestion.");
+        AssertFalse(storedSuggested.PortfolioCandidate, "Student suggestion alone should not become a parent portfolio candidate marker.");
+
+        var detail = await submissionService.GetReviewDetailAsync(parent, suggested.Value);
+        AssertTrue(detail.Succeeded, "Parent review detail should load the suggested submission.");
+        AssertTrue(detail.Value!.StudentPortfolioCandidate, "Parent review should show the student suggestion.");
+        AssertFalse(detail.Value.PortfolioCandidate, "Parent review should keep parent candidate state separate before acceptance.");
+
+        var acceptedWithoutPortfolio = await submissionService.AcceptSubmissionAsync(
+            parent,
+            new AcceptSubmissionCommand(suggested.Value, "Accepted as evidence, not portfolio.", false));
+        AssertTrue(acceptedWithoutPortfolio.Succeeded, "Parent should be able to accept evidence without accepting the portfolio suggestion.");
+        var evidenceAfterDecline = await repository.GetEvidenceRecordsAsync();
+        AssertFalse(evidenceAfterDecline.Single().PortfolioCandidate, "Declined portfolio suggestion should not create an assignment candidate.");
+        var workspaceAfterDecline = await portfolioService.GetReviewWorkspaceAsync(parent);
+        AssertTrue(workspaceAfterDecline.Succeeded, "Portfolio review workspace should load after declined suggestion.");
+        AssertEqual(0, workspaceAfterDecline.Value!.AssignmentCandidates.Count, "Declined suggestion should not appear as a portfolio assignment candidate.");
+
+        var secondAssignment = setup.Assignment with
+        {
+            Id = Guid.NewGuid(),
+            SourceAssignmentId = "second-portfolio-candidate",
+            SequenceOrder = 2,
+            Title = "Second evidence analysis"
+        };
+        await repository.SaveCourseAsync(setup.Course with
+        {
+            Modules =
+            [
+                setup.Module with
+                {
+                    Assignments = [setup.Assignment, secondAssignment]
+                }
+            ]
+        });
+
+        var secondSuggested = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                secondAssignment.Id,
+                "This one should go in the portfolio.",
+                "Please consider this for the portfolio.",
+                [],
+                setup.Student.Id,
+                MarkPortfolioCandidate: true));
+        AssertTrue(secondSuggested.Succeeded, "Student should submit a second portfolio suggestion.");
+        var acceptedCandidate = await submissionService.AcceptSubmissionAsync(
+            parent,
+            new AcceptSubmissionCommand(secondSuggested.Value, "Accepted as portfolio evidence.", true));
+        AssertTrue(acceptedCandidate.Succeeded, "Parent should accept the suggested work as portfolio evidence.");
+
+        var workspaceBeforeApproval = await portfolioService.GetReviewWorkspaceAsync(parent);
+        AssertTrue(workspaceBeforeApproval.Succeeded, "Portfolio review workspace should load candidate evidence.");
+        var candidate = workspaceBeforeApproval.Value!.AssignmentCandidates.Single();
+        AssertTrue(candidate.StudentSuggested, "Assignment candidate should show that the student suggested it.");
+        AssertEqual(secondSuggested.Value, candidate.SubmissionId, "Assignment candidate should point back to the accepted submission.");
+        AssertFalse(candidate.PortfolioDraftStatus.HasValue, "Candidate should not be a portfolio item before parent portfolio approval.");
+
+        var evidenceBeforeApproval = await repository.GetEvidenceRecordsAsync();
+        var assessmentsBeforeApproval = await repository.GetAssessmentRecordsAsync();
+        var approvedCandidate = await portfolioService.AcceptAssignmentCandidateAsync(
+            parent,
+            new AcceptPortfolioAssignmentCandidateCommand(candidate.EvidenceRecordId, "Ready for the parent portfolio packet."));
+        AssertTrue(approvedCandidate.Succeeded, "Parent should approve an accepted assignment candidate as a portfolio item.");
+
+        var workspaceAfterApproval = await portfolioService.GetReviewWorkspaceAsync(parent);
+        AssertEqual(1, workspaceAfterApproval.Value!.Items.Count, "Parent-approved assignment candidate should create one portfolio item.");
+        AssertTrue(workspaceAfterApproval.Value.Items[0].Status == PortfolioDraftStatus.ParentApproved, "Created portfolio item should be parent approved.");
+        AssertTrue(workspaceAfterApproval.Value.AssignmentCandidates.Single().PortfolioDraftStatus == PortfolioDraftStatus.ParentApproved, "Candidate should show its approved portfolio status.");
+        AssertEqual(evidenceBeforeApproval.Count, (await repository.GetEvidenceRecordsAsync()).Count, "Portfolio approval should not duplicate evidence records.");
+        AssertEqual(assessmentsBeforeApproval.Count, (await repository.GetAssessmentRecordsAsync()).Count, "Portfolio approval should not create assessment records.");
+        AssertEqual(setup.Course.PlannedCreditValue, (await repository.GetCourseAsync(setup.Course.Id))!.PlannedCreditValue, "Portfolio approval should not alter course credits.");
+    })),
     ("Student configures portfolio draft from accepted evidence and parent reviews it", (Func<Task>)(async () =>
     {
         var (repository, paths) = await CreateRepositoryWithPathsAsync();
@@ -2213,20 +2474,21 @@ var tests = new List<(string Name, Func<Task> Test)>
         var evidenceBefore = await repository.GetEvidenceRecordsAsync();
         var assessmentsBefore = await repository.GetAssessmentRecordsAsync();
 
-        var parentAdd = await portfolioService.AddDraftItemAsync(parent, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
-        AssertFalse(parentAdd.Succeeded, "Parent/admin should not create student portfolio draft entries.");
+        var designWorkspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertTrue(designWorkspace.Succeeded, "Student portfolio design should load with starter sections.");
+        var sectionId = designWorkspace.Value!.Design.Sections.First().SectionId;
 
-        var added = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
+        var added = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id, sectionId));
         AssertTrue(added.Succeeded, "Student should add accepted evidence to a portfolio draft.");
 
-        var duplicate = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id));
+        var duplicate = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id, sectionId));
         AssertTrue(duplicate.Succeeded, "Re-adding accepted evidence should be idempotent.");
         AssertEqual(added.Value, duplicate.Value, "Duplicate add should return the existing draft item id.");
 
         var updated = await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
             added.Value,
             "Evidence analysis portfolio artifact",
-            "Science",
+            sectionId,
             "This shows I can explain evidence carefully.",
             "It is one of my stronger written analyses.",
             ["Evidence", "Analysis"],
@@ -2252,7 +2514,7 @@ var tests = new List<(string Name, Func<Task> Test)>
         var revised = await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
             added.Value,
             "Evidence analysis portfolio artifact",
-            "Science",
+            sectionId,
             "This shows I can explain evidence carefully.",
             "It shows evidence interpretation and revision.",
             ["Evidence", "Analysis", "Revision"],
@@ -2285,6 +2547,298 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual(evidenceBefore.Count, evidenceAfter.Count, "Portfolio drafting should not duplicate evidence records.");
         AssertEqual(assessmentsBefore.Count, assessmentsAfter.Count, "Portfolio drafting should not create assessment records.");
         AssertEqual(setup.Course.PlannedCreditValue, courseAfter!.PlannedCreditValue, "Portfolio drafting should not alter course credits.");
+    })),
+    ("Portfolio design supports sections suggestions approval snapshots and assignment suggestions", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var submissionService = new AssignmentSubmissionService(repository, new LocalSubmissionFileStore(paths));
+        var portfolioService = new PortfolioService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+
+        var plannedAssignment = setup.Assignment with
+        {
+            Id = Guid.NewGuid(),
+            SourceAssignmentId = "planned-portfolio-presentation",
+            SequenceOrder = 2,
+            Title = "Planned portfolio presentation"
+        };
+        await repository.SaveCourseAsync(setup.Course with
+        {
+            Modules =
+            [
+                setup.Module with
+                {
+                    Assignments = [setup.Assignment, plannedAssignment]
+                }
+            ]
+        });
+
+        var submitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "Accepted work for the portfolio.",
+                "",
+                [],
+                setup.Student.Id));
+        AssertTrue(submitted.Succeeded, "Student submission should succeed.");
+
+        var accepted = await submissionService.AcceptSubmissionAsync(parent, new AcceptSubmissionCommand(submitted.Value, "Accepted evidence.", true));
+        AssertTrue(accepted.Succeeded, "Parent should accept evidence.");
+        var evidenceBefore = await repository.GetEvidenceRecordsAsync();
+        var assessmentsBefore = await repository.GetAssessmentRecordsAsync();
+
+        var workspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertTrue(workspace.Succeeded, "Student portfolio workspace should load.");
+        AssertTrue(workspace.Value!.CanStudentAuthor, "High-school student should author the working portfolio design.");
+        var narrative = workspace.Value.Design.Narratives.Single();
+        var defaultSection = workspace.Value.Design.Sections.First();
+
+        var updateDesign = await portfolioService.UpdateDesignAsync(studentUser, new UpdatePortfolioDesignCommand(
+            setup.Student.Id,
+            "Senior Learning Portfolio",
+            "College and family archive review.",
+            [new PortfolioNarrativeInput(narrative.NarrativeId, narrative.Prompt, "growth in statistical writing and applied analysis.", narrative.SortOrder)]));
+        AssertTrue(updateDesign.Succeeded, "Student should edit portfolio title and narrative.");
+
+        var addSection = await portfolioService.AddSectionAsync(studentUser, new AddPortfolioSectionCommand(
+            setup.Student.Id,
+            "Research Writing",
+            "Technical writing and evidence-based analysis."));
+        AssertTrue(addSection.Succeeded, "Student should add a custom portfolio section.");
+
+        var addEvidence = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id, addSection.Value));
+        AssertTrue(addEvidence.Succeeded, "Student should place accepted evidence in the custom section.");
+
+        var updateItem = await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
+            addEvidence.Value,
+            "Statistical inference analysis brief",
+            addSection.Value,
+            "This shows I can explain data limits and make a careful conclusion.",
+            "It represents my strongest applied statistics writing.",
+            ["Statistics", "Technical writing", "Revision"],
+            1,
+            true));
+        AssertTrue(updateItem.Succeeded, "Student should edit item reflection and placement.");
+
+        var suggestion = await portfolioService.SuggestAssignmentAsync(studentUser, new SuggestPortfolioAssignmentCommand(
+            setup.Student.Id,
+            setup.Course.Id,
+            setup.Module.Id,
+            plannedAssignment.Id,
+            "This presentation could become a good capstone artifact."));
+        AssertTrue(suggestion.Succeeded, "Student should suggest a planned assignment.");
+        AssertEqual(evidenceBefore.Count, (await repository.GetEvidenceRecordsAsync()).Count, "Planned assignment suggestions should not create accepted evidence.");
+
+        var submitDesign = await portfolioService.SubmitDesignAsync(studentUser, new SubmitPortfolioDesignCommand(setup.Student.Id));
+        AssertTrue(submitDesign.Succeeded, "Student should submit the portfolio design for review.");
+
+        var reviewWorkspace = await portfolioService.GetReviewWorkspaceAsync(parent, setup.Student.Id);
+        AssertTrue(reviewWorkspace.Succeeded, "Parent review workspace should load.");
+        AssertEqual(1, reviewWorkspace.Value!.AssignmentSuggestions.Count, "Parent should see planned assignment suggestions separately from evidence.");
+        AssertTrue(reviewWorkspace.Value.Preview.Sections.Any(section => section.Heading == "Research Writing"), "Preview should include the custom section.");
+
+        var reviewedNarrative = reviewWorkspace.Value.Design.Narratives.Single();
+        var reviewedSection = reviewWorkspace.Value.Design.Sections.First(section => section.Heading == "Research Writing");
+        var reviewedItem = reviewWorkspace.Value.Items.Single();
+        AssertTrue((await portfolioService.AddSuggestionAsync(parent, new AddPortfolioSuggestionCommand(setup.Student.Id, PortfolioSuggestionTargetType.Narrative, reviewedNarrative.NarrativeId, "Add one specific accomplishment."))).Succeeded, "Parent should add a narrative suggestion.");
+        AssertTrue((await portfolioService.AddSuggestionAsync(parent, new AddPortfolioSuggestionCommand(setup.Student.Id, PortfolioSuggestionTargetType.Section, reviewedSection.SectionId, "Clarify why this section matters."))).Succeeded, "Parent should add a section suggestion.");
+        AssertTrue((await portfolioService.AddSuggestionAsync(parent, new AddPortfolioSuggestionCommand(setup.Student.Id, PortfolioSuggestionTargetType.Item, reviewedItem.PortfolioDraftItemId, "Name the audience for this brief."))).Succeeded, "Parent should add an item suggestion.");
+        AssertTrue((await portfolioService.RequestRevisionAsync(parent, new RequestPortfolioRevisionCommand(setup.Student.Id, "Please revise the introduction and item explanation."))).Succeeded, "Parent should request revision.");
+
+        var studentRevision = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertEqual(PortfolioDesignStatus.NeedsRevision, studentRevision.Value!.Design.Status, "Revision request should be visible to the student.");
+        AssertTrue(studentRevision.Value.Design.Suggestions.Count(item => item.Status == PortfolioSuggestionStatus.Open) >= 4, "Student should see targeted and overall suggestions.");
+
+        foreach (var openSuggestion in studentRevision.Value.Design.Suggestions.Where(item => item.Status == PortfolioSuggestionStatus.Open))
+        {
+            AssertTrue((await portfolioService.ResolveSuggestionAsync(parent, new ResolvePortfolioSuggestionCommand(setup.Student.Id, openSuggestion.SuggestionId))).Succeeded, "Parent should resolve suggestions before approval.");
+        }
+
+        var resubmit = await portfolioService.SubmitDesignAsync(studentUser, new SubmitPortfolioDesignCommand(setup.Student.Id));
+        AssertTrue(resubmit.Succeeded, "Student should resubmit after revision.");
+
+        var approved = await portfolioService.ApproveDesignAsync(parent, new ApprovePortfolioDesignCommand(setup.Student.Id));
+        AssertTrue(approved.Succeeded, "Parent should approve the complete portfolio design.");
+
+        var approvedWorkspace = await portfolioService.GetReviewWorkspaceAsync(parent, setup.Student.Id);
+        AssertEqual(PortfolioDesignStatus.Approved, approvedWorkspace.Value!.Design.Status, "Approved design status should be visible.");
+        AssertEqual(1, approvedWorkspace.Value.Design.ApprovalSnapshots.Count, "Approval should create one snapshot.");
+        AssertEqual(1, approvedWorkspace.Value.Design.ApprovalSnapshots.Single().ItemCount, "Approval snapshot should include the selected item.");
+        AssertEqual(evidenceBefore.Count, (await repository.GetEvidenceRecordsAsync()).Count, "Portfolio approval should not duplicate evidence.");
+        AssertEqual(assessmentsBefore.Count, (await repository.GetAssessmentRecordsAsync()).Count, "Portfolio approval should not create assessments.");
+        AssertEqual(setup.Course.PlannedCreditValue, (await repository.GetCourseAsync(setup.Course.Id))!.PlannedCreditValue, "Portfolio approval should not alter credits.");
+
+        var snapshotTitle = approvedWorkspace.Value.Design.ApprovalSnapshots.Single().Title;
+        var editAfterApproval = await portfolioService.UpdateDesignAsync(studentUser, new UpdatePortfolioDesignCommand(
+            setup.Student.Id,
+            "Senior Learning Portfolio Revised",
+            approvedWorkspace.Value.Design.Purpose,
+            approvedWorkspace.Value.Design.Narratives
+                .Select(item => new PortfolioNarrativeInput(item.NarrativeId, item.Prompt, item.Response, item.SortOrder))
+                .ToArray()));
+        AssertTrue(editAfterApproval.Succeeded, "Later student edits should create a new working version.");
+
+        var afterEdit = await portfolioService.GetReviewWorkspaceAsync(parent, setup.Student.Id);
+        AssertEqual(PortfolioDesignStatus.Working, afterEdit.Value!.Design.Status, "Later edits should return the current design to working status.");
+        AssertEqual(2, afterEdit.Value.Design.Version, "Later edits after approval should increment the working version.");
+        AssertEqual(snapshotTitle, afterEdit.Value.Design.ApprovalSnapshots.Single().Title, "Approval snapshot should remain immutable after later edits.");
+    })),
+    ("Approved portfolio exports archive packet from immutable snapshot", (Func<Task>)(async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var fileStore = new LocalSubmissionFileStore(paths);
+        var submissionService = new AssignmentSubmissionService(repository, fileStore);
+        var portfolioService = new PortfolioService(repository);
+        var exportService = new PortfolioExportService(repository, fileStore);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+
+        var submitted = await submissionService.SubmitAssignmentAsync(
+            studentUser,
+            new SubmitAssignmentCommand(
+                setup.Course.Id,
+                setup.Module.Id,
+                setup.Assignment.Id,
+                "Portfolio-ready work with an attachment.",
+                "",
+                [new AssignmentAttachmentUpload("analysis-notes.txt", "text/plain", System.Text.Encoding.UTF8.GetBytes("accepted portfolio evidence"))],
+                setup.Student.Id));
+        AssertTrue(submitted.Succeeded, "Student submission should succeed.");
+
+        var accepted = await submissionService.AcceptSubmissionAsync(parent, new AcceptSubmissionCommand(submitted.Value, "Accepted as portfolio evidence.", true));
+        AssertTrue(accepted.Succeeded, "Parent should accept evidence.");
+        var evidenceBefore = await repository.GetEvidenceRecordsAsync();
+        var assessmentsBefore = await repository.GetAssessmentRecordsAsync();
+
+        var workspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertTrue(workspace.Succeeded, "Student portfolio workspace should load.");
+        var narrative = workspace.Value!.Design.Narratives.Single();
+        var sectionId = workspace.Value.Design.Sections.First().SectionId;
+        AssertTrue((await portfolioService.UpdateDesignAsync(studentUser, new UpdatePortfolioDesignCommand(
+            setup.Student.Id,
+            "Approved Export Portfolio",
+            "Family archive packet.",
+            [new PortfolioNarrativeInput(narrative.NarrativeId, narrative.Prompt, "growth in applied analysis.", narrative.SortOrder)]))).Succeeded, "Student should update portfolio design.");
+
+        var draft = await portfolioService.AddDraftItemAsync(studentUser, new AddPortfolioDraftItemCommand(accepted.Value, setup.Student.Id, sectionId));
+        AssertTrue(draft.Succeeded, "Student should add accepted evidence.");
+        AssertTrue((await portfolioService.UpdateDraftItemAsync(studentUser, new UpdatePortfolioDraftItemCommand(
+            draft.Value,
+            "Applied analysis notes",
+            sectionId,
+            "This artifact shows careful written analysis.",
+            "It belongs in the archive because it has accepted source evidence.",
+            ["Analysis", "Writing"],
+            1,
+            true))).Succeeded, "Student should configure the portfolio item.");
+        AssertTrue((await portfolioService.SubmitDesignAsync(studentUser, new SubmitPortfolioDesignCommand(setup.Student.Id))).Succeeded, "Student should submit the design.");
+        AssertTrue((await portfolioService.ApproveDesignAsync(parent, new ApprovePortfolioDesignCommand(setup.Student.Id))).Succeeded, "Parent should approve the design.");
+
+        var approvedWorkspace = await portfolioService.GetReviewWorkspaceAsync(parent, setup.Student.Id);
+        AssertTrue(approvedWorkspace.Value!.LatestApprovedPreview is not null, "Approved preview should be available to parent.");
+        AssertEqual("Approved Export Portfolio", approvedWorkspace.Value.LatestApprovedPreview!.Title, "Approved preview should use snapshot title.");
+
+        var studentApprovedWorkspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, setup.Student.Id);
+        AssertTrue(studentApprovedWorkspace.Value!.LatestApprovedPreview is not null, "Student should be able to view the approved portfolio preview.");
+        AssertEqual(PortfolioDesignStatus.Approved, studentApprovedWorkspace.Value.LatestApprovedPreview!.Status, "Student approved preview should be read-only approved state.");
+
+        var studentExport = await exportService.CreateArchivePacketAsync(studentUser, new CreatePortfolioExportCommand(setup.Student.Id));
+        AssertFalse(studentExport.Succeeded, "Student should not create the official archive export.");
+
+        var preview = await exportService.GetExportPreviewAsync(parent, setup.Student.Id);
+        AssertTrue(preview.Succeeded, "Parent should preview the approved export.");
+        AssertEqual(1, preview.Value!.ItemCount, "Preview should include the approved portfolio item.");
+        AssertEqual(1, preview.Value.AttachedFileCount, "Preview should count the accepted attachment.");
+        AssertEqual(0, preview.Value.MissingFileCount, "Preview should not report missing files before deletion.");
+        AssertEqual("Approved Export Portfolio", preview.Value.Preview.Title, "Export preview should use the approved snapshot.");
+
+        AssertTrue((await portfolioService.UpdateDesignAsync(studentUser, new UpdatePortfolioDesignCommand(
+            setup.Student.Id,
+            "Later Working Draft Title",
+            approvedWorkspace.Value.Design.Purpose,
+            approvedWorkspace.Value.Design.Narratives
+                .Select(item => new PortfolioNarrativeInput(item.NarrativeId, item.Prompt, item.Response, item.SortOrder))
+                .ToArray()))).Succeeded, "Student should be able to start a later working draft.");
+
+        var download = await exportService.CreateArchivePacketAsync(parent, new CreatePortfolioExportCommand(setup.Student.Id));
+        AssertTrue(download.Succeeded, "Parent should create the approved portfolio archive packet.");
+        AssertTrue(download.Value!.FileName.EndsWith(".zip", StringComparison.Ordinal), "Portfolio archive should be a zip file.");
+        AssertEqual("Approved Export Portfolio", download.Value.Manifest.PortfolioTitle, "Export should use the approved snapshot, not later draft edits.");
+        AssertEqual(1, download.Value.Manifest.AttachedFileCount, "Manifest should count included evidence files.");
+        AssertEqual(0, download.Value.Manifest.MissingFileCount, "Manifest should not report missing files.");
+        AssertEqual(evidenceBefore.Count, (await repository.GetEvidenceRecordsAsync()).Count, "Export should not create evidence records.");
+        AssertEqual(assessmentsBefore.Count, (await repository.GetAssessmentRecordsAsync()).Count, "Export should not create assessment records.");
+        AssertEqual(setup.Course.PlannedCreditValue, (await repository.GetCourseAsync(setup.Course.Id))!.PlannedCreditValue, "Export should not alter course credits.");
+
+        using (var stream = new MemoryStream(download.Value.Content))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+        {
+            AssertTrue(archive.GetEntry("portfolio.html") is not null, "Archive should include printable HTML.");
+            AssertTrue(archive.GetEntry("manifest.json") is not null, "Archive should include JSON manifest.");
+            AssertTrue(archive.GetEntry("manifest.md") is not null, "Archive should include readable manifest.");
+            AssertTrue(archive.Entries.Any(entry => entry.FullName.StartsWith("evidence-files/", StringComparison.OrdinalIgnoreCase) && entry.FullName.EndsWith("analysis-notes.txt", StringComparison.OrdinalIgnoreCase)), "Archive should include accepted evidence file content.");
+
+            var manifestEntry = archive.GetEntry("manifest.json") ?? throw new InvalidOperationException("Manifest entry missing.");
+            using var manifestStream = manifestEntry.Open();
+            using var manifestDocument = JsonDocument.Parse(manifestStream);
+            AssertEqual("homeschool-manager.portfolio-export", manifestDocument.RootElement.GetProperty("schema").GetString() ?? "", "Manifest should identify the portfolio export schema.");
+            AssertEqual("Approved Export Portfolio", manifestDocument.RootElement.GetProperty("portfolioTitle").GetString() ?? "", "Manifest should preserve approved title.");
+        }
+
+        var storedSubmission = await repository.GetAssignmentSubmissionAsync(submitted.Value) ?? throw new InvalidOperationException("Submission missing.");
+        var storedFile = storedSubmission.Attachments.Single();
+        File.Delete(Path.Combine(paths.DataRoot, storedFile.StoredPath));
+        var missingDownload = await exportService.CreateArchivePacketAsync(parent, new CreatePortfolioExportCommand(setup.Student.Id));
+        AssertTrue(missingDownload.Succeeded, "Export should still complete with a missing file warning.");
+        AssertEqual(1, missingDownload.Value!.Manifest.MissingFileCount, "Manifest should count the missing file.");
+        AssertTrue(missingDownload.Value.Manifest.Warnings.Any(warning => warning.Contains("was not found", StringComparison.OrdinalIgnoreCase)), "Manifest should include a missing-file warning.");
+        using var missingStream = new MemoryStream(missingDownload.Value.Content);
+        using var missingArchive = new ZipArchive(missingStream, ZipArchiveMode.Read);
+        AssertFalse(missingArchive.Entries.Any(entry => entry.FullName.StartsWith("evidence-files/", StringComparison.OrdinalIgnoreCase)), "Missing files should not be silently included.");
+    })),
+    ("K-5 portfolio editing is parent controlled", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setupService = new SetupService(repository);
+        var portfolioService = new PortfolioService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var studentUser = UserContext.Student("Student");
+
+        AssertTrue((await setupService.CreateHouseholdAsync(parent, new CreateHouseholdCommand("Family", "Parent"))).Succeeded, "Household setup failed.");
+        AssertTrue((await setupService.CreateStudentAsync(parent, new CreateStudentCommand("Elementary", "Learner", 4))).Succeeded, "K-5 student setup failed.");
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+
+        var studentWorkspace = await portfolioService.GetStudentWorkspaceAsync(studentUser, student.Id);
+        AssertTrue(studentWorkspace.Succeeded, "K-5 student should be able to view portfolio workspace state.");
+        AssertFalse(studentWorkspace.Value!.CanStudentAuthor, "K-5 student should not author the portfolio design.");
+
+        var studentEdit = await portfolioService.UpdateDesignAsync(studentUser, new UpdatePortfolioDesignCommand(
+            student.Id,
+            "Elementary Portfolio",
+            "Trying to edit.",
+            []));
+        AssertFalse(studentEdit.Succeeded, "K-5 student should not edit the portfolio design.");
+
+        var parentEdit = await portfolioService.UpdateDesignAsync(parent, new UpdatePortfolioDesignCommand(
+            student.Id,
+            "Elementary Learning Portfolio",
+            "Parent-managed portfolio.",
+            studentWorkspace.Value.Design.Narratives
+                .Select(item => new PortfolioNarrativeInput(item.NarrativeId, item.Prompt, "early learning progress.", item.SortOrder))
+                .ToArray()));
+        AssertTrue(parentEdit.Succeeded, "Parent should edit a K-5 portfolio design.");
+
+        var parentSection = await portfolioService.AddSectionAsync(parent, new AddPortfolioSectionCommand(
+            student.Id,
+            "Reading Samples",
+            "Selected reading and writing work."));
+        AssertTrue(parentSection.Succeeded, "Parent should add K-5 portfolio sections.");
     })),
     ("Parent can clear active submission and reopen a single-attempt assignment", (Func<Task>)(async () =>
     {
@@ -3145,6 +3699,184 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertFalse(detail.LearningObjectives.Contains("produce evidence suitable for course records", StringComparison.OrdinalIgnoreCase), "Legacy learning objectives should upgrade away from generic recordkeeping language.");
         AssertEqual("Parent custom goals.", detail.Goals, "Backfill should not overwrite parent goals.");
         AssertEqual("Parent custom sequence.", detail.PlannedSequence, "Backfill should not overwrite parent sequence.");
+    })),
+    ("Transcript uses only parent-recorded final grade and earned credit", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new TranscriptService(repository);
+        await repository.SaveCourseAsync(setup.Course with
+        {
+            CompletionStatus = CompletionStatus.Completed,
+            Description = new CourseDescription(
+                "A focused science course with documented lab and evidence work.",
+                "Parent-led discussion and independent work.",
+                "Observation, evidence analysis, and written explanation.",
+                "Lab notes and source readings.",
+                "Parent-reviewed assignments and course evaluation.",
+                "Letter grade from parent-reviewed evidence.")
+        });
+
+        var before = await service.GetTranscriptAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id);
+        var beforeCourse = before.Value?.Years.SelectMany(year => year.Courses).Single() ?? throw new InvalidOperationException("Expected a transcript course row.");
+        AssertEqual("Not recorded", beforeCourse.FinalGrade, "Missing final grade must stay explicit.");
+        AssertFalse(beforeCourse.EarnedCreditValue.HasValue, "Credit must not be inferred from planned credit.");
+        AssertEqual("Grade 12", before.Value?.TypicalGradeRange ?? "", "Transcript grade span should reflect only course records available in the system.");
+        AssertFalse(before.Value?.SpanLabel.Contains("Grades 9-12", StringComparison.OrdinalIgnoreCase) == true, "Transcript title should not overstate unavailable high school years.");
+        AssertTrue(before.Value?.CoverageNote.Contains("Other transcripts may be available for grades 9-11", StringComparison.OrdinalIgnoreCase) == true, "Partial high school transcript should identify that other transcripts may exist.");
+
+        var saved = await service.SaveCourseRecordAsync(UserContext.ParentAdmin("Parent"), new SaveTranscriptCourseRecordCommand(
+            setup.Student.Id,
+            setup.Course.Id,
+            "A",
+            0.5m,
+            new DateOnly(2027, 5, 28),
+            "Completed course with parent-reviewed assignments and evaluation.",
+            "Strong evidence across the course.",
+            true));
+        AssertTrue(saved.Succeeded, "Parent transcript course record should save.");
+
+        var after = await service.GetTranscriptAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id);
+        var row = after.Value?.Years.SelectMany(year => year.Courses).Single() ?? throw new InvalidOperationException("Expected an updated transcript course row.");
+        AssertEqual("A", row.FinalGrade, "Final grade should come from the parent transcript record.");
+        AssertEqual(0.5m, row.EarnedCreditValue ?? 0, "Earned credit should come from the parent transcript record.");
+        AssertEqual(0.5m, after.Value?.Summary.EarnedCredits ?? 0, "Transcript summary should total recorded earned credit.");
+        AssertTrue(after.Value?.CourseDescriptions.Single().Description.Contains("focused science", StringComparison.OrdinalIgnoreCase) == true, "Course description appendix should be populated.");
+    })),
+    ("Student can view transcript but cannot edit or export it", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new TranscriptService(repository);
+
+        var view = await service.GetTranscriptAsync(UserContext.Student("Student"), setup.Student.Id);
+        AssertTrue(view.Succeeded, "Student should be able to view transcript preview.");
+
+        var save = await service.SaveCourseRecordAsync(UserContext.Student("Student"), new SaveTranscriptCourseRecordCommand(
+            setup.Student.Id,
+            setup.Course.Id,
+            "A",
+            0.5m,
+            null,
+            "Student attempted record.",
+            "",
+            true));
+        AssertFalse(save.Succeeded, "Student must not save transcript course records.");
+
+        var export = await service.CreateTranscriptPacketAsync(UserContext.Student("Student"), new CreateTranscriptExportCommand(setup.Student.Id, TranscriptSpan.HighSchool));
+        AssertFalse(export.Succeeded, "Student must not export transcript packets.");
+        var pdfExport = await service.CreateTranscriptPdfPacketAsync(UserContext.Student("Student"), new CreateTranscriptExportCommand(setup.Student.Id, TranscriptSpan.HighSchool));
+        AssertFalse(pdfExport.Succeeded, "Student must not export transcript PDF packets.");
+        AssertEqual(0, (await repository.GetTranscriptCourseRecordsAsync()).Count, "Student transcript mutation should not persist.");
+    })),
+    ("Transcript span separates middle school and high school courses", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var middleYear = new SchoolYear(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            "2022-2023",
+            2022,
+            2023,
+            [
+                new Term(Guid.NewGuid(), "Semester 1", new DateOnly(2022, 8, 22), new DateOnly(2022, 12, 16)),
+                new Term(Guid.NewGuid(), "Semester 2", new DateOnly(2023, 1, 9), new DateOnly(2023, 5, 26))
+            ]);
+        await repository.SaveSchoolYearAsync(middleYear);
+        var middleCourse = new Course(
+            Guid.NewGuid(),
+            setup.Student.Id,
+            middleYear.Id,
+            "Middle School Earth Science",
+            ["Science"],
+            CourseDuration.TwoSemesters,
+            1.0m,
+            null,
+            null,
+            new CourseDescription("Middle school science description.", "", "", "", "", ""),
+            CurriculumPlan.Empty,
+            [],
+            completionStatus: CompletionStatus.Completed);
+        await repository.SaveCourseAsync(middleCourse);
+
+        var service = new TranscriptService(repository);
+        var middle = await service.GetTranscriptAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id, TranscriptSpan.MiddleSchool);
+        var high = await service.GetTranscriptAsync(UserContext.ParentAdmin("Parent"), setup.Student.Id, TranscriptSpan.HighSchool);
+
+        AssertTrue(middle.Value?.Years.SelectMany(year => year.Courses).Any(course => course.CourseTitle == "Middle School Earth Science") == true, "Middle school span should include estimated grade 8 course.");
+        AssertFalse(middle.Value?.Years.SelectMany(year => year.Courses).Any(course => course.CourseTitle == setup.Course.Title) == true, "Middle school span should not include high school course.");
+        AssertTrue(high.Value?.Years.SelectMany(year => year.Courses).Any(course => course.CourseTitle == setup.Course.Title) == true, "High school span should include current high school course.");
+        AssertFalse(high.Value?.Years.SelectMany(year => year.Courses).Any(course => course.CourseTitle == "Middle School Earth Science") == true, "High school span should not include middle school course.");
+    })),
+    ("Transcript export includes html manifest and avoids prohibited credential wording", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new TranscriptService(repository);
+        var save = await service.SaveCourseRecordAsync(UserContext.ParentAdmin("Parent"), new SaveTranscriptCourseRecordCommand(
+            setup.Student.Id,
+            setup.Course.Id,
+            "Pass",
+            0.5m,
+            new DateOnly(2027, 5, 28),
+            "Parent-recorded completed course.",
+            "",
+            true));
+        AssertTrue(save.Succeeded, "Transcript record setup should save.");
+
+        var export = await service.CreateTranscriptPacketAsync(UserContext.ParentAdmin("Parent"), new CreateTranscriptExportCommand(setup.Student.Id, TranscriptSpan.HighSchool));
+        AssertTrue(export.Succeeded, "Parent transcript export should succeed.");
+        using var stream = new MemoryStream(export.Value!.Content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        AssertTrue(archive.GetEntry("transcript.html") is not null, "Transcript archive should include transcript.html.");
+        AssertTrue(archive.GetEntry("manifest.json") is not null, "Transcript archive should include manifest.json.");
+        AssertTrue(archive.GetEntry("manifest.md") is not null, "Transcript archive should include manifest.md.");
+
+        using var htmlReader = new StreamReader(archive.GetEntry("transcript.html")!.Open());
+        var html = await htmlReader.ReadToEndAsync();
+        AssertTrue(html.Contains("Family-issued homeschool academic record", StringComparison.OrdinalIgnoreCase), "Transcript should use family-issued wording.");
+        AssertTrue(html.Contains("Grade 12", StringComparison.OrdinalIgnoreCase), "Transcript should show the actual grade coverage.");
+        AssertTrue(html.Contains("Other transcripts may be available for grades 9-11", StringComparison.OrdinalIgnoreCase), "Transcript should disclose unavailable high school years.");
+        AssertFalse(html.Contains("Grades 9-12", StringComparison.OrdinalIgnoreCase), "Transcript should not claim a full high school span when only grade 12 is recorded.");
+        AssertFalse(html.Contains("MDE-approved", StringComparison.OrdinalIgnoreCase), "Transcript must not imply MDE approval.");
+        AssertFalse(html.Contains("state-approved", StringComparison.OrdinalIgnoreCase), "Transcript must not imply state approval.");
+        AssertFalse(html.Contains("accredited", StringComparison.OrdinalIgnoreCase), "Transcript must not imply accreditation.");
+    })),
+    ("Transcript PDF export creates one family issued packet file", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        var setup = await CreateCourseWithAssignmentAsync(repository);
+        var service = new TranscriptService(repository);
+        var save = await service.SaveCourseRecordAsync(UserContext.ParentAdmin("Parent"), new SaveTranscriptCourseRecordCommand(
+            setup.Student.Id,
+            setup.Course.Id,
+            "A",
+            0.5m,
+            new DateOnly(2027, 5, 28),
+            "Parent-recorded completed course.",
+            "PDF packet test note.",
+            true));
+        AssertTrue(save.Succeeded, "Transcript record setup should save.");
+
+        var export = await service.CreateTranscriptPdfPacketAsync(UserContext.ParentAdmin("Parent"), new CreateTranscriptExportCommand(setup.Student.Id, TranscriptSpan.HighSchool));
+        AssertTrue(export.Succeeded, "Parent transcript PDF export should succeed.");
+        AssertTrue(export.Value!.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase), "Transcript PDF export should download as a PDF file.");
+        AssertEqual("application/pdf", export.Value.ContentType, "Transcript PDF export should use the PDF content type.");
+
+        var pdfText = Encoding.ASCII.GetString(export.Value.Content);
+        AssertTrue(pdfText.StartsWith("%PDF-1.4", StringComparison.Ordinal), "Transcript PDF export should be a PDF document.");
+        AssertTrue(pdfText.Contains("Family-issued homeschool academic record", StringComparison.OrdinalIgnoreCase), "PDF should use family-issued wording.");
+        AssertTrue(pdfText.Contains("Course Descriptions", StringComparison.OrdinalIgnoreCase), "PDF should include course descriptions in the same file.");
+        AssertTrue(pdfText.Contains("Source Summary", StringComparison.OrdinalIgnoreCase), "PDF should include source summary context.");
+        AssertTrue(pdfText.Contains("Transcript coverage", StringComparison.OrdinalIgnoreCase), "PDF should include transcript coverage wording.");
+        AssertTrue(pdfText.Contains("Other transcripts may be available", StringComparison.OrdinalIgnoreCase), "PDF should not imply unavailable grades are included.");
+        AssertTrue(pdfText.Contains("grades 9-11", StringComparison.OrdinalIgnoreCase), "PDF should identify the unavailable high school years.");
+        AssertTrue(pdfText.Contains(" re", StringComparison.Ordinal), "PDF should draw structured boxes and table cells.");
+        AssertFalse(pdfText.Contains("Course | Subject | Term", StringComparison.OrdinalIgnoreCase), "PDF should not use the old pipe-delimited text layout.");
+        AssertFalse(pdfText.Contains("MDE-approved", StringComparison.OrdinalIgnoreCase), "PDF must not imply MDE approval.");
+        AssertFalse(pdfText.Contains("state-approved", StringComparison.OrdinalIgnoreCase), "PDF must not imply state approval.");
+        AssertFalse(pdfText.Contains("accredited", StringComparison.OrdinalIgnoreCase), "PDF must not imply accreditation.");
     }))
 };
 

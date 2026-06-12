@@ -72,7 +72,7 @@
             <article class="hm-card dashboard-metric-card">
                 <img class="hm-icon" src="icons/hm/svg/purple/form-course-description-document.svg" alt="" aria-hidden="true" />
                 <span>Portfolio review</span>
-                <strong>@pendingPortfolioItems.Count</strong>
+                <strong>@PortfolioReviewCount</strong>
             </article>
         </section>
 
@@ -166,7 +166,7 @@
                         <h2>Portfolio review</h2>
                         <a class="btn btn-outline-primary btn-sm" href="portfolio">Open portfolio</a>
                     </div>
-                    @if (pendingPortfolioItems.Count == 0)
+                    @if (PortfolioReviewCount == 0)
                     {
                         <p>No student portfolio items are waiting for review.</p>
                     }
@@ -179,6 +179,16 @@
                                     <div>
                                         <strong>@item.DisplayTitle</strong>
                                         <small>@item.StudentName | @item.CourseTitle</small>
+                                    </div>
+                                    <a class="btn btn-outline-primary btn-sm" href="portfolio">Review</a>
+                                </li>
+                            }
+                            @foreach (var candidate in pendingPortfolioCandidates.Take(Math.Max(0, 5 - pendingPortfolioItems.Count)))
+                            {
+                                <li>
+                                    <div>
+                                        <strong>@candidate.Title</strong>
+                                        <small>@candidate.StudentName | @candidate.CourseTitle</small>
                                     </div>
                                     <a class="btn btn-outline-primary btn-sm" href="portfolio">Review</a>
                                 </li>
@@ -253,6 +263,9 @@
     private IReadOnlyList<AssignmentSubmissionSummary> pendingSubmissions = [];
     private GradebookDashboardSummary? gradebookSummary;
     private IReadOnlyList<PortfolioDraftItemView> pendingPortfolioItems = [];
+    private IReadOnlyList<PortfolioAssignmentCandidateView> pendingPortfolioCandidates = [];
+
+    private int PortfolioReviewCount => pendingPortfolioItems.Count + pendingPortfolioCandidates.Count;
 
     protected override async Task OnInitializedAsync()
     {
@@ -298,6 +311,11 @@
             pendingPortfolioItems = portfolioResult.Succeeded
                 ? portfolioResult.Value?.Items
                     .Where(item => item.Status == HomeschoolManager.Domain.Submissions.PortfolioDraftStatus.SubmittedForReview)
+                    .ToArray() ?? []
+                : [];
+            pendingPortfolioCandidates = portfolioResult.Succeeded
+                ? portfolioResult.Value?.AssignmentCandidates
+                    .Where(item => !item.PortfolioDraftStatus.HasValue)
                     .ToArray() ?? []
                 : [];
         }

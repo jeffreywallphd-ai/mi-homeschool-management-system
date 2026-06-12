@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using HomeschoolManager.Application.Access;
 using HomeschoolManager.Application.Common;
+using HomeschoolManager.Application.Documents;
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Domain.Access;
 
@@ -39,7 +40,7 @@ public sealed class SubmissionFilePreviewService
             return OperationResult<SubmissionFileResponse>.Success(file);
         }
 
-        if (IsImage(file))
+        if (IsBrowserMedia(file))
         {
             return OperationResult<SubmissionFileResponse>.Success(file);
         }
@@ -54,9 +55,9 @@ public sealed class SubmissionFilePreviewService
         }
 
         var previewText = TryExtractPreviewText(file);
-        var previewPdf = SimplePdf.CreateTextPreview(
+        var previewPdf = SimplePdfDocument.CreateTextDocument(
             file.OriginalFileName,
-            previewText ?? "This file is attached to the submission, but an in-browser preview is not available yet. Use Download to open it with the matching app on this computer.");
+            [previewText ?? "This file is attached to the submission, but an in-browser preview is not available yet. Use Download to open it with the matching app on this computer."]);
 
         return OperationResult<SubmissionFileResponse>.Success(new SubmissionFileResponse(
             $"{Path.GetFileNameWithoutExtension(file.OriginalFileName)}-preview.pdf",
@@ -117,9 +118,11 @@ public sealed class SubmissionFilePreviewService
             file.OriginalFileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsImage(SubmissionFileResponse file)
+    private static bool IsBrowserMedia(SubmissionFileResponse file)
     {
-        return file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+        return file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+            file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+            file.ContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsTextLike(SubmissionFileResponse file)
@@ -219,151 +222,6 @@ public sealed class SubmissionFilePreviewService
         catch (DecoderFallbackException)
         {
             return Encoding.Default.GetString(content);
-        }
-    }
-
-    private static class SimplePdf
-    {
-        public static byte[] CreateTextPreview(string title, string text)
-        {
-            var lines = WrapLines($"{title}\n\n{text}".Replace("\r\n", "\n").Replace('\r', '\n'), 86);
-            var pages = lines.Chunk(48).Select(pageLines => pageLines.ToArray()).ToArray();
-            if (pages.Length == 0)
-            {
-                pages = [[]];
-            }
-
-            var objects = new List<string>
-            {
-                "<< /Type /Catalog /Pages 2 0 R >>",
-                ""
-            };
-
-            var pageObjectNumbers = new List<int>();
-            for (var index = 0; index < pages.Length; index++)
-            {
-                var contentObjectNumber = 3 + index * 2;
-                var pageObjectNumber = contentObjectNumber + 1;
-                pageObjectNumbers.Add(pageObjectNumber);
-                objects.Add(CreateContentObject(pages[index]));
-                objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {3 + pages.Length * 2} 0 R >> >> /Contents {contentObjectNumber} 0 R >>");
-            }
-
-            objects[1] = $"<< /Type /Pages /Kids [{string.Join(' ', pageObjectNumbers.Select(number => $"{number} 0 R"))}] /Count {pageObjectNumbers.Count} >>";
-            objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-
-            return BuildPdf(objects);
-        }
-
-        private static string CreateContentObject(IReadOnlyList<string> lines)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("BT");
-            builder.AppendLine("/F1 11 Tf");
-            builder.AppendLine("50 742 Td");
-            builder.AppendLine("14 TL");
-            foreach (var line in lines)
-            {
-                builder.Append('(').Append(EscapePdf(line)).AppendLine(") Tj");
-                builder.AppendLine("T*");
-            }
-
-            builder.AppendLine("ET");
-            var stream = builder.ToString();
-            return $"<< /Length {Encoding.ASCII.GetByteCount(stream)} >>\nstream\n{stream}endstream";
-        }
-
-        private static byte[] BuildPdf(IReadOnlyList<string> objects)
-        {
-            var builder = new StringBuilder();
-            var offsets = new List<int> { 0 };
-            builder.AppendLine("%PDF-1.4");
-            for (var index = 0; index < objects.Count; index++)
-            {
-                offsets.Add(Encoding.ASCII.GetByteCount(builder.ToString()));
-                builder.Append(index + 1).AppendLine(" 0 obj");
-                builder.AppendLine(objects[index]);
-                builder.AppendLine("endobj");
-            }
-
-            var xrefOffset = Encoding.ASCII.GetByteCount(builder.ToString());
-            builder.AppendLine("xref");
-            builder.Append("0 ").AppendLine((objects.Count + 1).ToString());
-            builder.AppendLine("0000000000 65535 f ");
-            foreach (var offset in offsets.Skip(1))
-            {
-                builder.Append(offset.ToString("D10")).AppendLine(" 00000 n ");
-            }
-
-            builder.AppendLine("trailer");
-            builder.Append("<< /Size ").Append(objects.Count + 1).AppendLine(" /Root 1 0 R >>");
-            builder.AppendLine("startxref");
-            builder.AppendLine(xrefOffset.ToString());
-            builder.AppendLine("%%EOF");
-            return Encoding.ASCII.GetBytes(builder.ToString());
-        }
-
-        private static IReadOnlyList<string> WrapLines(string text, int maxLength)
-        {
-            var lines = new List<string>();
-            foreach (var sourceLine in text.Split('\n'))
-            {
-                var words = sourceLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (words.Length == 0)
-                {
-                    lines.Add("");
-                    continue;
-                }
-
-                var current = new StringBuilder();
-                foreach (var word in words)
-                {
-                    var safeWord = ToPdfText(word);
-                    if (current.Length > 0 && current.Length + safeWord.Length + 1 > maxLength)
-                    {
-                        lines.Add(current.ToString());
-                        current.Clear();
-                    }
-
-                    if (safeWord.Length > maxLength)
-                    {
-                        foreach (var chunk in safeWord.Chunk(maxLength))
-                        {
-                            if (current.Length > 0)
-                            {
-                                lines.Add(current.ToString());
-                                current.Clear();
-                            }
-
-                            lines.Add(new string(chunk));
-                        }
-
-                        continue;
-                    }
-
-                    if (current.Length > 0)
-                    {
-                        current.Append(' ');
-                    }
-
-                    current.Append(safeWord);
-                }
-
-                lines.Add(current.ToString());
-            }
-
-            return lines;
-        }
-
-        private static string EscapePdf(string value)
-        {
-            return ToPdfText(value).Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
-        }
-
-        private static string ToPdfText(string value)
-        {
-            var characters = value.Select(character => character is >= ' ' and <= '~' ? character : '?').ToArray();
-            return new string(characters);
         }
     }
 

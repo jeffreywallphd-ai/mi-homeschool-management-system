@@ -37,13 +37,19 @@ else
 
     <div class="student-page-grid student-course-page-grid">
         <main class="student-main-column">
-            <section class="form-section">
-                <h2>Course Description</h2>
+            <details class="form-section student-disclosure-card">
+                <summary>
+                    <h2>Course Description</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 <p>@course.Description</p>
-            </section>
+            </details>
 
-            <section class="form-section">
-                <h2>Learning Objectives</h2>
+            <details class="form-section student-disclosure-card">
+                <summary>
+                    <h2>Learning Objectives</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 @if (course.LearningObjectives.Count == 0)
                 {
                     <p>No learning objectives have been added yet.</p>
@@ -57,8 +63,7 @@ else
                         }
                     </ul>
                 }
-                <a class="btn btn-primary mt-3" href="@($"{RouteBase(course.StudentId)}/courses/{CourseId}/syllabus")">Open syllabus</a>
-            </section>
+            </details>
         </main>
 
         <aside class="student-support-column">
@@ -74,10 +79,12 @@ else
                         <dd>@course.Modules.Count</dd>
                     </div>
                 </dl>
+                <a class="btn btn-primary mt-3" href="@($"{RouteBase(course.StudentId)}/courses/{CourseId}/syllabus")">Open syllabus</a>
             </section>
 
             <section class="support-card">
                 <h2>Modules</h2>
+                <p class="student-muted">Complete the modules in the order listed.</p>
                 @if (course.Modules.Count == 0)
                 {
                     <p>No modules have been added yet.</p>
@@ -182,7 +189,7 @@ else
             builder.AddContent(sequence++, module.Title);
             builder.CloseElement();
             builder.OpenElement(sequence++, "span");
-            builder.AddContent(sequence++, ModuleMeta(module));
+            builder.AddContent(sequence++, ModuleMeta(module, course?.Duration ?? CourseDuration.OneSemester));
             builder.CloseElement();
             builder.CloseElement();
             builder.CloseElement();
@@ -196,10 +203,10 @@ else
         return duration == CourseDuration.OneSemester ? "One semester" : "Two semesters";
     }
 
-    private static string ModuleMeta(StudentModuleLink module)
+    private static string ModuleMeta(StudentModuleLink module, CourseDuration duration)
     {
         var parts = new List<string> { StatusText(module.Status) };
-        if (!string.IsNullOrWhiteSpace(module.TermName))
+        if (duration != CourseDuration.OneSemester && !string.IsNullOrWhiteSpace(module.TermName))
         {
             parts.Add(module.TermName);
         }
@@ -221,6 +228,6 @@ else
     private string RouteBase(Guid? studentId = null)
     {
         var targetStudentId = studentId ?? course?.StudentId ?? StudentId;
-        return $"student/{targetStudentId}";
+        return $"/student/{targetStudentId}";
     }
 }

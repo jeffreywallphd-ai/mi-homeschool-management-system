@@ -1,7 +1,7 @@
 # Student Course Client Roadmap
 
 - Status: accepted
-- Last reviewed: 2026-06-06
+- Last reviewed: 2026-06-11
 - Canonical for: phased implementation plan for the student-facing course and module client
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md)
 - Related docs: [Identity and Access Architecture](../architecture/identity-and-access-architecture.md), [Curriculum Planning Rules](../domain/curriculum-planning-rules.md), [Course Pack Rules](../domain/course-pack-rules.md), [Assessment and Grading Rules](../domain/assessment-and-grading-rules.md), [Blazor UI Pack](../context/packs/blazor-ui.pack.md)
@@ -24,24 +24,27 @@ The later accepted [Assignment Submissions and Evidence Roadmap](assignment-subm
 - Read-only course syllabus page compiled from course detail fields.
 - Read-only student module detail page.
 - Student navigation to courses, syllabi, and modules.
+- Student gradebook area for upcoming, submitted, and parent-feedback-posted assignments.
 - Student-only routes and application read models.
 - Parent/admin preview path if useful for review.
 - Responsive layouts for mobile, tablet, and laptop/PC screens.
 
 ## Out of Scope
 
-- Gradebook scoring implementation.
+- Gradebook scoring or current-grade calculation implementation.
 - Assignment submission workflow, now covered by the later assignment submissions roadmap.
 - Attendance or activity logging.
 - File evidence upload by the student, now covered only for assignment submissions by the later assignment submissions roadmap.
 - Parent feedback, grade finalization, credit awards, transcripts, or report cards.
 - Student mutation of courses, modules, mappings, grades, credits, or setup.
 
-## Current Grade Constraint
+## Student Gradebook Constraint
 
-The gradebook is not implemented yet. The first student landing page should expose a current-grade display slot and show a clear placeholder such as "Not recorded" or "No grade yet" until a gradebook service exists.
+The student portal may show assignment workflow status such as upcoming, submitted, returned for revision, accepted for review, and parent-feedback-posted work.
 
-Do not infer grades from course progress, module completion, or planned credits.
+The student portal must not calculate or infer current grades from course progress, module completion, planned credits, assignment submission status, or visible feedback. Current-grade display should remain an explicit grade or a clear placeholder such as "Not recorded" or "No grade yet" until a parent-owned grade calculation model exists.
+
+Visible assessment feedback remains parent/admin-controlled and must be explicitly marked student-visible before it appears in the student portal.
 
 ## Phase 1: Student Read Contracts
 
@@ -198,6 +201,7 @@ Do not infer grades from course progress, module completion, or planned credits.
 ### Build
 
 - Review student dashboard, course, syllabus, and module pages at mobile, tablet, and laptop/PC sizes.
+- Review the student gradebook at mobile, tablet, and laptop/PC sizes.
 - Use single-column layouts on narrow screens and two-column layouts only when space supports them.
 - Keep cards, links, and navigation targets usable by touch.
 - Ensure long titles, descriptions, resources, and objectives wrap without overlapping controls.
@@ -206,6 +210,7 @@ Do not infer grades from course progress, module completion, or planned credits.
 ### Exit Criteria
 
 - Student pages work on mobile, tablet, and laptop/PC screens.
+- Student gradebook sections for upcoming, submitted, and feedback-posted assignments remain readable across screen sizes.
 - Page columns collapse cleanly before content becomes cramped.
 - Tap targets, course cards, syllabus links, module links, and previous/next module links remain easy to use.
 
@@ -229,7 +234,7 @@ Do not infer grades from course progress, module completion, or planned credits.
 - Build passes.
 - Tests pass.
 - Student pages are read-only and role-safe.
-- Current-grade placeholder is clearly documented until gradebook exists.
+- Current-grade placeholder remains clearly separated from assignment workflow status.
 - No conflicts with identity/access, curriculum, legal-language, or UI guidance.
 
 ### Verification
@@ -241,7 +246,7 @@ Do not infer grades from course progress, module completion, or planned credits.
 
 ## Deferred Decisions
 
-- Exact gradebook model and how current grades are calculated.
+- Exact current-grade calculation model.
 - Assignment submission and evidence workflow.
 - Whether students may mark module resources complete.
 - Whether parent notes should always be student-facing or marked with a visibility setting.

@@ -28,6 +28,20 @@ The system must support these parent-facing record workflows:
 - Full graduation packet.
 - Portfolio packet.
 
+## Transcript Preview and Export
+
+The transcript workflow should let the parent/admin review a high-school-style transcript preview, record final transcript line values for each course, and export a transcript packet. Student access may show the transcript and course descriptions read-only.
+
+Transcript packets should be able to include:
+
+- A conventional transcript table grouped by school year and grade level.
+- In-progress courses clearly labeled as in progress or planned.
+- Final grades and earned credits only when explicitly parent-recorded.
+- Course descriptions as an appendix or companion section.
+- A source manifest that identifies course and transcript course record identifiers.
+- A single PDF version of the packet for printing or sharing.
+- A grade-span label and coverage note that describe only the grades represented by system course records.
+
 ## Required Graduation Packet Contents
 
 A graduation packet should be able to include:

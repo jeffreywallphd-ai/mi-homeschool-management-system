@@ -95,7 +95,8 @@ public sealed class AssignmentSubmissionService
                 null,
                 "",
                 context.Assignment.IsPortfolioCandidate,
-                draftNumber: draftNumber);
+                draftNumber: draftNumber,
+                studentPortfolioCandidate: command.MarkPortfolioCandidate);
 
             await repository.SaveAssignmentSubmissionAsync(submission, cancellationToken);
             return OperationResult<Guid>.Success(submission.Id);
@@ -405,6 +406,7 @@ public sealed class AssignmentSubmissionService
                 detail.ClearedAtUtc,
                 detail.ParentReviewNotes,
                 detail.PortfolioCandidate,
+                detail.StudentPortfolioCandidate,
                 detail.Attachments.Count,
                 detail.DraftNumber,
                 detail.DraftCount,
@@ -450,6 +452,7 @@ public sealed class AssignmentSubmissionService
             submission.ClearedAtUtc,
             submission.ParentReviewNotes,
             submission.PortfolioCandidate,
+            submission.StudentPortfolioCandidate,
             submission.DraftNumber,
             context.Assignment.DraftCount,
             IsFinalDraft(context.Assignment, submission.DraftNumber),

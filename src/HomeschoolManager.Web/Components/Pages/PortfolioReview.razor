@@ -1,18 +1,21 @@
 @page "/portfolio"
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Common
 @using HomeschoolManager.Application.Portfolio
 @using HomeschoolManager.Domain.Submissions
 @using HomeschoolManager.Web.Services
 @inject PortfolioService Portfolio
+@inject PortfolioExportService PortfolioExports
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Portfolio Review</PageTitle>
 
 @if (!canView)
 {
     <h1>Portfolio Review</h1>
-    <div class="alert alert-warning">Sign in as parent/admin to review portfolio items.</div>
+    <div class="alert alert-warning">Sign in as parent/admin to review portfolio designs.</div>
 }
 else if (workspace is null)
 {
@@ -22,7 +25,7 @@ else if (workspace is null)
                 <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
             </span>
             <h1>Portfolio Review</h1>
-            <p>Review student-curated portfolio draft items.</p>
+            <p>Review portfolio designs and approve the family portfolio packet preview.</p>
         </div>
         <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
     </div>
@@ -40,165 +43,484 @@ else
                 <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
             </span>
             <h1>Portfolio Review</h1>
-            <p>Review student reflections and decide which evidence is ready for the parent portfolio packet.</p>
+            <p>@ReviewPostureText</p>
         </div>
         <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
     </div>
 
+    <div class="gradebook-selector-bar hm-card portfolio-selector-bar">
+        <div>
+            <label class="form-label" for="portfolio-student">Student</label>
+            <select id="portfolio-student" class="form-select" value="@selectedStudentId" @onchange="OnStudentChangedAsync">
+                @foreach (var student in workspace.Students)
+                {
+                    <option value="@student.StudentId">@student.Name</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Portfolio status</label>
+            <div class="portfolio-status-display">
+                <span class="submission-status-pill">@DesignStatusText(workspace.Design.Status)</span>
+                <span>Version @workspace.Design.Version</span>
+            </div>
+        </div>
+    </div>
+
     @foreach (var message in messages)
     {
-        <div class="alert alert-info">@message</div>
+        <div class="alert @(lastActionSucceeded ? "alert-success" : "alert-warning")">@message</div>
     }
 
     <section class="dashboard-metrics" aria-label="Portfolio review summary">
         <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/form-course-description-document.svg" alt="" aria-hidden="true" />
+            <span>Sections</span>
+            <strong>@workspace.Design.Sections.Count(item => item.IncludeInPortfolio)</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
             <img class="hm-icon" src="icons/hm/svg/purple/form-assignment-clipboard.svg" alt="" aria-hidden="true" />
-            <span>Awaiting review</span>
-            <strong>@CountByStatus(PortfolioDraftStatus.SubmittedForReview)</strong>
+            <span>Portfolio items</span>
+            <strong>@workspace.Items.Count(item => item.IncludeInDraft && item.Status != PortfolioDraftStatus.Excluded)</strong>
         </article>
         <article class="hm-card dashboard-metric-card">
             <img class="hm-icon" src="icons/hm/svg/purple/status-alert-triangle.svg" alt="" aria-hidden="true" />
-            <span>Needs revision</span>
-            <strong>@CountByStatus(PortfolioDraftStatus.NeedsRevision)</strong>
+            <span>Open suggestions</span>
+            <strong>@OpenSuggestionCount</strong>
         </article>
         <article class="hm-card dashboard-metric-card">
             <img class="hm-icon" src="icons/hm/svg/purple/metric-credit-award.svg" alt="" aria-hidden="true" />
-            <span>Approved</span>
-            <strong>@CountByStatus(PortfolioDraftStatus.ParentApproved)</strong>
-        </article>
-        <article class="hm-card dashboard-metric-card">
-            <img class="hm-icon" src="icons/hm/svg/purple/nav-student-preview-eye.svg" alt="" aria-hidden="true" />
-            <span>Drafts visible</span>
-            <strong>@CountByStatus(PortfolioDraftStatus.Draft)</strong>
+            <span>Approved snapshots</span>
+            <strong>@workspace.Design.ApprovalSnapshots.Count</strong>
         </article>
     </section>
 
-    <div class="dashboard-grid">
+    <div class="dashboard-grid portfolio-review-grid">
         <main class="dashboard-main">
-            <section class="hm-card dashboard-card">
+            <section class="hm-card dashboard-card portfolio-editor-card">
                 <div class="section-heading-row">
-                    <h2>Student Portfolio Items</h2>
-                    <span class="submission-status-pill">@workspace.Items.Count total</span>
+                    <div>
+                        <h2>Portfolio Design</h2>
+                        <p class="form-text">Use direct edits when needed; suggestions are best for guiding older students.</p>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" @onclick="SaveDesignAsync">Save design</button>
                 </div>
 
-                @if (workspace.Items.Count == 0)
+                <div class="two-column-form-grid">
+                    <div>
+                        <label class="form-label" for="portfolio-title">Title <span class="required-marker">*</span></label>
+                        <input id="portfolio-title" class="form-control" @bind="designEdit.Title" />
+                    </div>
+                    <div>
+                        <label class="form-label" for="portfolio-purpose">Purpose</label>
+                        <input id="portfolio-purpose" class="form-control" @bind="designEdit.Purpose" />
+                    </div>
+                </div>
+
+                @foreach (var narrative in designEdit.Narratives.OrderBy(item => item.SortOrder))
                 {
-                    <p>No student portfolio draft items have been created yet.</p>
+                    var suggestionEdit = SuggestionEditFor(PortfolioSuggestionTargetType.Narrative, narrative.NarrativeId);
+                    <div class="portfolio-review-block">
+                        <label class="form-label" for="@($"narrative-{narrative.NarrativeId}")">@narrative.Prompt</label>
+                        <textarea id="@($"narrative-{narrative.NarrativeId}")" class="form-control" rows="4" @bind="narrative.Response"></textarea>
+                        <div class="portfolio-suggestion-editor">
+                            <label class="form-label" for="@($"narrative-suggestion-{narrative.NarrativeId}")">Suggestion for this narrative</label>
+                            <textarea id="@($"narrative-suggestion-{narrative.NarrativeId}")" class="form-control" rows="3" @bind="suggestionEdit.Text"></textarea>
+                            <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => AddSuggestionAsync(PortfolioSuggestionTargetType.Narrative, narrative.NarrativeId)">Save suggestion</button>
+                        </div>
+                        <OpenSuggestionList Suggestions="OpenSuggestionsFor(PortfolioSuggestionTargetType.Narrative, narrative.NarrativeId)" OnResolve="ResolveSuggestionAsync" />
+                    </div>
+                }
+            </section>
+
+            <section class="hm-card dashboard-card portfolio-editor-card">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Sections and Items</h2>
+                        <p class="form-text">Review section structure, item placement, reflections, and source context.</p>
+                    </div>
+                    <span class="submission-status-pill">@workspace.Items.Count total items</span>
+                </div>
+
+                <div class="inline-entry-form portfolio-add-section">
+                    <div class="two-column-form-grid">
+                        <div>
+                            <label class="form-label" for="new-section-heading">New section heading</label>
+                            <input id="new-section-heading" class="form-control" @bind="newSectionHeading" />
+                        </div>
+                        <div>
+                            <label class="form-label" for="new-section-intro">Introduction</label>
+                            <input id="new-section-intro" class="form-control" @bind="newSectionIntroduction" />
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" @onclick="AddSectionAsync">Add section</button>
+                </div>
+
+                <div class="portfolio-section-stack">
+                    @foreach (var portfolioSection in workspace.Design.Sections.OrderBy(item => item.SortOrder))
+                    {
+                        var sectionEdit = SectionEditFor(portfolioSection);
+                        var sectionSuggestion = SuggestionEditFor(PortfolioSuggestionTargetType.Section, portfolioSection.SectionId);
+                        var sectionItems = ItemsForSection(portfolioSection.SectionId).ToArray();
+                        <article class="portfolio-section-card @(portfolioSection.IncludeInPortfolio ? "" : "portfolio-section-muted")">
+                            <div class="section-heading-row portfolio-section-heading">
+                                <div>
+                                    <h3>@portfolioSection.Heading</h3>
+                                    <small>@SectionStatusText(portfolioSection.Status) | @sectionItems.Length items</small>
+                                </div>
+                                <span class="student-grade-pill">@portfolioSection.SortOrder</span>
+                            </div>
+
+                            <div class="inline-entry-form">
+                                <div class="two-column-form-grid">
+                                    <div>
+                                        <label class="form-label" for="@($"portfolio-section-heading-{portfolioSection.SectionId}")">Heading</label>
+                                        <input id="@($"portfolio-section-heading-{portfolioSection.SectionId}")" class="form-control" @bind="sectionEdit.Heading" />
+                                    </div>
+                                    <div>
+                                        <label class="form-label" for="@($"portfolio-section-order-{portfolioSection.SectionId}")">Order</label>
+                                        <input id="@($"portfolio-section-order-{portfolioSection.SectionId}")" class="form-control" type="number" min="0" @bind="sectionEdit.SortOrder" />
+                                    </div>
+                                </div>
+                                <label class="form-label" for="@($"portfolio-section-intro-{portfolioSection.SectionId}")">Introduction</label>
+                                <textarea id="@($"portfolio-section-intro-{portfolioSection.SectionId}")" class="form-control" rows="3" @bind="sectionEdit.Introduction"></textarea>
+                                <div class="checkbox-row">
+                                    <input id="@($"portfolio-section-include-{portfolioSection.SectionId}")" class="form-check-input" type="checkbox" @bind="sectionEdit.IncludeInPortfolio" />
+                                    <label class="form-check-label" for="@($"portfolio-section-include-{portfolioSection.SectionId}")">Include this section</label>
+                                </div>
+                                <button class="btn btn-outline-primary" type="button" @onclick="() => SaveSectionAsync(portfolioSection.SectionId)">Save section</button>
+                            </div>
+
+                            <div class="portfolio-suggestion-editor">
+                                <label class="form-label" for="@($"portfolio-section-suggestion-{portfolioSection.SectionId}")">Suggestion for this section</label>
+                                <textarea id="@($"portfolio-section-suggestion-{portfolioSection.SectionId}")" class="form-control" rows="3" @bind="sectionSuggestion.Text"></textarea>
+                                <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => AddSuggestionAsync(PortfolioSuggestionTargetType.Section, portfolioSection.SectionId)">Save suggestion</button>
+                            </div>
+                            <OpenSuggestionList Suggestions="OpenSuggestionsFor(PortfolioSuggestionTargetType.Section, portfolioSection.SectionId)" OnResolve="ResolveSuggestionAsync" />
+
+                            @if (sectionItems.Length == 0)
+                            {
+                                <p class="student-muted">No evidence is placed in this section yet.</p>
+                            }
+                            else
+                            {
+                                <div class="portfolio-item-stack">
+                                    @foreach (var item in sectionItems)
+                                    {
+                                        var itemEdit = ItemEditFor(item);
+                                        var itemSuggestion = SuggestionEditFor(PortfolioSuggestionTargetType.Item, item.PortfolioDraftItemId);
+                                        <article class="portfolio-item-card">
+                                            <div class="student-card-heading">
+                                                <div>
+                                                    <h4>@item.DisplayTitle</h4>
+                                                    <small>@item.StudentName | @item.CourseTitle | @item.AssignmentTitle</small>
+                                                </div>
+                                                <span class="student-grade-pill">@ItemStatusText(item.Status)</span>
+                                            </div>
+
+                                            <dl class="student-detail-facts">
+                                                <div>
+                                                    <dt>Files</dt>
+                                                    <dd>@item.FileCount</dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Order</dt>
+                                                    <dd>@item.SortOrder</dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Included</dt>
+                                                    <dd>@(item.IncludeInDraft ? "Yes" : "No")</dd>
+                                                </div>
+                                            </dl>
+
+                                            <div class="inline-entry-form">
+                                                <div class="two-column-form-grid">
+                                                    <div>
+                                                        <label class="form-label" for="@($"item-title-{item.PortfolioDraftItemId}")">Display title</label>
+                                                        <input id="@($"item-title-{item.PortfolioDraftItemId}")" class="form-control" @bind="itemEdit.DisplayTitle" />
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label" for="@($"item-section-{item.PortfolioDraftItemId}")">Section</label>
+                                                        <select id="@($"item-section-{item.PortfolioDraftItemId}")" class="form-select" @bind="itemEdit.PortfolioSectionId">
+                                                            @foreach (var option in workspace.Design.Sections.Where(item => item.IncludeInPortfolio).OrderBy(item => item.SortOrder))
+                                                            {
+                                                                <option value="@option.SectionId">@option.Heading</option>
+                                                            }
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label" for="@($"item-skills-{item.PortfolioDraftItemId}")">Skills shown</label>
+                                                        <input id="@($"item-skills-{item.PortfolioDraftItemId}")" class="form-control" @bind="itemEdit.SkillsShownText" />
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label" for="@($"item-order-{item.PortfolioDraftItemId}")">Order</label>
+                                                        <input id="@($"item-order-{item.PortfolioDraftItemId}")" class="form-control" type="number" min="0" @bind="itemEdit.SortOrder" />
+                                                    </div>
+                                                </div>
+                                                <label class="form-label" for="@($"item-reflection-{item.PortfolioDraftItemId}")">Student reflection</label>
+                                                <textarea id="@($"item-reflection-{item.PortfolioDraftItemId}")" class="form-control" rows="3" @bind="itemEdit.StudentReflection"></textarea>
+                                                <label class="form-label" for="@($"item-reason-{item.PortfolioDraftItemId}")">Reason for inclusion</label>
+                                                <textarea id="@($"item-reason-{item.PortfolioDraftItemId}")" class="form-control" rows="3" @bind="itemEdit.ChosenReason"></textarea>
+                                                <div class="checkbox-row">
+                                                    <input id="@($"item-include-{item.PortfolioDraftItemId}")" class="form-check-input" type="checkbox" @bind="itemEdit.IncludeInDraft" />
+                                                    <label class="form-check-label" for="@($"item-include-{item.PortfolioDraftItemId}")">Include in approved design</label>
+                                                </div>
+                                                <button class="btn btn-outline-primary" type="button" @onclick="() => SaveItemAsync(item.PortfolioDraftItemId)">Save item</button>
+                                            </div>
+
+                                            <div class="portfolio-suggestion-editor">
+                                                <label class="form-label" for="@($"item-suggestion-{item.PortfolioDraftItemId}")">Suggestion for this item</label>
+                                                <textarea id="@($"item-suggestion-{item.PortfolioDraftItemId}")" class="form-control" rows="3" @bind="itemSuggestion.Text"></textarea>
+                                                <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => AddSuggestionAsync(PortfolioSuggestionTargetType.Item, item.PortfolioDraftItemId)">Save suggestion</button>
+                                            </div>
+                                            <OpenSuggestionList Suggestions="OpenSuggestionsFor(PortfolioSuggestionTargetType.Item, item.PortfolioDraftItemId)" OnResolve="ResolveSuggestionAsync" />
+
+                                            <div class="inline-entry-form">
+                                                <label class="form-label" for="@($"item-review-notes-{item.PortfolioDraftItemId}")">Parent item notes</label>
+                                                <textarea id="@($"item-review-notes-{item.PortfolioDraftItemId}")" class="form-control" rows="3" @bind="itemEdit.ParentReviewNotes"></textarea>
+                                                <div class="review-action-row">
+                                                    <button type="button" class="btn btn-primary" disabled="@IsDraft(item)" @onclick="() => ReviewItemAsync(item.PortfolioDraftItemId, PortfolioDraftStatus.ParentApproved)">Approve item</button>
+                                                    <button type="button" class="btn btn-outline-primary" disabled="@IsDraft(item)" @onclick="() => ReviewItemAsync(item.PortfolioDraftItemId, PortfolioDraftStatus.NeedsRevision)">Needs revision</button>
+                                                    <button type="button" class="btn btn-outline-danger" disabled="@IsDraft(item)" @onclick="() => ReviewItemAsync(item.PortfolioDraftItemId, PortfolioDraftStatus.Excluded)">Exclude</button>
+                                                    <a class="btn btn-outline-secondary" href="@($"submissions/{item.SubmissionId}")">Open submission</a>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            </section>
+        </main>
+
+        <aside class="dashboard-support portfolio-support-column">
+            <section class="hm-card dashboard-card">
+                <h2>Review Actions</h2>
+                <p>@ReviewPostureText</p>
+                <div class="portfolio-suggestion-editor">
+                    <label class="form-label" for="portfolio-suggestion">Overall suggestion</label>
+                    <textarea id="portfolio-suggestion" class="form-control" rows="3" @bind="portfolioSuggestionText"></textarea>
+                    <button class="btn btn-outline-primary" type="button" @onclick="() => AddSuggestionAsync(PortfolioSuggestionTargetType.Portfolio, null)">Save suggestion</button>
+                </div>
+                <OpenSuggestionList Suggestions="OpenSuggestionsFor(PortfolioSuggestionTargetType.Portfolio, null)" OnResolve="ResolveSuggestionAsync" />
+                <label class="form-label" for="revision-notes">Revision request</label>
+                <textarea id="revision-notes" class="form-control" rows="3" @bind="revisionNotes"></textarea>
+                <div class="review-action-row">
+                    <button class="btn btn-outline-primary" type="button" @onclick="RequestRevisionAsync">Request revision</button>
+                    <button class="btn btn-primary" type="button" @onclick="ApproveDesignAsync">Approve portfolio design</button>
+                </div>
+            </section>
+
+            <section class="hm-card dashboard-card">
+                <div class="section-heading-row">
+                    <h2>Approved Portfolio</h2>
+                    <span class="submission-status-pill">@workspace.Design.ApprovalSnapshots.Count snapshot@(workspace.Design.ApprovalSnapshots.Count == 1 ? "" : "s")</span>
+                </div>
+                @if (workspace.Design.ApprovalSnapshots.Count == 0)
+                {
+                    <p>Approve a portfolio design before creating an official archive packet.</p>
                 }
                 else
                 {
-                    <div class="dashboard-student-list">
-                        @foreach (var item in OrderedItems)
+                    <label class="form-label" for="approved-snapshot">Approved snapshot</label>
+                    <select id="approved-snapshot" class="form-select" value="@selectedExportSnapshotId" @onchange="OnExportSnapshotChangedAsync">
+                        @foreach (var snapshot in workspace.Design.ApprovalSnapshots.OrderByDescending(item => item.ApprovedAtUtc))
                         {
-                            var edit = NotesFor(item);
-                            <article class="dashboard-student-row">
-                                <div class="dashboard-student-identity">
-                                    <span class="hm-icon-tile" aria-hidden="true">
-                                        <img class="hm-icon" src="icons/hm/svg/currentcolor/form-assignment-clipboard.svg" alt="" />
-                                    </span>
-                                    <div>
-                                        <h3>@item.DisplayTitle</h3>
-                                        <p>@item.StudentName</p>
-                                    </div>
-                                </div>
-                                <dl class="student-detail-facts">
-                                    <div>
-                                        <dt>Status</dt>
-                                        <dd>@StatusText(item.Status)</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Course</dt>
-                                        <dd>@item.CourseTitle</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Section</dt>
-                                        <dd>@(string.IsNullOrWhiteSpace(item.PortfolioSection) ? "Not set" : item.PortfolioSection)</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Files</dt>
-                                        <dd>@item.FileCount</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Order</dt>
-                                        <dd>@item.SortOrder</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Included</dt>
-                                        <dd>@(item.IncludeInDraft ? "Yes" : "No")</dd>
-                                    </div>
-                                </dl>
-                                <a class="btn btn-outline-primary btn-sm" href="@($"student-preview/{item.StudentId}/courses/{item.CourseId}/modules/{item.ModuleId}")">Preview context</a>
-                            </article>
+                            <option value="@snapshot.ApprovalSnapshotId">Version @snapshot.Version | @snapshot.ApprovedAtUtc.ToLocalTime().ToString("g")</option>
+                        }
+                    </select>
 
-                            <article class="hm-card dashboard-card">
-                                <div class="section-heading-row">
-                                    <div>
-                                        <h3>@item.AssignmentTitle</h3>
-                                        <small>@item.ModuleTitle</small>
-                                    </div>
-                                    <span class="submission-status-pill">@StatusText(item.Status)</span>
-                                </div>
-                                <div class="student-nested-panel">
-                                    <strong>Student reflection</strong>
-                                    <p>@(string.IsNullOrWhiteSpace(item.StudentReflection) ? "No reflection added yet." : item.StudentReflection)</p>
-                                </div>
-                                <div class="student-nested-panel">
-                                    <strong>Why the student chose this</strong>
-                                    <p>@(string.IsNullOrWhiteSpace(item.ChosenReason) ? "No reason added yet." : item.ChosenReason)</p>
-                                </div>
-                                @if (item.SkillsShown.Count > 0)
+                    @if (exportPreview is not null)
+                    {
+                        <div class="portfolio-export-summary">
+                            <div>
+                                <span>Sections</span>
+                                <strong>@exportPreview.SectionCount</strong>
+                            </div>
+                            <div>
+                                <span>Items</span>
+                                <strong>@exportPreview.ItemCount</strong>
+                            </div>
+                            <div>
+                                <span>Files</span>
+                                <strong>@exportPreview.AttachedFileCount</strong>
+                            </div>
+                            <div>
+                                <span>Missing</span>
+                                <strong>@exportPreview.MissingFileCount</strong>
+                            </div>
+                        </div>
+                        <p class="form-text">Exports use the approved snapshot and do not include later draft edits.</p>
+                        @if (exportPreview.Warnings.Count > 0)
+                        {
+                            <div class="alert alert-warning">
+                                @foreach (var warning in exportPreview.Warnings)
                                 {
-                                    <div class="submission-status-strip">
-                                        @foreach (var skill in item.SkillsShown)
-                                        {
-                                            <span class="submission-status-pill">@skill</span>
-                                        }
-                                    </div>
+                                    <div>@warning</div>
                                 }
+                            </div>
+                        }
+                        <div class="portfolio-approved-preview-frame">
+                            <PortfolioPreview Preview="exportPreview.Preview" />
+                        </div>
+                    }
 
-                                <div class="inline-entry-form mt-3">
-                                    <label class="form-label" for="@($"portfolio-review-notes-{item.PortfolioDraftItemId}")">Parent review notes</label>
-                                    <textarea id="@($"portfolio-review-notes-{item.PortfolioDraftItemId}")" class="form-control" rows="4" @bind="edit.ParentReviewNotes"></textarea>
-                                    @if (item.Status == PortfolioDraftStatus.Draft)
-                                    {
-                                        <p class="form-text">The student has not submitted this item for review yet.</p>
-                                    }
-                                    <div class="review-action-row">
-                                        <button type="button" class="btn btn-primary" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.ParentApproved)">Approve</button>
-                                        <button type="button" class="btn btn-outline-primary" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.NeedsRevision)">Needs revision</button>
-                                        <button type="button" class="btn btn-outline-danger" disabled="@IsDraft(item)" @onclick="() => Review(item.PortfolioDraftItemId, PortfolioDraftStatus.Excluded)">Exclude</button>
-                                    </div>
-                                </div>
+                    <div class="review-action-row">
+                        <button class="btn btn-outline-primary" type="button" @onclick="() => RefreshExportPreviewAsync()">Refresh preview</button>
+                        <button class="btn btn-primary" type="button" @onclick="DownloadArchivePacketAsync">Download archive packet</button>
+                    </div>
+                }
+            </section>
+
+            <section class="hm-card dashboard-card">
+                <div class="section-heading-row">
+                    <h2>Accepted Evidence</h2>
+                    <span class="submission-status-pill">@workspace.AvailableEvidence.Count(item => !item.AlreadyAdded) available</span>
+                </div>
+                <div class="portfolio-suggestion-list">
+                    @foreach (var evidence in workspace.AvailableEvidence.Where(item => !item.AlreadyAdded).Take(6))
+                    {
+                        var add = EvidenceAddFor(evidence);
+                        <article class="portfolio-mini-card">
+                            <strong>@evidence.Title</strong>
+                            <small>@evidence.CourseTitle | @evidence.AssignmentTitle</small>
+                            <select class="form-select" @bind="add.SectionId">
+                                @foreach (var sectionOption in workspace.Design.Sections.Where(item => item.IncludeInPortfolio).OrderBy(item => item.SortOrder))
+                                {
+                                    <option value="@sectionOption.SectionId">@sectionOption.Heading</option>
+                                }
+                            </select>
+                            <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => AddEvidenceAsync(evidence.EvidenceRecordId)">Add evidence</button>
+                        </article>
+                    }
+                </div>
+            </section>
+
+            <section class="hm-card dashboard-card">
+                <div class="section-heading-row">
+                    <h2>Assignment Candidates</h2>
+                    <span class="submission-status-pill">@PendingAssignmentCandidateCount pending</span>
+                </div>
+                @if (workspace.AssignmentCandidates.Count == 0)
+                {
+                    <p>No accepted assignments are marked as portfolio candidates yet.</p>
+                }
+                else
+                {
+                    <div class="portfolio-suggestion-list">
+                        @foreach (var candidate in workspace.AssignmentCandidates)
+                        {
+                            var candidateAdd = CandidateAddFor(candidate);
+                            <article class="portfolio-mini-card">
+                                <strong>@candidate.Title</strong>
+                                <small>@candidate.CourseTitle | @candidate.AssignmentTitle</small>
+                                @if (candidate.PortfolioDraftStatus.HasValue)
+                                {
+                                    <span class="submission-status-pill">@ItemStatusText(candidate.PortfolioDraftStatus.Value)</span>
+                                }
+                                else
+                                {
+                                    <select class="form-select" @bind="candidateAdd.SectionId">
+                                        @foreach (var sectionOption in workspace.Design.Sections.Where(item => item.IncludeInPortfolio).OrderBy(item => item.SortOrder))
+                                        {
+                                            <option value="@sectionOption.SectionId">@sectionOption.Heading</option>
+                                        }
+                                    </select>
+                                    <textarea class="form-control" rows="2" @bind="candidateAdd.ParentReviewNotes"></textarea>
+                                    <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => AcceptCandidateAsync(candidate.EvidenceRecordId)">Accept candidate</button>
+                                }
                             </article>
                         }
                     </div>
                 }
             </section>
-        </main>
 
-        <aside class="dashboard-support">
             <section class="hm-card dashboard-card">
-                <h2>Review Posture</h2>
-                <p>Student portfolio entries are draft curation records until parent/admin review marks them approved.</p>
-                <p>Approving a portfolio item does not change grades, credits, course completion, or the accepted evidence record.</p>
+                <div class="section-heading-row">
+                    <h2>Assignment Ideas</h2>
+                    <span class="submission-status-pill">@workspace.AssignmentSuggestions.Count suggested</span>
+                </div>
+                @if (workspace.AssignmentSuggestions.Count == 0)
+                {
+                    <p>No planned assignment suggestions yet.</p>
+                }
+                else
+                {
+                    <div class="portfolio-suggestion-list">
+                        @foreach (var suggestion in workspace.AssignmentSuggestions)
+                        {
+                            <article class="portfolio-mini-card">
+                                <strong>@suggestion.AssignmentTitle</strong>
+                                <small>@AssignmentSuggestionStatusText(suggestion.Status)</small>
+                                <p>@(string.IsNullOrWhiteSpace(suggestion.StudentReason) ? "No reason added." : suggestion.StudentReason)</p>
+                            </article>
+                        }
+                    </div>
+                }
             </section>
+
+            <section class="hm-card dashboard-card gradebook-preview-card">
+                <div class="section-heading-row">
+                    <h2>Preview</h2>
+                    <span class="hm-chip">@DesignStatusText(workspace.Preview.Status)</span>
+                </div>
+                <PortfolioPreview Preview="workspace.Preview" />
+            </section>
+
+            @if (workspace.Design.ApprovalSnapshots.Count > 0)
+            {
+                <section class="hm-card dashboard-card">
+                    <h2>Approved Snapshots</h2>
+                    <div class="portfolio-suggestion-list">
+                        @foreach (var snapshot in workspace.Design.ApprovalSnapshots)
+                        {
+                            <article class="portfolio-mini-card">
+                                <strong>@snapshot.Title</strong>
+                                <small>Version @snapshot.Version | @snapshot.ApprovedAtUtc.ToLocalTime().ToString("g")</small>
+                                <p>@snapshot.SectionCount sections | @snapshot.ItemCount items</p>
+                                <small>@snapshot.ExportManifestName</small>
+                            </article>
+                        }
+                    </div>
+                </section>
+            }
         </aside>
     </div>
 }
 
 @code {
-    private bool canView;
-    private PortfolioReviewWorkspace? workspace;
-    private readonly List<string> messages = [];
-    private readonly Dictionary<Guid, PortfolioReviewEditModel> noteModels = [];
+    [SupplyParameterFromQuery]
+    public Guid? StudentId { get; set; }
 
-    private IEnumerable<PortfolioDraftItemView> OrderedItems => workspace is null
-        ? []
-        : workspace.Items
-            .OrderBy(item => item.Status == PortfolioDraftStatus.SubmittedForReview ? 0 : 1)
-            .ThenBy(item => item.StudentName)
-            .ThenBy(item => item.SortOrder)
-            .ThenBy(item => item.DisplayTitle);
+    private bool canView;
+    private bool lastActionSucceeded;
+    private PortfolioReviewWorkspace? workspace;
+    private string selectedStudentId = "";
+    private PortfolioDesignEditModel designEdit = new();
+    private readonly List<string> messages = [];
+    private readonly Dictionary<Guid, PortfolioSectionEditModel> sectionEdits = [];
+    private readonly Dictionary<Guid, PortfolioItemEditModel> itemEdits = [];
+    private readonly Dictionary<string, SuggestionEditModel> suggestionEdits = [];
+    private readonly Dictionary<Guid, EvidenceAddModel> evidenceAdds = [];
+    private readonly Dictionary<Guid, CandidateAddModel> candidateAdds = [];
+    private string newSectionHeading = "";
+    private string newSectionIntroduction = "";
+    private string portfolioSuggestionText = "";
+    private string revisionNotes = "";
+    private string selectedExportSnapshotId = "";
+    private PortfolioExportPreview? exportPreview;
+
+    private int OpenSuggestionCount => workspace?.Design.Suggestions.Count(item => item.Status == PortfolioSuggestionStatus.Open) ?? 0;
+
+    private int PendingAssignmentCandidateCount => workspace?.AssignmentCandidates.Count(item => !item.PortfolioDraftStatus.HasValue) ?? 0;
+
+    private string ReviewPostureText => workspace is null
+        ? "Review portfolio designs before approval."
+        : workspace.StudentAuthoringAllowed
+            ? "For this grade level, guide the student's portfolio design and give final approval."
+            : "For this grade level, the parent/admin controls portfolio creation and approval.";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -214,47 +536,349 @@ else
             return;
         }
 
-        await LoadAsync();
+        await LoadAsync(StudentId);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(Guid? studentId)
     {
         if (Session.CurrentUser is null)
         {
             return;
         }
 
-        var result = await Portfolio.GetReviewWorkspaceAsync(Session.CurrentUser);
+        var result = await Portfolio.GetReviewWorkspaceAsync(Session.CurrentUser, studentId);
         if (result.Succeeded && result.Value is not null)
         {
             workspace = result.Value;
+            selectedStudentId = workspace.StudentId.ToString();
             messages.Clear();
-            SyncNotes();
+            SyncEditModels();
+            await RefreshExportPreviewAsync(addMessages: false);
         }
         else
         {
             workspace = null;
+            exportPreview = null;
             messages.Clear();
             messages.AddRange(result.Errors);
         }
     }
 
-    private async Task Review(Guid itemId, PortfolioDraftStatus status)
+    private async Task OnStudentChangedAsync(ChangeEventArgs args)
     {
-        if (Session.CurrentUser is null)
+        if (Guid.TryParse(args.Value?.ToString(), out var studentId))
+        {
+            Navigation.NavigateTo($"/portfolio?studentId={studentId}");
+            await LoadAsync(studentId);
+        }
+    }
+
+    private async Task SaveDesignAsync()
+    {
+        if (workspace is null)
         {
             return;
         }
 
-        var notes = noteModels.TryGetValue(itemId, out var edit)
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.UpdateDesignAsync(Session.CurrentUser!, new UpdatePortfolioDesignCommand(
+                workspace.StudentId,
+                designEdit.Title,
+                designEdit.Purpose,
+                designEdit.Narratives
+                    .Select(item => new PortfolioNarrativeInput(item.NarrativeId, item.Prompt, item.Response, item.SortOrder))
+                    .ToArray()));
+            await HandleResultAsync(result, "Portfolio design saved.");
+        });
+    }
+
+    private async Task AddSectionAsync()
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.AddSectionAsync(Session.CurrentUser!, new AddPortfolioSectionCommand(
+                workspace.StudentId,
+                newSectionHeading,
+                newSectionIntroduction));
+            if (result.Succeeded)
+            {
+                newSectionHeading = "";
+                newSectionIntroduction = "";
+            }
+
+            await HandleResultAsync(result, "Section added.");
+        });
+    }
+
+    private async Task SaveSectionAsync(Guid sectionId)
+    {
+        if (workspace is null || !sectionEdits.TryGetValue(sectionId, out var edit))
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.UpdateSectionAsync(Session.CurrentUser!, new UpdatePortfolioSectionCommand(
+                workspace.StudentId,
+                sectionId,
+                edit.Heading,
+                edit.Introduction,
+                edit.SortOrder,
+                edit.IncludeInPortfolio));
+            await HandleResultAsync(result, "Section saved.");
+        });
+    }
+
+    private async Task AddEvidenceAsync(Guid evidenceRecordId)
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        var add = evidenceAdds.TryGetValue(evidenceRecordId, out var model)
+            ? model
+            : new EvidenceAddModel { SectionId = FirstSectionId() };
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.AddDraftItemAsync(Session.CurrentUser!, new AddPortfolioDraftItemCommand(evidenceRecordId, workspace.StudentId, add.SectionId));
+            await HandleResultAsync(result, "Evidence added to the portfolio.");
+        });
+    }
+
+    private async Task SaveItemAsync(Guid portfolioDraftItemId)
+    {
+        if (!itemEdits.TryGetValue(portfolioDraftItemId, out var edit))
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.UpdateDraftItemAsync(Session.CurrentUser!, new UpdatePortfolioDraftItemCommand(
+                portfolioDraftItemId,
+                edit.DisplayTitle,
+                edit.PortfolioSectionId,
+                edit.StudentReflection,
+                edit.ChosenReason,
+                SplitSkills(edit.SkillsShownText),
+                edit.SortOrder,
+                edit.IncludeInDraft));
+            await HandleResultAsync(result, "Portfolio item saved.");
+        });
+    }
+
+    private async Task ReviewItemAsync(Guid portfolioDraftItemId, PortfolioDraftStatus status)
+    {
+        var notes = itemEdits.TryGetValue(portfolioDraftItemId, out var edit)
             ? edit.ParentReviewNotes
             : "";
-        var result = await Portfolio.ReviewDraftItemAsync(Session.CurrentUser, new ReviewPortfolioDraftItemCommand(itemId, status, notes));
-        messages.Clear();
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.ReviewDraftItemAsync(Session.CurrentUser!, new ReviewPortfolioDraftItemCommand(
+                portfolioDraftItemId,
+                status,
+                notes));
+            await HandleResultAsync(result, $"Portfolio item marked {ItemStatusText(status).ToLowerInvariant()}.");
+        });
+    }
+
+    private async Task AddSuggestionAsync(PortfolioSuggestionTargetType targetType, Guid? targetId)
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        var text = targetType == PortfolioSuggestionTargetType.Portfolio
+            ? portfolioSuggestionText
+            : SuggestionEditFor(targetType, targetId).Text;
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.AddSuggestionAsync(Session.CurrentUser!, new AddPortfolioSuggestionCommand(
+                workspace.StudentId,
+                targetType,
+                targetId,
+                text));
+            if (result.Succeeded)
+            {
+                if (targetType == PortfolioSuggestionTargetType.Portfolio)
+                {
+                    portfolioSuggestionText = "";
+                }
+                else
+                {
+                    SuggestionEditFor(targetType, targetId).Text = "";
+                }
+            }
+
+            await HandleResultAsync(result, "Suggestion saved.");
+        });
+    }
+
+    private async Task ResolveSuggestionAsync(Guid suggestionId)
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.ResolveSuggestionAsync(Session.CurrentUser!, new ResolvePortfolioSuggestionCommand(workspace.StudentId, suggestionId));
+            await HandleResultAsync(result, "Suggestion resolved.");
+        });
+    }
+
+    private async Task RequestRevisionAsync()
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.RequestRevisionAsync(Session.CurrentUser!, new RequestPortfolioRevisionCommand(workspace.StudentId, revisionNotes));
+            if (result.Succeeded)
+            {
+                revisionNotes = "";
+            }
+
+            await HandleResultAsync(result, "Revision requested.");
+        });
+    }
+
+    private async Task ApproveDesignAsync()
+    {
+        if (workspace is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.ApproveDesignAsync(Session.CurrentUser!, new ApprovePortfolioDesignCommand(workspace.StudentId));
+            await HandleResultAsync(result, "Portfolio design approved.");
+        });
+    }
+
+    private async Task AcceptCandidateAsync(Guid evidenceRecordId)
+    {
+        if (!candidateAdds.TryGetValue(evidenceRecordId, out var edit))
+        {
+            edit = new CandidateAddModel { SectionId = FirstSectionId() };
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await Portfolio.AcceptAssignmentCandidateAsync(Session.CurrentUser!, new AcceptPortfolioAssignmentCandidateCommand(
+                evidenceRecordId,
+                edit.ParentReviewNotes,
+                edit.SectionId));
+            await HandleResultAsync(result, "Assignment candidate accepted into the portfolio.");
+        });
+    }
+
+    private async Task OnExportSnapshotChangedAsync(ChangeEventArgs args)
+    {
+        selectedExportSnapshotId = args.Value?.ToString() ?? "";
+        await RefreshExportPreviewAsync();
+    }
+
+    private async Task RefreshExportPreviewAsync(bool addMessages = true)
+    {
+        if (workspace is null || Session.CurrentUser is null || workspace.Design.ApprovalSnapshots.Count == 0)
+        {
+            exportPreview = null;
+            return;
+        }
+
+        if (!Guid.TryParse(selectedExportSnapshotId, out var snapshotId) ||
+            workspace.Design.ApprovalSnapshots.All(item => item.ApprovalSnapshotId != snapshotId))
+        {
+            snapshotId = workspace.Design.ApprovalSnapshots
+                .OrderByDescending(item => item.ApprovedAtUtc)
+                .Select(item => item.ApprovalSnapshotId)
+                .First();
+            selectedExportSnapshotId = snapshotId.ToString();
+        }
+
+        var result = await PortfolioExports.GetExportPreviewAsync(Session.CurrentUser, workspace.StudentId, snapshotId);
         if (result.Succeeded)
         {
-            messages.Add($"Portfolio item marked {StatusText(status).ToLowerInvariant()}.");
-            await LoadAsync();
+            exportPreview = result.Value;
+            if (addMessages)
+            {
+                messages.Clear();
+                lastActionSucceeded = true;
+                messages.Add("Approved portfolio export preview refreshed.");
+            }
+        }
+        else
+        {
+            exportPreview = null;
+            if (addMessages)
+            {
+                messages.Clear();
+                messages.AddRange(result.Errors);
+            }
+        }
+    }
+
+    private async Task DownloadArchivePacketAsync()
+    {
+        if (workspace is null || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        messages.Clear();
+        lastActionSucceeded = false;
+        var snapshotId = Guid.TryParse(selectedExportSnapshotId, out var parsedSnapshotId)
+            ? parsedSnapshotId
+            : (Guid?)null;
+        var result = await PortfolioExports.CreateArchivePacketAsync(
+            Session.CurrentUser,
+            new CreatePortfolioExportCommand(workspace.StudentId, snapshotId));
+        if (!result.Succeeded || result.Value is null)
+        {
+            messages.AddRange(result.Errors);
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            result.Value.FileName,
+            result.Value.ContentType,
+            Convert.ToBase64String(result.Value.Content));
+        exportPreview = PortfolioExportPreviewFromDownload(result.Value);
+        lastActionSucceeded = true;
+        messages.Add($"Downloaded {result.Value.FileName}.");
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        messages.Clear();
+        lastActionSucceeded = false;
+        await action();
+    }
+
+    private async Task HandleResultAsync(OperationResult result, string successMessage)
+    {
+        if (result.Succeeded)
+        {
+            lastActionSucceeded = true;
+            messages.Add(successMessage);
+            await LoadAsync(workspace?.StudentId);
         }
         else
         {
@@ -262,37 +886,226 @@ else
         }
     }
 
-    private PortfolioReviewEditModel NotesFor(PortfolioDraftItemView item)
+    private async Task HandleResultAsync<T>(OperationResult<T> result, string successMessage)
     {
-        if (!noteModels.TryGetValue(item.PortfolioDraftItemId, out var edit))
+        if (result.Succeeded)
         {
-            edit = new PortfolioReviewEditModel { ParentReviewNotes = item.ParentReviewNotes };
-            noteModels[item.PortfolioDraftItemId] = edit;
+            lastActionSucceeded = true;
+            messages.Add(successMessage);
+            await LoadAsync(workspace?.StudentId);
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private void SyncEditModels()
+    {
+        if (workspace is null)
+        {
+            designEdit = new PortfolioDesignEditModel();
+            sectionEdits.Clear();
+            itemEdits.Clear();
+            evidenceAdds.Clear();
+            candidateAdds.Clear();
+            return;
+        }
+
+        designEdit = PortfolioDesignEditModel.From(workspace.Design);
+        foreach (var section in workspace.Design.Sections)
+        {
+            sectionEdits[section.SectionId] = PortfolioSectionEditModel.From(section);
+        }
+
+        foreach (var item in workspace.Items)
+        {
+            itemEdits[item.PortfolioDraftItemId] = PortfolioItemEditModel.From(item);
+        }
+
+        foreach (var evidence in workspace.AvailableEvidence)
+        {
+            if (!evidenceAdds.ContainsKey(evidence.EvidenceRecordId))
+            {
+                evidenceAdds[evidence.EvidenceRecordId] = new EvidenceAddModel { SectionId = FirstSectionId() };
+            }
+        }
+
+        foreach (var candidate in workspace.AssignmentCandidates)
+        {
+            if (!candidateAdds.ContainsKey(candidate.EvidenceRecordId))
+            {
+                candidateAdds[candidate.EvidenceRecordId] = new CandidateAddModel
+                {
+                    SectionId = FirstSectionId(),
+                    ParentReviewNotes = candidate.ParentNotes
+                };
+            }
+        }
+
+        if (workspace.Design.ApprovalSnapshots.Count == 0)
+        {
+            selectedExportSnapshotId = "";
+            exportPreview = null;
+        }
+        else if (!Guid.TryParse(selectedExportSnapshotId, out var selectedSnapshot) ||
+            workspace.Design.ApprovalSnapshots.All(item => item.ApprovalSnapshotId != selectedSnapshot))
+        {
+            selectedExportSnapshotId = workspace.Design.ApprovalSnapshots
+                .OrderByDescending(item => item.ApprovedAtUtc)
+                .Select(item => item.ApprovalSnapshotId.ToString())
+                .First();
+        }
+    }
+
+    private static PortfolioExportPreview PortfolioExportPreviewFromDownload(PortfolioExportDownloadFile download)
+    {
+        var manifest = download.Manifest;
+        return new PortfolioExportPreview(
+            manifest.StudentId,
+            manifest.StudentName,
+            manifest.ApprovalSnapshotId,
+            manifest.SnapshotVersion,
+            manifest.PortfolioTitle,
+            manifest.ApprovedAtUtc,
+            manifest.ApprovedBy,
+            download.FileName,
+            "portfolio.html",
+            "manifest.json",
+            "manifest.md",
+            manifest.SectionCount,
+            manifest.ItemCount,
+            manifest.AttachedFileCount,
+            manifest.MissingFileCount,
+            manifest.Sections
+                .Select(section => new PortfolioExportSectionPreview(section.SectionId, section.Heading, section.SortOrder, section.Items.Count))
+                .ToArray(),
+            new PortfolioPreviewView(
+                manifest.StudentId,
+                manifest.StudentName,
+                manifest.PortfolioTitle,
+                "",
+                PortfolioDesignStatus.Approved,
+                manifest.SnapshotVersion,
+                manifest.ApprovedAtUtc,
+                [],
+                manifest.Sections
+                    .OrderBy(section => section.SortOrder)
+                    .Select(section => new PortfolioPreviewSectionView(
+                        section.SectionId,
+                        section.Heading,
+                        section.Introduction,
+                        section.SortOrder,
+                        section.Items
+                            .OrderBy(item => item.SortOrder)
+                            .Select(item => new PortfolioPreviewItemView(
+                                item.PortfolioDraftItemId,
+                                item.EvidenceRecordId,
+                                item.DisplayTitle,
+                                item.CourseTitle,
+                                item.ModuleTitle,
+                                item.AssignmentTitle,
+                                item.StudentReflection,
+                                item.ChosenReason,
+                                item.SkillsShown,
+                                item.ParentReviewNotes,
+                                item.Files.Count,
+                                item.SortOrder))
+                            .ToArray()))
+                    .ToArray()),
+            manifest.Warnings);
+    }
+
+    private IEnumerable<PortfolioDraftItemView> ItemsForSection(Guid sectionId)
+    {
+        if (workspace is null)
+        {
+            return Array.Empty<PortfolioDraftItemView>();
+        }
+
+        return workspace.Items
+            .Where(item => item.PortfolioSectionId == sectionId)
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.DisplayTitle);
+    }
+
+    private IReadOnlyList<PortfolioSuggestionView> OpenSuggestionsFor(PortfolioSuggestionTargetType targetType, Guid? targetId)
+    {
+        return workspace?.Design.Suggestions
+            .Where(item => item.TargetType == targetType)
+            .Where(item => item.TargetId == targetId)
+            .Where(item => item.Status == PortfolioSuggestionStatus.Open)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ToArray() ?? [];
+    }
+
+    private PortfolioSectionEditModel SectionEditFor(PortfolioSectionView section)
+    {
+        if (!sectionEdits.TryGetValue(section.SectionId, out var edit))
+        {
+            edit = PortfolioSectionEditModel.From(section);
+            sectionEdits[section.SectionId] = edit;
         }
 
         return edit;
     }
 
-    private void SyncNotes()
+    private PortfolioItemEditModel ItemEditFor(PortfolioDraftItemView item)
     {
-        if (workspace is null)
+        if (!itemEdits.TryGetValue(item.PortfolioDraftItemId, out var edit))
         {
-            noteModels.Clear();
-            return;
+            edit = PortfolioItemEditModel.From(item);
+            itemEdits[item.PortfolioDraftItemId] = edit;
         }
 
-        foreach (var item in workspace.Items)
-        {
-            if (!noteModels.ContainsKey(item.PortfolioDraftItemId))
-            {
-                noteModels[item.PortfolioDraftItemId] = new PortfolioReviewEditModel { ParentReviewNotes = item.ParentReviewNotes };
-            }
-        }
+        return edit;
     }
 
-    private int CountByStatus(PortfolioDraftStatus status)
+    private SuggestionEditModel SuggestionEditFor(PortfolioSuggestionTargetType targetType, Guid? targetId)
     {
-        return workspace?.Items.Count(item => item.Status == status) ?? 0;
+        var key = $"{targetType}:{targetId}";
+        if (!suggestionEdits.TryGetValue(key, out var edit))
+        {
+            edit = new SuggestionEditModel();
+            suggestionEdits[key] = edit;
+        }
+
+        return edit;
+    }
+
+    private EvidenceAddModel EvidenceAddFor(PortfolioEvidenceOptionView evidence)
+    {
+        if (!evidenceAdds.TryGetValue(evidence.EvidenceRecordId, out var add))
+        {
+            add = new EvidenceAddModel { SectionId = FirstSectionId() };
+            evidenceAdds[evidence.EvidenceRecordId] = add;
+        }
+
+        return add;
+    }
+
+    private CandidateAddModel CandidateAddFor(PortfolioAssignmentCandidateView candidate)
+    {
+        if (!candidateAdds.TryGetValue(candidate.EvidenceRecordId, out var add))
+        {
+            add = new CandidateAddModel
+            {
+                SectionId = FirstSectionId(),
+                ParentReviewNotes = candidate.ParentNotes
+            };
+            candidateAdds[candidate.EvidenceRecordId] = add;
+        }
+
+        return add;
+    }
+
+    private Guid FirstSectionId()
+    {
+        return workspace?.Design.Sections
+            .Where(item => item.IncludeInPortfolio)
+            .OrderBy(item => item.SortOrder)
+            .Select(item => item.SectionId)
+            .FirstOrDefault() ?? Guid.Empty;
     }
 
     private static bool IsDraft(PortfolioDraftItemView item)
@@ -300,7 +1113,38 @@ else
         return item.Status == PortfolioDraftStatus.Draft;
     }
 
-    private static string StatusText(PortfolioDraftStatus status)
+    private static IReadOnlyList<string> SplitSkills(string value)
+    {
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+    }
+
+    private static string DesignStatusText(PortfolioDesignStatus status)
+    {
+        return status switch
+        {
+            PortfolioDesignStatus.SubmittedForReview => "Submitted for review",
+            PortfolioDesignStatus.NeedsRevision => "Needs revision",
+            PortfolioDesignStatus.ReadyForApproval => "Ready for approval",
+            PortfolioDesignStatus.Approved => "Approved",
+            _ => "Working"
+        };
+    }
+
+    private static string SectionStatusText(PortfolioSectionStatus status)
+    {
+        return status switch
+        {
+            PortfolioSectionStatus.SuggestionsOpen => "Suggestions open",
+            PortfolioSectionStatus.Resolved => "Resolved",
+            PortfolioSectionStatus.Excluded => "Excluded",
+            _ => "No suggestions"
+        };
+    }
+
+    private static string ItemStatusText(PortfolioDraftStatus status)
     {
         return status switch
         {
@@ -308,12 +1152,112 @@ else
             PortfolioDraftStatus.NeedsRevision => "Needs revision",
             PortfolioDraftStatus.ParentApproved => "Approved",
             PortfolioDraftStatus.Excluded => "Excluded",
-            _ => "Draft"
+            _ => "Working"
         };
     }
 
-    private sealed class PortfolioReviewEditModel
+    private static string AssignmentSuggestionStatusText(PortfolioAssignmentSuggestionStatus status)
     {
+        return status switch
+        {
+            PortfolioAssignmentSuggestionStatus.EvidenceAccepted => "Evidence accepted",
+            PortfolioAssignmentSuggestionStatus.NotIncluded => "Not included",
+            _ => "Suggested"
+        };
+    }
+
+    private sealed class PortfolioDesignEditModel
+    {
+        public string Title { get; set; } = "";
+        public string Purpose { get; set; } = "";
+        public List<PortfolioNarrativeEditModel> Narratives { get; set; } = [];
+
+        public static PortfolioDesignEditModel From(PortfolioDesignView design)
+        {
+            return new PortfolioDesignEditModel
+            {
+                Title = design.Title,
+                Purpose = design.Purpose,
+                Narratives = design.Narratives
+                    .Select(item => new PortfolioNarrativeEditModel
+                    {
+                        NarrativeId = item.NarrativeId,
+                        Prompt = item.Prompt,
+                        Response = item.Response,
+                        SortOrder = item.SortOrder
+                    })
+                    .ToList()
+            };
+        }
+    }
+
+    private sealed class PortfolioNarrativeEditModel
+    {
+        public Guid NarrativeId { get; set; }
+        public string Prompt { get; set; } = "";
+        public string Response { get; set; } = "";
+        public int SortOrder { get; set; }
+    }
+
+    private sealed class PortfolioSectionEditModel
+    {
+        public string Heading { get; set; } = "";
+        public string Introduction { get; set; } = "";
+        public int SortOrder { get; set; }
+        public bool IncludeInPortfolio { get; set; }
+
+        public static PortfolioSectionEditModel From(PortfolioSectionView section)
+        {
+            return new PortfolioSectionEditModel
+            {
+                Heading = section.Heading,
+                Introduction = section.Introduction,
+                SortOrder = section.SortOrder,
+                IncludeInPortfolio = section.IncludeInPortfolio
+            };
+        }
+    }
+
+    private sealed class PortfolioItemEditModel
+    {
+        public string DisplayTitle { get; set; } = "";
+        public Guid PortfolioSectionId { get; set; }
+        public string StudentReflection { get; set; } = "";
+        public string ChosenReason { get; set; } = "";
+        public string SkillsShownText { get; set; } = "";
+        public int SortOrder { get; set; }
+        public bool IncludeInDraft { get; set; }
+        public string ParentReviewNotes { get; set; } = "";
+
+        public static PortfolioItemEditModel From(PortfolioDraftItemView item)
+        {
+            return new PortfolioItemEditModel
+            {
+                DisplayTitle = item.DisplayTitle,
+                PortfolioSectionId = item.PortfolioSectionId,
+                StudentReflection = item.StudentReflection,
+                ChosenReason = item.ChosenReason,
+                SkillsShownText = string.Join(", ", item.SkillsShown),
+                SortOrder = item.SortOrder,
+                IncludeInDraft = item.IncludeInDraft,
+                ParentReviewNotes = item.ParentReviewNotes
+            };
+        }
+    }
+
+    private sealed class SuggestionEditModel
+    {
+        public string Text { get; set; } = "";
+    }
+
+    private sealed class EvidenceAddModel
+    {
+        public Guid SectionId { get; set; }
+    }
+
+    private sealed class CandidateAddModel
+    {
+        public Guid SectionId { get; set; }
         public string ParentReviewNotes { get; set; } = "";
     }
 }

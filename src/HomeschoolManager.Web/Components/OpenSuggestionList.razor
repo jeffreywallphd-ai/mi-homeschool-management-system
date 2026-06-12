@@ -1,0 +1,22 @@
+@using HomeschoolManager.Application.Portfolio
+
+@if (Suggestions.Count > 0)
+{
+    <div class="portfolio-suggestion-stack">
+        @foreach (var suggestion in Suggestions)
+        {
+            <div class="portfolio-suggestion-row">
+                <p>@suggestion.SuggestionText</p>
+                <button class="btn btn-outline-primary btn-sm" type="button" @onclick="() => OnResolve.InvokeAsync(suggestion.SuggestionId)">Resolve</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<PortfolioSuggestionView> Suggestions { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<Guid> OnResolve { get; set; }
+}

@@ -63,6 +63,7 @@ Purpose: UI workflow and form-boundary guidance.
 - Logged-out navigation exposes only Login and startup routes to Login.
 - Student sessions route to the student course client and should not see parent/admin navigation.
 - Student client course content remains read-only, but the true student portal may submit assignment work through application contracts.
+- The true student portal may author grade-appropriate portfolio designs through application contracts; parent/admin final approval remains separate.
 - Student module pages show lesson-by-lesson resources rather than module-level resource editing data.
 - Student client pages use student read models and dedicated student submission commands instead of admin form models or admin mutation commands.
 - Parent/admin preview uses child-specific student paths selected from configured children and must be visibly labeled as preview.

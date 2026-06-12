@@ -1171,6 +1171,14 @@ small {
     background: var(--hm-surface);
 }
 
+.student-lesson-list > li {
+    padding: var(--hm-space-5);
+}
+
+.student-module-links a {
+    padding: var(--hm-space-4);
+}
+
 .itemized-editor-list li,
 .module-nav-list li {
     padding: .75rem;
@@ -1391,6 +1399,129 @@ small {
     margin-top: var(--hm-space-5);
 }
 
+.student-track-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--hm-space-3);
+}
+
+.student-gradebook-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.student-gradebook-section {
+    margin-bottom: var(--hm-space-5);
+}
+
+.student-gradebook-list {
+    display: grid;
+    gap: var(--hm-space-3);
+}
+
+.student-gradebook-row {
+    display: grid;
+    gap: var(--hm-space-3);
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface);
+}
+
+.student-gradebook-row h3 {
+    margin: .45rem 0 0;
+    font-size: 1.08rem;
+}
+
+.student-gradebook-submissions {
+    margin-bottom: 0;
+}
+
+.student-disclosure-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.student-disclosure-card > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--hm-space-3);
+    padding: var(--hm-space-5);
+    cursor: pointer;
+    list-style: none;
+}
+
+.student-disclosure-card > summary::-webkit-details-marker,
+.student-lesson-detail-toggle > summary::-webkit-details-marker {
+    display: none;
+}
+
+.student-disclosure-card > summary h2 {
+    margin: 0;
+}
+
+.student-disclosure-card > :not(summary) {
+    margin-right: var(--hm-space-5);
+    margin-left: var(--hm-space-5);
+}
+
+.student-disclosure-card > :last-child {
+    margin-bottom: var(--hm-space-5);
+}
+
+.student-disclosure-toggle::before {
+    content: "Show";
+    color: var(--hm-primary);
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.student-disclosure-card[open] .student-disclosure-toggle::before {
+    content: "Hide";
+}
+
+.student-lesson-detail-toggle {
+    padding: .85rem 0;
+    border-top: 1px solid var(--hm-border);
+}
+
+.student-lesson-detail-toggle:first-of-type {
+    margin-top: var(--hm-space-3);
+}
+
+.student-lesson-detail-toggle > summary {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .6rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.student-lesson-detail-toggle > summary h4 {
+    margin: 0;
+}
+
+.student-more-less::before {
+    content: "More";
+    color: var(--hm-primary);
+    font-size: .9rem;
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: .16rem;
+}
+
+.student-lesson-detail-toggle[open] .student-more-less::before {
+    content: "Less";
+}
+
+.student-lesson-detail-toggle > .student-readable-list,
+.student-lesson-detail-toggle > .student-nested-panel,
+.student-lesson-detail-toggle > ol,
+.student-lesson-detail-toggle > ul {
+    margin-top: var(--hm-space-3);
+}
+
 .dashboard-metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1451,6 +1582,262 @@ small {
     border: 1px solid var(--hm-border);
     border-radius: var(--hm-radius-lg);
     background: var(--hm-surface-soft);
+}
+
+.portfolio-candidate-card {
+    display: grid;
+    gap: var(--hm-space-4);
+    align-items: start;
+    min-width: 0;
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-lg);
+    background: var(--hm-surface-soft);
+}
+
+.portfolio-candidate-card .section-heading-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.portfolio-candidate-card .section-heading-row > div,
+.portfolio-candidate-card p,
+.portfolio-candidate-card .student-nested-panel,
+.portfolio-candidate-card .inline-entry-form {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.portfolio-candidate-card p {
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+}
+
+.portfolio-candidate-card .student-detail-facts {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    width: 100%;
+}
+
+.portfolio-candidate-card .inline-entry-form textarea {
+    min-height: 6rem;
+}
+
+.portfolio-candidate-card .review-action-row {
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.portfolio-builder-grid,
+.portfolio-review-grid {
+    align-items: start;
+}
+
+.portfolio-selector-bar {
+    align-items: end;
+}
+
+.portfolio-status-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hm-space-3);
+    align-items: center;
+    min-height: 2.4rem;
+}
+
+.portfolio-editor-card {
+    display: grid;
+    gap: var(--hm-space-4);
+}
+
+.portfolio-narrative-grid,
+.portfolio-section-stack,
+.portfolio-item-stack,
+.portfolio-suggestion-list {
+    display: grid;
+    gap: var(--hm-space-4);
+    min-width: 0;
+}
+
+.portfolio-add-section {
+    display: grid;
+    gap: var(--hm-space-3);
+}
+
+.portfolio-add-section .btn {
+    justify-self: start;
+}
+
+.portfolio-section-card {
+    display: grid;
+    gap: var(--hm-space-4);
+    min-width: 0;
+    padding-block: var(--hm-space-5);
+    border-top: 1px solid var(--hm-border);
+}
+
+.portfolio-section-card:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.portfolio-section-heading {
+    align-items: flex-start;
+}
+
+.portfolio-section-muted {
+    opacity: .72;
+}
+
+.portfolio-item-card,
+.portfolio-mini-card {
+    display: grid;
+    gap: var(--hm-space-3);
+    min-width: 0;
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface-soft);
+}
+
+.portfolio-item-card h4,
+.portfolio-mini-card strong {
+    margin: 0;
+}
+
+.portfolio-mini-card p {
+    margin: 0;
+}
+
+.portfolio-picker-card {
+    display: grid;
+    gap: var(--hm-space-3);
+}
+
+.portfolio-review-block,
+.portfolio-suggestion-editor {
+    display: grid;
+    gap: var(--hm-space-3);
+    min-width: 0;
+}
+
+.portfolio-review-block {
+    padding-top: var(--hm-space-4);
+    border-top: 1px solid var(--hm-border);
+}
+
+.portfolio-suggestion-stack {
+    display: grid;
+    gap: var(--hm-space-3);
+    padding: var(--hm-space-3);
+    border: 1px solid var(--hm-lavender-200);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-lavender-50);
+}
+
+.portfolio-suggestion-stack p {
+    margin: 0;
+}
+
+.portfolio-suggestion-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--hm-space-3);
+    align-items: center;
+}
+
+.portfolio-preview-report {
+    display: grid;
+    gap: var(--hm-space-4);
+    min-width: 0;
+    padding: var(--hm-space-5);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-lg);
+    background: var(--hm-surface);
+}
+
+.portfolio-preview-cover {
+    display: grid;
+    gap: .35rem;
+    padding-bottom: var(--hm-space-4);
+    border-bottom: 1px solid var(--hm-border);
+}
+
+.portfolio-preview-cover h3,
+.portfolio-preview-cover p {
+    margin: 0;
+}
+
+.portfolio-preview-block,
+.portfolio-preview-section {
+    display: grid;
+    gap: var(--hm-space-3);
+    min-width: 0;
+}
+
+.portfolio-preview-toc {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.portfolio-preview-section {
+    padding-top: var(--hm-space-4);
+    border-top: 1px solid var(--hm-border);
+}
+
+.portfolio-preview-section h4,
+.portfolio-preview-item h5 {
+    margin: 0;
+}
+
+.portfolio-preview-item {
+    display: grid;
+    gap: .45rem;
+    padding: var(--hm-space-3);
+    border-left: 3px solid var(--hm-lavender-300);
+    background: var(--hm-surface-soft);
+}
+
+.portfolio-export-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--hm-space-3);
+    margin: var(--hm-space-4) 0;
+}
+
+.portfolio-export-summary div {
+    padding: var(--hm-space-3);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface-soft);
+}
+
+.portfolio-export-summary span {
+    display: block;
+    color: var(--hm-muted);
+    font-size: .85rem;
+    font-weight: 700;
+}
+
+.portfolio-export-summary strong {
+    display: block;
+    margin-top: .25rem;
+    color: var(--hm-ink);
+    font-size: 1.35rem;
+    line-height: 1.2;
+}
+
+.portfolio-approved-preview-frame {
+    max-height: 34rem;
+    margin-top: var(--hm-space-4);
+    overflow: auto;
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface);
+}
+
+.portfolio-approved-preview-frame .portfolio-preview-report {
+    border: 0;
+    border-radius: 0;
 }
 
 .dashboard-student-identity {
@@ -1759,6 +2146,25 @@ small {
     background: var(--hm-surface);
 }
 
+.gradebook-media-preview {
+    display: block;
+    object-fit: contain;
+    max-height: 42rem;
+}
+
+.gradebook-audio-preview {
+    display: grid;
+    gap: var(--hm-space-4);
+    padding: var(--hm-space-5);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface);
+}
+
+.gradebook-audio-preview audio {
+    width: 100%;
+}
+
 .gradebook-file-preview-placeholder {
     display: grid;
     place-items: center;
@@ -1769,6 +2175,235 @@ small {
     color: var(--hm-muted);
     background: var(--hm-surface);
     text-align: center;
+}
+
+.transcript-selector-bar {
+    align-items: end;
+}
+
+.transcript-download-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--hm-space-3);
+}
+
+.transcript-workbench {
+    grid-template-columns: minmax(0, 1.3fr) minmax(22rem, .7fr);
+}
+
+.transcript-preview-card,
+.transcript-editor-card {
+    display: grid;
+    gap: var(--hm-space-5);
+}
+
+.transcript-document {
+    display: grid;
+    gap: var(--hm-space-5);
+    padding: clamp(1.25rem, 3vw, 2.25rem);
+    border: 1px solid var(--hm-border-strong);
+    border-radius: var(--hm-radius-md);
+    background: #fff;
+    color: #171221;
+    box-shadow: 0 .5rem 1.5rem rgba(var(--hm-shadow-rgb), .06);
+}
+
+.transcript-document-header {
+    display: grid;
+    gap: .25rem;
+    text-align: center;
+}
+
+.transcript-document-header p,
+.transcript-document-header h2 {
+    margin: 0;
+}
+
+.transcript-document-header p {
+    color: var(--hm-muted);
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+.transcript-document-header h2 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.transcript-coverage-note {
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface-soft);
+}
+
+.transcript-coverage-note p {
+    margin: .25rem 0 0;
+    color: var(--hm-muted);
+}
+
+.transcript-identity-grid,
+.transcript-summary-grid {
+    display: grid;
+    gap: .5rem;
+    margin: 0;
+}
+
+.transcript-identity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.transcript-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.transcript-identity-grid div,
+.transcript-summary-grid div {
+    min-width: 0;
+    padding: .75rem;
+    border: 1px solid var(--hm-border);
+    border-radius: .25rem;
+    background: var(--hm-surface-soft);
+}
+
+.transcript-identity-grid dt,
+.transcript-summary-grid dt {
+    color: var(--hm-muted);
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.transcript-identity-grid dd,
+.transcript-summary-grid dd {
+    margin: .2rem 0 0;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.transcript-year-block {
+    display: grid;
+    gap: var(--hm-space-3);
+}
+
+.transcript-year-block h3 {
+    margin: 0;
+}
+
+.transcript-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.transcript-table {
+    width: 100%;
+    min-width: 46rem;
+    border-collapse: collapse;
+    font-size: .92rem;
+}
+
+.transcript-table th,
+.transcript-table td {
+    padding: .6rem .65rem;
+    border: 1px solid var(--hm-border);
+    vertical-align: top;
+}
+
+.transcript-table th {
+    background: var(--hm-lavender-50);
+    color: var(--hm-text-strong);
+    font-size: .72rem;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.transcript-table small {
+    display: block;
+    margin-top: .2rem;
+}
+
+.transcript-number {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.transcript-record-notes {
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-warning-soft);
+}
+
+.transcript-record-notes h3 {
+    margin-top: 0;
+}
+
+.transcript-record-notes ul {
+    margin-bottom: 0;
+}
+
+.transcript-signature-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(10rem, .35fr);
+    gap: var(--hm-space-6);
+    margin-top: var(--hm-space-3);
+}
+
+.transcript-signature-row div {
+    padding-top: .5rem;
+    border-top: 1px solid var(--hm-text-strong);
+    color: var(--hm-muted);
+    font-size: .88rem;
+    font-weight: 700;
+}
+
+.transcript-description-appendix,
+.transcript-description-list,
+.transcript-course-editor-list {
+    display: grid;
+    gap: var(--hm-space-4);
+    min-width: 0;
+}
+
+.transcript-description-card {
+    overflow-wrap: anywhere;
+}
+
+.transcript-description-card .student-detail-facts {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.transcript-course-editor {
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-surface-soft);
+}
+
+.transcript-course-editor > summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--hm-space-3);
+    padding: var(--hm-space-4);
+    cursor: pointer;
+    list-style: none;
+}
+
+.transcript-course-editor > summary::-webkit-details-marker {
+    display: none;
+}
+
+.transcript-course-editor > summary span:first-child {
+    min-width: 0;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.transcript-course-editor .inline-entry-form {
+    margin: 0 var(--hm-space-4) var(--hm-space-4);
 }
 
 @media (max-width: 1024px) {
@@ -1806,6 +2441,13 @@ small {
     .gradebook-file-list li {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .portfolio-selector-bar,
+    .portfolio-suggestion-row,
+    .transcript-identity-grid,
+    .transcript-summary-grid {
+        grid-template-columns: 1fr;
     }
 
     .gradebook-file-actions {
@@ -1857,12 +2499,22 @@ small {
 
     .student-card-actions,
     .student-card-actions .btn,
-    .student-track-card .btn {
+    .student-track-actions,
+    .student-track-actions .btn,
+    .student-track-card .btn,
+    .transcript-download-actions,
+    .transcript-download-actions .btn {
         width: 100%;
     }
 
-    .student-card-facts {
+    .student-card-facts,
+    .student-gradebook-metrics,
+    .transcript-metrics {
         grid-template-columns: 1fr;
+    }
+
+    .student-lesson-list > li {
+        padding: var(--hm-space-4);
     }
 
     .two-column-field-row {

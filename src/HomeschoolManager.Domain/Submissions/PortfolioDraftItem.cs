@@ -6,6 +6,8 @@ public sealed record PortfolioDraftItem
 {
     public Guid Id { get; init; }
     public Guid StudentId { get; init; }
+    public Guid PortfolioDesignId { get; init; }
+    public Guid PortfolioSectionId { get; init; }
     public Guid EvidenceRecordId { get; init; }
     public string DisplayTitle { get; init; }
     public string PortfolioSection { get; init; }
@@ -37,7 +39,9 @@ public sealed record PortfolioDraftItem
         DateTimeOffset createdAtUtc,
         DateTimeOffset updatedAtUtc,
         DateTimeOffset? submittedAtUtc = null,
-        DateTimeOffset? reviewedAtUtc = null)
+        DateTimeOffset? reviewedAtUtc = null,
+        Guid portfolioDesignId = default,
+        Guid portfolioSectionId = default)
     {
         if (studentId == Guid.Empty)
         {
@@ -61,6 +65,8 @@ public sealed record PortfolioDraftItem
 
         Id = id == Guid.Empty ? Guid.NewGuid() : id;
         StudentId = studentId;
+        PortfolioDesignId = portfolioDesignId;
+        PortfolioSectionId = portfolioSectionId;
         EvidenceRecordId = evidenceRecordId;
         DisplayTitle = Require.Text(displayTitle, nameof(displayTitle));
         PortfolioSection = Clean(portfolioSection);

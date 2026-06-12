@@ -31,4 +31,5 @@ Product direction and long-term sequencing belong in `docs/product/roadmap.md`. 
 - [Assignment Attempts and Completion Status Roadmap](assignment-attempts-and-completion-status-roadmap.md)
 - [Gradebook and Assessment Review Roadmap](gradebook-assessment-review-roadmap.md)
 - [Student Course Client Roadmap](student-course-client-roadmap.md)
-- [Student Portfolio Builder Roadmap](student-portfolio-builder-roadmap.md)
+- [Student Portfolio Creation and Preview Roadmap](student-portfolio-builder-roadmap.md)
+- [Transcript with Course Descriptions Roadmap](transcript-with-course-descriptions-roadmap.md)

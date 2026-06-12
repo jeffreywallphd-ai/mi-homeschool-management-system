@@ -24,6 +24,16 @@ Generated documents should be created from validated source records, not from lo
 - Portfolio export.
 - Graduation packet.
 
+## Transcript Packet Rendering
+
+Transcript packet rendering should receive a complete transcript document model from the application layer. That model should already identify the student, school profile, span, school-year sections, course rows, transcript course records, warnings, course-description appendix data, and source identifiers.
+
+Transcript renderers must preserve missing states. They may display "not recorded" for final grades or earned credits, but they must not infer grades, credits, GPA, or completion from planned course data, assignment status, or assessment records.
+
+Transcript renderers must preserve grade-span truthfulness. A requested high-school or middle-school filter is not proof that the system contains the full conventional span. The rendered title, grade-span label, manifest, and PDF/HTML note should identify the actual grades represented by local course records and should note when other transcripts or records may exist for omitted grades.
+
+Transcript packets may be generated as a ZIP archive containing `transcript.html`, `manifest.json`, and `manifest.md`, and may also offer a single PDF packet version for easier sharing or printing. The manifest should include source course identifiers and transcript course record identifiers when present. The PDF packet should preserve the same transcript, course-description appendix, record-note, and source-summary content in one styled file with readable identity, summary, and course-table sections.
+
 ## Source Contracts
 
 Each renderer should receive a complete document model:

@@ -43,8 +43,11 @@ else
 
     <div class="student-page-grid student-module-workflow-grid">
         <main class="student-main-column">
-            <section class="form-section">
-                <h2>Module Overview</h2>
+            <details class="form-section student-disclosure-card">
+                <summary>
+                    <h2>Module Overview</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 <p>@module.Description</p>
                 <dl class="student-detail-facts">
                     <div>
@@ -66,15 +69,21 @@ else
                         </div>
                     }
                 </dl>
-            </section>
+            </details>
 
-            <section class="form-section">
-                <h2>Instructions</h2>
+            <details class="form-section student-disclosure-card">
+                <summary>
+                    <h2>Instructions</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 <p>@(string.IsNullOrWhiteSpace(module.Instructions) ? "No instructions have been added yet." : module.Instructions)</p>
-            </section>
+            </details>
 
-            <section class="form-section">
-                <h2>Learning Objectives</h2>
+            <details class="form-section student-disclosure-card">
+                <summary>
+                    <h2>Learning Objectives</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 @if (module.LearningObjectives.Count == 0)
                 {
                     <p>No learning objectives have been added yet.</p>
@@ -94,7 +103,7 @@ else
                         }
                     </ul>
                 }
-            </section>
+            </details>
 
             <section class="form-section">
                 <h2 id="student-lesson-heading">@LessonSectionHeading</h2>
@@ -136,37 +145,52 @@ else
                         }
                         @if (lesson.LearningObjectives.Count > 0)
                         {
-                            <h4>Lesson Objectives</h4>
-                            <ul class="student-readable-list">
-                                @foreach (var objective in lesson.LearningObjectives)
-                                {
-                                    <li>@objective.Text <small>@EnumLabel(objective.BloomLevel.ToString())</small></li>
-                                }
-                            </ul>
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>Lesson Objectives</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="student-readable-list">
+                                    @foreach (var objective in lesson.LearningObjectives)
+                                    {
+                                        <li>@objective.Text <small>@EnumLabel(objective.BloomLevel.ToString())</small></li>
+                                    }
+                                </ul>
+                            </details>
                         }
                         @if (lesson.SuccessCriteria.Count > 0)
                         {
-                            <h4>Success Criteria</h4>
-                            <ul class="student-readable-list">
-                                @foreach (var criterion in lesson.SuccessCriteria)
-                                {
-                                    <li>@criterion</li>
-                                }
-                            </ul>
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>Success Criteria</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="student-readable-list">
+                                    @foreach (var criterion in lesson.SuccessCriteria)
+                                    {
+                                        <li>@criterion</li>
+                                    }
+                                </ul>
+                            </details>
                         }
                         @if (lesson.LessonSteps.Count > 0)
                         {
-                            <h4>What To Do</h4>
-                            <ol class="student-readable-list">
-                                @foreach (var step in lesson.LessonSteps)
-                                {
-                                    <li>
-                                        <strong>@step.Title</strong>
-                                        <p>@step.Instructions</p>
-                                        <small>@EnumLabel(step.StepType.ToString())@(step.EstimatedMinutes > 0 ? $" | {step.EstimatedMinutes} minutes" : "")@(step.Required ? " | Required" : " | Optional")</small>
-                                    </li>
-                                }
-                            </ol>
+                            <details class="student-lesson-detail-toggle" open>
+                                <summary>
+                                    <h4>What To Do</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ol class="student-readable-list">
+                                    @foreach (var step in lesson.LessonSteps)
+                                    {
+                                        <li>
+                                            <strong>@step.Title</strong>
+                                            <p>@step.Instructions</p>
+                                            <small>@EnumLabel(step.StepType.ToString())@(step.EstimatedMinutes > 0 ? $" | {step.EstimatedMinutes} minutes" : "")@(step.Required ? " | Required" : " | Optional")</small>
+                                        </li>
+                                    }
+                                </ol>
+                            </details>
                         }
                         @if (lesson.Resources.Count > 0)
                         {
@@ -194,63 +218,83 @@ else
                         }
                         @if (lesson.ProblemSets.Count > 0)
                         {
-                            <h4>Practice</h4>
-                            @foreach (var problemSet in lesson.ProblemSets)
-                            {
-                                <div class="student-nested-panel">
-                                    <strong>@problemSet.Title</strong>
-                                    @if (!string.IsNullOrWhiteSpace(problemSet.Instructions))
-                                    {
-                                        <p>@problemSet.Instructions</p>
-                                    }
-                                    <ol>
-                                        @foreach (var problem in problemSet.Problems)
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>Practice</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                @foreach (var problemSet in lesson.ProblemSets)
+                                {
+                                    <div class="student-nested-panel">
+                                        <strong>@problemSet.Title</strong>
+                                        @if (!string.IsNullOrWhiteSpace(problemSet.Instructions))
                                         {
-                                            <li>@problem.Prompt</li>
+                                            <p>@problemSet.Instructions</p>
                                         }
-                                    </ol>
-                                </div>
-                            }
+                                        <ol>
+                                            @foreach (var problem in problemSet.Problems)
+                                            {
+                                                <li>@problem.Prompt</li>
+                                            }
+                                        </ol>
+                                    </div>
+                                }
+                            </details>
                         }
                         @if (lesson.PortfolioConnections.Count > 0)
                         {
-                            <h4>Portfolio Connections</h4>
-                            <ul class="student-readable-list">
-                                @foreach (var connection in lesson.PortfolioConnections)
-                                {
-                                    <li>
-                                        <strong>@connection.ArtifactTitle</strong>
-                                        <p>@connection.ArtifactPurpose</p>
-                                        @if (!string.IsNullOrWhiteSpace(connection.PortfolioSection))
-                                        {
-                                            <small>@connection.PortfolioSection</small>
-                                        }
-                                    </li>
-                                }
-                            </ul>
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>Portfolio Connections</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="student-readable-list">
+                                    @foreach (var connection in lesson.PortfolioConnections)
+                                    {
+                                        <li>
+                                            <strong>@connection.ArtifactTitle</strong>
+                                            <p>@connection.ArtifactPurpose</p>
+                                            @if (!string.IsNullOrWhiteSpace(connection.PortfolioSection))
+                                            {
+                                                <small>@connection.PortfolioSection</small>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            </details>
                         }
                         @if (lesson.Rubric is not null && lesson.Rubric.Criteria.Count > 0)
                         {
-                            <h4>How This Will Be Reviewed</h4>
-                            <ul class="student-readable-list">
-                                @foreach (var criterion in lesson.Rubric.Criteria)
-                                {
-                                    <li>
-                                        <strong>@criterion.Criterion</strong>
-                                        <small>@criterion.Level4</small>
-                                    </li>
-                                }
-                            </ul>
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>How This Will Be Reviewed</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="student-readable-list">
+                                    @foreach (var criterion in lesson.Rubric.Criteria)
+                                    {
+                                        <li>
+                                            <strong>@criterion.Criterion</strong>
+                                            <small>@criterion.Level4</small>
+                                        </li>
+                                    }
+                                </ul>
+                            </details>
                         }
                         @if (lesson.ReflectionPrompts.Count > 0)
                         {
-                            <h4>Reflection</h4>
-                            <ul class="student-readable-list">
-                                @foreach (var prompt in lesson.ReflectionPrompts)
-                                {
-                                    <li>@prompt</li>
-                                }
-                            </ul>
+                            <details class="student-lesson-detail-toggle">
+                                <summary>
+                                    <h4>Reflection</h4>
+                                    <span class="student-more-less" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="student-readable-list">
+                                    @foreach (var prompt in lesson.ReflectionPrompts)
+                                    {
+                                        <li>@prompt</li>
+                                    }
+                                </ul>
+                            </details>
                         }
                         @if (lesson.LinkedAssignmentTitles.Count > 0)
                         {
@@ -269,8 +313,11 @@ else
             }
 
             @{
-                RenderFragment assignmentCard = @<section class="form-section student-module-assignment-card">
-                <h2>@AssignmentSectionHeading</h2>
+                RenderFragment assignmentCard = @<details class="form-section student-module-assignment-card student-disclosure-card">
+                <summary>
+                    <h2>@AssignmentSectionHeading</h2>
+                    <span class="student-disclosure-toggle" aria-hidden="true"></span>
+                </summary>
                 @if (module.Assignments.Count == 0)
                 {
                     <p>No assignments have been added yet.</p>
@@ -491,6 +538,10 @@ else
                                             {
                                                 <span>@latest.AttachmentCount attachment(s)</span>
                                             }
+                                            @if (latest.StudentPortfolioCandidate)
+                                            {
+                                                <span>Suggested for portfolio</span>
+                                            }
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(latest.ParentReviewNotes))
                                         {
@@ -528,6 +579,11 @@ else
                                                 <textarea id="@NotesFieldId(formKey)" class="form-control" rows="3" @bind="form.StudentNotes"></textarea>
                                             </div>
 
+                                            <div class="form-check">
+                                                <input id="@PortfolioCandidateFieldId(formKey)" class="form-check-input" type="checkbox" @bind="form.MarkPortfolioCandidate" />
+                                                <label class="form-check-label" for="@PortfolioCandidateFieldId(formKey)">Suggest this assignment for my portfolio</label>
+                                            </div>
+
                                             <div class="submission-field">
                                                 <label class="form-label" for="@FilesFieldId(formKey)">Attach files</label>
                                                 <InputFile id="@FilesFieldId(formKey)" class="form-control submission-file-input" OnChange="eventArgs => FilesSelected(formKey, eventArgs)" multiple />
@@ -563,7 +619,7 @@ else
                         }
                     </ol>
                 }
-                </section>;
+                </details>;
             }
         </main>
 
@@ -745,7 +801,8 @@ else
                     form.StudentNotes,
                     attachments,
                     module.StudentId,
-                    draftNumber));
+                    draftNumber,
+                    form.MarkPortfolioCandidate));
 
             if (result.Succeeded)
             {
@@ -1001,10 +1058,12 @@ else
 
     private static string FilesFieldId(string formKey) => $"files-{formKey}";
 
+    private static string PortfolioCandidateFieldId(string formKey) => $"portfolio-candidate-{formKey}";
+
     private string RouteBase(Guid? studentId = null)
     {
         var targetStudentId = studentId ?? module?.StudentId ?? StudentId;
-        return $"student/{targetStudentId}";
+        return $"/student/{targetStudentId}";
     }
 
     private sealed class SubmissionFormState
@@ -1012,6 +1071,8 @@ else
         public string ResponseText { get; set; } = "";
 
         public string StudentNotes { get; set; } = "";
+
+        public bool MarkPortfolioCandidate { get; set; }
 
         public List<IBrowserFile> Files { get; set; } = [];
     }

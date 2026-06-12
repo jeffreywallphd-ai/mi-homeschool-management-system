@@ -5,6 +5,7 @@ using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Domain.Submissions;
 using HomeschoolManager.Domain.Assessments;
+using HomeschoolManager.Domain.Records;
 
 namespace HomeschoolManager.Application.Persistence;
 
@@ -27,6 +28,8 @@ public interface IHomeschoolRepository
     Task SaveStudentAsync(Student student, CancellationToken cancellationToken = default);
 
     Task<SchoolYear?> GetSchoolYearAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SchoolYear>> GetSchoolYearsAsync(CancellationToken cancellationToken = default);
 
     Task SaveSchoolYearAsync(SchoolYear schoolYear, CancellationToken cancellationToken = default);
 
@@ -65,11 +68,23 @@ public interface IHomeschoolRepository
 
     Task SavePortfolioDraftItemAsync(PortfolioDraftItem item, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PortfolioDesign>> GetPortfolioDesignsAsync(CancellationToken cancellationToken = default);
+
+    Task<PortfolioDesign?> GetPortfolioDesignAsync(Guid portfolioDesignId, CancellationToken cancellationToken = default);
+
+    Task SavePortfolioDesignAsync(PortfolioDesign design, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default);
 
     Task<AssessmentRecord?> GetAssessmentRecordAsync(Guid assessmentId, CancellationToken cancellationToken = default);
 
     Task SaveAssessmentRecordAsync(AssessmentRecord assessmentRecord, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TranscriptCourseRecord>> GetTranscriptCourseRecordsAsync(CancellationToken cancellationToken = default);
+
+    Task<TranscriptCourseRecord?> GetTranscriptCourseRecordAsync(Guid courseId, CancellationToken cancellationToken = default);
+
+    Task SaveTranscriptCourseRecordAsync(TranscriptCourseRecord record, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CoursePackDefinition>> GetInstalledCoursePacksAsync(CancellationToken cancellationToken = default);
 

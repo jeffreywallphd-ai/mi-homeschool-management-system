@@ -8,7 +8,8 @@ public sealed record SubmitAssignmentCommand(
     string StudentNotes,
     IReadOnlyList<AssignmentAttachmentUpload> Attachments,
     Guid? StudentId = null,
-    int DraftNumber = 1);
+    int DraftNumber = 1,
+    bool MarkPortfolioCandidate = false);
 
 public sealed record AssignmentAttachmentUpload(
     string FileName,

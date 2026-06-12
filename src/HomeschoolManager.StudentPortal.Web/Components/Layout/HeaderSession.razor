@@ -1,27 +1,78 @@
 @rendermode InteractiveServer
 @using HomeschoolManager.StudentPortal.Web.Services
 @inject SessionState Session
+@inject IJSRuntime JS
 @implements IDisposable
+@implements IAsyncDisposable
 
 <div class="header-actions">
     @if (Session.IsAuthenticated)
     {
-        <span class="header-notification" aria-hidden="true">
-            <img class="hm-icon-sm" src="icons/hm/svg/purple/utility-bell.svg" alt="" />
-        </span>
-        <span class="signed-in-avatar" aria-hidden="true">@Initials()</span>
-        <span class="signed-in-label">
-            <strong>@Session.CurrentUser?.DisplayName</strong>
-            <small>@RoleText()</small>
-        </span>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="SignOut">Sign out</button>
+        <details @ref="profileMenuElement" class="student-profile-menu">
+            <summary aria-label="Open student profile menu">
+                <span class="signed-in-avatar" aria-hidden="true">@Initials()</span>
+                <span class="signed-in-label">
+                    <strong>@Session.CurrentUser?.DisplayName</strong>
+                    <small>@RoleText()</small>
+                </span>
+                <img class="hm-icon-sm student-profile-chevron" src="icons/hm/svg/currentcolor/action-chevron-down.svg" alt="" aria-hidden="true" />
+            </summary>
+            <div class="student-profile-dropdown">
+                <div class="student-profile-dropdown-heading">
+                    <span class="signed-in-avatar" aria-hidden="true">@Initials()</span>
+                    <div>
+                        <strong>@Session.CurrentUser?.DisplayName</strong>
+                        <small>@RoleText()</small>
+                    </div>
+                </div>
+                <button type="button" class="student-profile-menu-item" disabled>
+                    <img class="hm-icon-sm" src="icons/hm/svg/purple/utility-bell.svg" alt="" aria-hidden="true" />
+                    Notifications
+                    <small>No new notifications</small>
+                </button>
+                @if (Session.IsStudent)
+                {
+                    <a class="student-profile-menu-item" href="/student/gradebook">
+                        <img class="hm-icon-sm" src="icons/hm/svg/purple/report-table.svg" alt="" aria-hidden="true" />
+                        Gradebook
+                        <small>Upcoming work and feedback</small>
+                    </a>
+                    <a class="student-profile-menu-item" href="/student/transcript">
+                        <img class="hm-icon-sm" src="icons/hm/svg/purple/metric-credit-award.svg" alt="" aria-hidden="true" />
+                        Transcript
+                        <small>Academic record and course descriptions</small>
+                    </a>
+                    <a class="student-profile-menu-item" href="/student/portfolio">
+                        <img class="hm-icon-sm" src="icons/hm/svg/purple/action-archive.svg" alt="" aria-hidden="true" />
+                        Portfolio
+                        <small>Evidence draft workspace</small>
+                    </a>
+                }
+                <button type="button" class="student-profile-menu-item" @onclick="SignOut">
+                    <img class="hm-icon-sm" src="icons/hm/svg/purple/action-arrow-left.svg" alt="" aria-hidden="true" />
+                    Sign out
+                </button>
+            </div>
+        </details>
     }
 </div>
 
 @code {
+    private ElementReference profileMenuElement;
+    private bool profileMenuClickAwayInitialized;
+
     protected override void OnInitialized()
     {
         Session.Changed += OnSessionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Session.IsAuthenticated && !profileMenuClickAwayInitialized)
+        {
+            await JS.InvokeVoidAsync("homeschoolMenus.initializeDetailsClickAway", profileMenuElement);
+            profileMenuClickAwayInitialized = true;
+        }
     }
 
     private void SignOut()
@@ -48,11 +99,31 @@
 
     private void OnSessionChanged()
     {
+        if (!Session.IsAuthenticated)
+        {
+            profileMenuClickAwayInitialized = false;
+        }
+
         InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
         Session.Changed -= OnSessionChanged;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (profileMenuClickAwayInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("homeschoolMenus.disposeDetailsClickAway", profileMenuElement);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit can already be gone when the browser closes.
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ using HomeschoolManager.Domain.LegalRequirements;
 using HomeschoolManager.Domain.Students;
 using HomeschoolManager.Domain.Submissions;
 using HomeschoolManager.Domain.Assessments;
+using HomeschoolManager.Domain.Records;
 
 namespace HomeschoolManager.Infrastructure.Persistence;
 
@@ -105,12 +106,30 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
     public async Task<SchoolYear?> GetSchoolYearAsync(CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(cancellationToken);
-        return document.SchoolYear;
+        return SchoolYearsFor(document).FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<SchoolYear>> GetSchoolYearsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return SchoolYearsFor(document);
     }
 
     public async Task SaveSchoolYearAsync(SchoolYear schoolYear, CancellationToken cancellationToken = default)
     {
-        await MutateAsync(document => document.SchoolYear = schoolYear, cancellationToken);
+        await MutateAsync(
+            document =>
+            {
+                document.SchoolYears.RemoveAll(existing => existing.Id == schoolYear.Id);
+                document.SchoolYears.Add(schoolYear);
+                document.SchoolYears = document.SchoolYears
+                    .OrderByDescending(existing => existing.StartYear)
+                    .ThenByDescending(existing => existing.EndYear)
+                    .ThenBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                document.SchoolYear = schoolYear;
+            },
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<RequirementSet>> GetRequirementSetsAsync(CancellationToken cancellationToken = default)
@@ -260,6 +279,31 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PortfolioDesign>> GetPortfolioDesignsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.PortfolioDesigns
+            .OrderByDescending(design => design.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<PortfolioDesign?> GetPortfolioDesignAsync(Guid portfolioDesignId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.PortfolioDesigns.FirstOrDefault(design => design.Id == portfolioDesignId);
+    }
+
+    public async Task SavePortfolioDesignAsync(PortfolioDesign design, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.PortfolioDesigns.RemoveAll(existing => existing.Id == design.Id);
+                document.PortfolioDesigns.Add(design);
+            },
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AssessmentRecord>> GetAssessmentRecordsAsync(CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(cancellationToken);
@@ -281,6 +325,34 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             {
                 document.AssessmentRecords.RemoveAll(existing => existing.Id == assessmentRecord.Id);
                 document.AssessmentRecords.Add(assessmentRecord);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TranscriptCourseRecord>> GetTranscriptCourseRecordsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.TranscriptCourseRecords
+            .OrderByDescending(record => record.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<TranscriptCourseRecord?> GetTranscriptCourseRecordAsync(Guid courseId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.TranscriptCourseRecords
+            .Where(record => record.CourseId == courseId)
+            .OrderByDescending(record => record.UpdatedAtUtc)
+            .FirstOrDefault();
+    }
+
+    public async Task SaveTranscriptCourseRecordAsync(TranscriptCourseRecord record, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.TranscriptCourseRecords.RemoveAll(existing => existing.Id == record.Id || existing.CourseId == record.CourseId);
+                document.TranscriptCourseRecords.Add(record);
             },
             cancellationToken);
     }
@@ -371,6 +443,18 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             .Select(group => group.First())
             .OrderBy(student => student.FirstName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(student => student.LastName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<SchoolYear> SchoolYearsFor(AppDataDocument document)
+    {
+        return document.SchoolYears
+            .Concat(document.SchoolYear is null ? [] : [document.SchoolYear])
+            .GroupBy(year => year.Id)
+            .Select(group => group.First())
+            .OrderByDescending(year => year.StartYear)
+            .ThenByDescending(year => year.EndYear)
+            .ThenBy(year => year.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 

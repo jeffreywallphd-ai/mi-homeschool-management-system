@@ -180,11 +180,29 @@ else
 
                     @if (!string.IsNullOrWhiteSpace(previewDataUrl))
                     {
-                        <iframe
-                            class="gradebook-file-preview"
-                            title="@previewTitle"
-                            src="@previewDataUrl">
-                        </iframe>
+                        @if (previewContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <img class="gradebook-file-preview gradebook-media-preview" src="@previewDataUrl" alt="@previewTitle" />
+                        }
+                        else if (previewContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <video class="gradebook-file-preview gradebook-media-preview" src="@previewDataUrl" controls title="@previewTitle"></video>
+                        }
+                        else if (previewContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="gradebook-audio-preview">
+                                <strong>@previewTitle</strong>
+                                <audio src="@previewDataUrl" controls></audio>
+                            </div>
+                        }
+                        else
+                        {
+                            <iframe
+                                class="gradebook-file-preview"
+                                title="@previewTitle"
+                                src="@previewDataUrl">
+                            </iframe>
+                        }
                     }
                     else
                     {
@@ -400,6 +418,7 @@ else
     private string clearNotes = "";
     private string clearConfirmation = "";
     private string previewDataUrl = "";
+    private string previewContentType = "";
     private string previewTitle = "Assignment file preview";
 
     protected override async Task OnInitializedAsync()
@@ -487,6 +506,7 @@ else
         clearNotes = "";
         clearConfirmation = "";
         previewDataUrl = "";
+        previewContentType = "";
         previewTitle = "Assignment file preview";
         fileMessages.Clear();
         messages.Clear();
@@ -613,6 +633,7 @@ else
                 clearNotes = "";
                 clearConfirmation = "";
                 previewDataUrl = "";
+                previewContentType = "";
                 fileMessages.Clear();
             }
             else
@@ -642,11 +663,13 @@ else
             {
                 var file = result.Value!;
                 previewDataUrl = DataUrl(file);
+                previewContentType = file.ContentType;
                 previewTitle = $"{DraftLabel(submission)} {attachment.OriginalFileName} preview";
             }
             else
             {
                 previewDataUrl = "";
+                previewContentType = "";
                 fileMessages.AddRange(result.Errors);
             }
         }

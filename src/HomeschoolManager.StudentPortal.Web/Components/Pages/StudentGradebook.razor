@@ -1,0 +1,264 @@
+@page "/student/gradebook"
+@page "/student/{StudentId:guid}/gradebook"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Courses
+@using HomeschoolManager.Domain.Assessments
+@using HomeschoolManager.Domain.Curriculum
+@using HomeschoolManager.Domain.Submissions
+@using HomeschoolManager.StudentPortal.Web.Services
+@using Microsoft.AspNetCore.Components.Rendering
+@inject StudentCourseService StudentCourses
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Student Gradebook</PageTitle>
+
+@if (!canView)
+{
+    <h1>Gradebook</h1>
+    <div class="alert alert-warning">Sign in through the student portal to view your gradebook.</div>
+}
+else if (gradebook is null)
+{
+    <h1>Gradebook</h1>
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/report-table.svg" alt="" />
+            </span>
+            <h1>Gradebook</h1>
+            <p>Track upcoming work, submitted assignments, and parent feedback.</p>
+        </div>
+        <a class="btn btn-outline-primary student-header-action" href="@($"/student/{gradebook.StudentId}")">Back to courses</a>
+    </div>
+
+    <section class="dashboard-metrics student-gradebook-metrics" aria-label="Gradebook summary">
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/metric-calendar.svg" alt="" aria-hidden="true" />
+            <span>Upcoming</span>
+            <strong>@gradebook.UpcomingCount</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/form-assignment-clipboard.svg" alt="" aria-hidden="true" />
+            <span>Submitted</span>
+            <strong>@gradebook.SubmittedCount</strong>
+        </article>
+        <article class="hm-card dashboard-metric-card">
+            <img class="hm-icon" src="icons/hm/svg/purple/status-check-circle.svg" alt="" aria-hidden="true" />
+            <span>Feedback posted</span>
+            <strong>@gradebook.GradedCount</strong>
+        </article>
+    </section>
+
+    @if (gradebook.Assignments.Count == 0)
+    {
+        <section class="status-panel">
+            <h2>No assignments yet</h2>
+            <p>Assignments from your courses will appear here.</p>
+        </section>
+    }
+    else
+    {
+        @GradebookSection("Upcoming Assignments", StudentGradebookStatus.Upcoming)
+        @GradebookSection("Submitted Assignments", StudentGradebookStatus.Submitted)
+        @GradebookSection("Graded Assignments", StudentGradebookStatus.Graded)
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid StudentId { get; set; }
+
+    private bool canView;
+    private StudentGradebookPage? gradebook;
+    private readonly List<string> messages = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        canView = Session.IsStudent;
+        if (!canView || Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await StudentCourses.GetGradebookAsync(Session.CurrentUser, StudentId == Guid.Empty ? null : StudentId);
+        if (result.Succeeded)
+        {
+            gradebook = result.Value;
+            messages.Clear();
+            if (StudentId == Guid.Empty && gradebook is not null)
+            {
+                Navigation.NavigateTo($"/student/{gradebook.StudentId}/gradebook", replace: true);
+            }
+        }
+        else
+        {
+            gradebook = null;
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private RenderFragment GradebookSection(string heading, StudentGradebookStatus status) => builder =>
+    {
+        var rows = gradebook?.Assignments.Where(row => row.GradebookStatus == status).ToArray() ?? [];
+        builder.OpenElement(0, "section");
+        builder.AddAttribute(1, "class", "hm-card dashboard-card student-gradebook-section");
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "section-heading-row");
+        builder.OpenElement(4, "h2");
+        builder.AddContent(5, heading);
+        builder.CloseElement();
+        builder.OpenElement(6, "span");
+        builder.AddAttribute(7, "class", "hm-chip");
+        builder.AddContent(8, rows.Length);
+        builder.CloseElement();
+        builder.CloseElement();
+
+        if (rows.Length == 0)
+        {
+            builder.OpenElement(9, "p");
+            builder.AddAttribute(10, "class", "student-muted");
+            builder.AddContent(11, "Nothing in this group right now.");
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.OpenElement(12, "div");
+            builder.AddAttribute(13, "class", "student-gradebook-list");
+            var sequence = 14;
+            foreach (var row in rows)
+            {
+                builder.OpenElement(sequence++, "article");
+                builder.AddAttribute(sequence++, "class", "student-gradebook-row");
+
+                builder.OpenElement(sequence++, "div");
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "student-grade-pill");
+                builder.AddContent(sequence++, row.StatusLabel);
+                builder.CloseElement();
+                builder.OpenElement(sequence++, "h3");
+                builder.AddContent(sequence++, row.AssignmentTitle);
+                builder.CloseElement();
+                builder.OpenElement(sequence++, "p");
+                builder.AddAttribute(sequence++, "class", "student-card-description");
+                builder.AddContent(sequence++, $"{row.CourseTitle} / {row.ModuleTitle}");
+                builder.CloseElement();
+                builder.CloseElement();
+
+                builder.OpenElement(sequence++, "dl");
+                builder.AddAttribute(sequence++, "class", "student-card-facts");
+                Fact(builder, sequence, "Timing", TimingLabel(row));
+                sequence += 6;
+                Fact(builder, sequence, "Submitted", row.LatestSubmittedAtUtc?.ToLocalTime().ToString("g") ?? "Not yet");
+                sequence += 6;
+                Fact(builder, sequence, "Result", string.IsNullOrWhiteSpace(row.LatestResultLabel) ? "No feedback yet" : row.LatestResultLabel);
+                sequence += 6;
+                builder.CloseElement();
+
+                if (row.Submissions.Count > 0)
+                {
+                    builder.OpenElement(sequence++, "ul");
+                    builder.AddAttribute(sequence++, "class", "student-readable-list student-gradebook-submissions");
+                    foreach (var submission in row.Submissions.Take(4))
+                    {
+                        builder.OpenElement(sequence++, "li");
+                        builder.AddContent(sequence++, $"{DraftLabel(submission, row.DraftCount)}: {SubmissionStatusText(submission.Status)}");
+                        if (submission.AttachmentCount > 0)
+                        {
+                            builder.OpenElement(sequence++, "small");
+                            builder.AddContent(sequence++, $"{submission.AttachmentCount} file(s) attached");
+                            builder.CloseElement();
+                        }
+                        builder.CloseElement();
+                    }
+                    builder.CloseElement();
+                }
+
+                if (row.AssessmentFeedback.Count > 0)
+                {
+                    builder.OpenElement(sequence++, "div");
+                    builder.AddAttribute(sequence++, "class", "student-feedback-note");
+                    builder.OpenElement(sequence++, "strong");
+                    builder.AddContent(sequence++, row.AssessmentFeedback[0].ResultLabel);
+                    builder.CloseElement();
+                    if (!string.IsNullOrWhiteSpace(row.AssessmentFeedback[0].StudentFeedback))
+                    {
+                        builder.OpenElement(sequence++, "p");
+                        builder.AddContent(sequence++, row.AssessmentFeedback[0].StudentFeedback);
+                        builder.CloseElement();
+                    }
+                    builder.CloseElement();
+                }
+
+                builder.OpenElement(sequence++, "a");
+                builder.AddAttribute(sequence++, "class", "btn btn-outline-primary btn-sm");
+                builder.AddAttribute(sequence++, "href", $"/student/{row.StudentId}/courses/{row.CourseId}/modules/{row.ModuleId}");
+                builder.AddContent(sequence++, "Open module");
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private static void Fact(RenderTreeBuilder builder, int sequence, string label, string value)
+    {
+        builder.OpenElement(sequence, "div");
+        builder.OpenElement(sequence + 1, "dt");
+        builder.AddContent(sequence + 2, label);
+        builder.CloseElement();
+        builder.OpenElement(sequence + 3, "dd");
+        builder.AddContent(sequence + 4, value);
+        builder.CloseElement();
+        builder.CloseElement();
+    }
+
+    private static string TimingLabel(StudentGradebookAssignmentView row)
+    {
+        if (row.DueDate.HasValue)
+        {
+            return row.DueDate.Value.ToString("MMM d, yyyy");
+        }
+
+        return string.IsNullOrWhiteSpace(row.DueTimingLabel) ? "No due date" : row.DueTimingLabel;
+    }
+
+    private static string DraftLabel(StudentAssignmentSubmissionView submission, int draftCount)
+    {
+        if (draftCount <= 1)
+        {
+            return $"Attempt {submission.AttemptNumber}";
+        }
+
+        return submission.IsFinalDraft ? "Final draft" : $"Draft {submission.DraftNumber}";
+    }
+
+    private static string SubmissionStatusText(AssignmentSubmissionStatus status)
+    {
+        return status switch
+        {
+            AssignmentSubmissionStatus.Submitted => "Submitted",
+            AssignmentSubmissionStatus.Returned => "Returned",
+            AssignmentSubmissionStatus.Accepted => "Accepted",
+            AssignmentSubmissionStatus.Cleared => "Cleared",
+            AssignmentSubmissionStatus.Archived => "Archived",
+            _ => status.ToString()
+        };
+    }
+}

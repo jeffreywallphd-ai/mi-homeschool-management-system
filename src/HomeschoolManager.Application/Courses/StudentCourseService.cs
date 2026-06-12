@@ -97,9 +97,49 @@ public sealed class StudentCourseService
             course.PlannedCreditValue,
             course.CompletionStatus,
             NoGradeYet,
-            TermNames(schoolYear),
+            CourseModuleTermNames(course, schoolYear),
             SplitLines(course.CurriculumPlan.LearningObjectives).ToArray(),
             ModuleLinks(course, schoolYear)));
+    }
+
+    public async Task<OperationResult<StudentGradebookPage>> GetGradebookAsync(
+        UserContext user,
+        Guid? studentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (user.Role != UserRole.Student)
+        {
+            return OperationResult<StudentGradebookPage>.Failure("Sign in through the student portal to view your gradebook.");
+        }
+
+        var student = await ResolveStudentAsync(studentId, cancellationToken);
+        if (student is null)
+        {
+            return OperationResult<StudentGradebookPage>.Failure("Student was not found.");
+        }
+
+        var courses = (await repository.GetCoursesAsync(cancellationToken))
+            .Where(course => course.StudentId == student.Id)
+            .Where(course => !course.IsArchived)
+            .OrderBy(course => course.Title, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var submissions = await repository.GetAssignmentSubmissionsAsync(cancellationToken);
+        var assessments = await repository.GetAssessmentRecordsAsync(cancellationToken);
+        var rows = courses
+            .SelectMany(course => StudentGradebookRows(course, submissions, assessments))
+            .OrderBy(row => row.GradebookStatus)
+            .ThenBy(row => row.CourseTitle, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.ModuleTitle, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.AssignmentTitle, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return OperationResult<StudentGradebookPage>.Success(new StudentGradebookPage(
+            student.Id,
+            student.FirstName,
+            rows.Count(row => row.GradebookStatus == StudentGradebookStatus.Upcoming),
+            rows.Count(row => row.GradebookStatus == StudentGradebookStatus.Submitted),
+            rows.Count(row => row.GradebookStatus == StudentGradebookStatus.Graded),
+            rows));
     }
 
     public async Task<OperationResult<StudentCourseSyllabus>> GetSyllabusAsync(
@@ -399,6 +439,11 @@ public sealed class StudentCourseService
             : names;
     }
 
+    private static IReadOnlyList<string> CourseModuleTermNames(Course course, SchoolYear? schoolYear)
+    {
+        return course.Duration == CourseDuration.OneSemester ? [] : CourseTermNames(course, schoolYear);
+    }
+
     private static string TermName(Guid? termId, SchoolYear? schoolYear)
     {
         return termId.HasValue
@@ -430,10 +475,87 @@ public sealed class StudentCourseService
                 submission.ClearedAtUtc,
                 submission.ParentReviewNotes,
                 submission.PortfolioCandidate,
+                submission.StudentPortfolioCandidate,
                 submission.DraftNumber,
                 submission.DraftNumber == draftCount,
                 submission.Attachments.Count))
             .ToArray();
+    }
+
+    private static IReadOnlyList<StudentGradebookAssignmentView> StudentGradebookRows(
+        Course course,
+        IReadOnlyList<AssignmentSubmission> submissions,
+        IReadOnlyList<AssessmentRecord> assessments)
+    {
+        return course.Modules
+            .OrderBy(module => module.SequenceOrder)
+            .SelectMany(module => module.Assignments
+                .OrderBy(assignment => assignment.SequenceOrder)
+                .Select(assignment =>
+                {
+                    var assignmentSubmissions = AssignmentSubmissionsFor(
+                        submissions,
+                        course.StudentId,
+                        course.Id,
+                        module.Id,
+                        assignment.Id,
+                        assignment.DraftCount);
+                    var feedback = AssignmentFeedbackFor(
+                        assessments,
+                        course.StudentId,
+                        course.Id,
+                        module.Id,
+                        assignment.Id);
+                    var status = StudentGradebookStatusFor(assignmentSubmissions, feedback);
+                    return new StudentGradebookAssignmentView(
+                        course.StudentId,
+                        course.Id,
+                        course.Title,
+                        module.Id,
+                        module.Title,
+                        assignment.Id,
+                        assignment.Title,
+                        assignment.Status,
+                        assignment.DueTimingLabel,
+                        assignment.DueDate,
+                        status,
+                        StudentGradebookStatusLabel(status, assignmentSubmissions),
+                        feedback.FirstOrDefault()?.ResultLabel ?? "",
+                        assignmentSubmissions.FirstOrDefault()?.SubmittedAtUtc,
+                        assignment.DraftCount,
+                        assignmentSubmissions,
+                        feedback);
+                }))
+            .ToArray();
+    }
+
+    private static StudentGradebookStatus StudentGradebookStatusFor(
+        IReadOnlyList<StudentAssignmentSubmissionView> submissions,
+        IReadOnlyList<StudentAssignmentAssessmentFeedbackView> feedback)
+    {
+        if (feedback.Count > 0)
+        {
+            return StudentGradebookStatus.Graded;
+        }
+
+        return submissions.Any(submission => submission.Status is not (AssignmentSubmissionStatus.Archived or AssignmentSubmissionStatus.Cleared))
+            ? StudentGradebookStatus.Submitted
+            : StudentGradebookStatus.Upcoming;
+    }
+
+    private static string StudentGradebookStatusLabel(
+        StudentGradebookStatus status,
+        IReadOnlyList<StudentAssignmentSubmissionView> submissions)
+    {
+        return status switch
+        {
+            StudentGradebookStatus.Graded => "Feedback posted",
+            StudentGradebookStatus.Submitted when submissions.Any(submission => submission.Status == AssignmentSubmissionStatus.Returned) => "Returned for revision",
+            StudentGradebookStatus.Submitted when submissions.Any(submission => submission.Status == AssignmentSubmissionStatus.Submitted) => "Submitted",
+            StudentGradebookStatus.Submitted when submissions.Any(submission => submission.Status == AssignmentSubmissionStatus.Accepted) => "Accepted for review",
+            StudentGradebookStatus.Submitted => "Submitted",
+            _ => "Upcoming"
+        };
     }
 
     private static int DraftNumberForLesson(ModuleAssignment assignment, Guid? lessonId)

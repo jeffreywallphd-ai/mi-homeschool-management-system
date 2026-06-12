@@ -274,6 +274,6 @@ else
     private string RouteBase(Guid? studentId = null)
     {
         var targetStudentId = studentId ?? syllabus?.StudentId ?? StudentId;
-        return $"student/{targetStudentId}";
+        return $"/student/{targetStudentId}";
     }
 }

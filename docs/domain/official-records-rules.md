@@ -1,7 +1,7 @@
 # Official Records Rules
 
 - Status: accepted
-- Last reviewed: 2026-06-06
+- Last reviewed: 2026-06-12
 - Canonical for: report cards, transcripts, diplomas, and official family-issued packets
 - Related ADRs: [ADR-0001](../adr/ADR-0001-parent-owned-records-not-state-filings.md), [ADR-0003](../adr/ADR-0003-records-and-credentials-module-from-start.md), [ADR-0005](../adr/ADR-0005-parent-defined-graduation-standards-before-diploma.md)
 - Related docs: [Records and Credentials Use Cases](../product/records-and-credentials-use-cases.md), [Legal Language Boundaries](../legal-requirements/legal-language-boundaries.md)
@@ -19,13 +19,29 @@ Official records are family-issued artifacts generated from parent-owned source 
 - Portfolio packets.
 - Graduation packets.
 
+A student-authored portfolio design is a working portfolio record, not an issued official family record until parent/admin final approval and export. For grade 6 and above, the student may edit the portfolio design and narrative; the parent/admin approves the reviewed packet that becomes family-issued output. For K-5 students, the parent may author and control the portfolio directly.
+
 ## Report Card
 
 A report card summarizes courses, grades, progress, credits where relevant, attendance/activity summaries when selected, and parent notes for a reporting period.
 
 ## Transcript
 
-A transcript summarizes high-school course history, grade levels, school years, terms, credits attempted, credits earned, final grades, GPA, graduation date if applicable, and parent/school signature information.
+A transcript summarizes academic course history, grade levels, school years, terms, credits attempted or planned, credits earned when explicitly parent-recorded, final grades when explicitly parent-recorded, GPA when a known grade scale exists, graduation date if applicable, and parent/school signature information.
+
+Transcript course lines must not fabricate final grades, earned credits, GPA, or completion from course existence, assignment status, assessment records, planned points, planned credit values, or in-progress work. Missing final grades and missing earned credits must remain visible as not recorded until the parent/admin records them through a transcript or credit-award workflow.
+
+Transcript titles, grade-span labels, and export wording must describe only the course data available in the system. If a requested conventional span, such as high school grades 9-12, is only partially represented by local course records, the transcript must identify the actual included grades and include a note that other transcripts or records may be available for grades not included.
+
+The transcript may support:
+
+- A high school span, conventionally grades 9-12.
+- A middle school span, conventionally grades 6-8.
+- An all-recorded-courses span for family archive use.
+
+Student access may include read-only transcript preview. Student access must not allow editing transcript course records, final grades, earned credits, GPA, report cards, diplomas, or official packet exports.
+
+Course descriptions may be included with a transcript packet as supporting material. They should remain an appendix or companion packet so the transcript itself keeps a conventional record layout.
 
 ## Diploma
 

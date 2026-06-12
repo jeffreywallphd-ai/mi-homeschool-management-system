@@ -12,6 +12,8 @@
 
 Generated records are output artifacts created from source records. They should be saved, versioned, and linked to source identifiers or source snapshots.
 
+Transcript packet exports may include a human-readable transcript HTML file, a JSON manifest, a Markdown manifest summary, and a single PDF packet version for printing or sharing. When course descriptions are selected, they should travel with the transcript as supporting context rather than replacing source course records.
+
 ## Family Archive
 
 The family archive should preserve records that may be needed years later.

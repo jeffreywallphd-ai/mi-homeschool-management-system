@@ -1,0 +1,99 @@
+@using HomeschoolManager.Application.Portfolio
+@using HomeschoolManager.Domain.Submissions
+
+@if (Preview is not null)
+{
+    <article class="portfolio-preview-report">
+        <header class="portfolio-preview-cover">
+            <span class="submission-status-pill">@StatusText(Preview.Status)</span>
+            <h3>@Preview.Title</h3>
+            <p>@Preview.StudentName</p>
+            @if (!string.IsNullOrWhiteSpace(Preview.Purpose))
+            {
+                <small>@Preview.Purpose</small>
+            }
+        </header>
+
+        @foreach (var narrative in Preview.Narratives.OrderBy(item => item.SortOrder))
+        {
+            <section class="portfolio-preview-block">
+                <strong>@narrative.Prompt</strong>
+                <p>@(string.IsNullOrWhiteSpace(narrative.Response) ? "No response added yet." : narrative.Response)</p>
+            </section>
+        }
+
+        @if (Preview.Sections.Count > 1)
+        {
+            <section class="portfolio-preview-block">
+                <strong>Contents</strong>
+                <ol class="portfolio-preview-toc">
+                    @foreach (var previewSection in Preview.Sections.OrderBy(item => item.SortOrder))
+                    {
+                        <li>@previewSection.Heading</li>
+                    }
+                </ol>
+            </section>
+        }
+
+        @foreach (var previewSection in Preview.Sections.OrderBy(item => item.SortOrder))
+        {
+            <section class="portfolio-preview-section">
+                <h4>@previewSection.Heading</h4>
+                @if (!string.IsNullOrWhiteSpace(previewSection.Introduction))
+                {
+                    <p>@previewSection.Introduction</p>
+                }
+
+                @if (previewSection.Items.Count == 0)
+                {
+                    <p class="student-muted">No evidence selected for this section yet.</p>
+                }
+                else
+                {
+                    @foreach (var item in previewSection.Items.OrderBy(item => item.SortOrder))
+                    {
+                        <article class="portfolio-preview-item">
+                            <h5>@item.DisplayTitle</h5>
+                            <small>@item.CourseTitle | @item.ModuleTitle | @item.AssignmentTitle</small>
+                            @if (!string.IsNullOrWhiteSpace(item.StudentReflection))
+                            {
+                                <p>@item.StudentReflection</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.ChosenReason))
+                            {
+                                <p>@item.ChosenReason</p>
+                            }
+                            @if (item.SkillsShown.Count > 0)
+                            {
+                                <div class="submission-status-strip">
+                                    @foreach (var skill in item.SkillsShown)
+                                    {
+                                        <span class="submission-status-pill">@skill</span>
+                                    }
+                                </div>
+                            }
+                            <small>@item.FileCount file@(item.FileCount == 1 ? "" : "s")</small>
+                        </article>
+                    }
+                }
+            </section>
+        }
+    </article>
+}
+
+@code {
+    [Parameter]
+    public PortfolioPreviewView? Preview { get; set; }
+
+    private static string StatusText(PortfolioDesignStatus status)
+    {
+        return status switch
+        {
+            PortfolioDesignStatus.SubmittedForReview => "Submitted for review",
+            PortfolioDesignStatus.NeedsRevision => "Needs revision",
+            PortfolioDesignStatus.ReadyForApproval => "Ready for approval",
+            PortfolioDesignStatus.Approved => "Approved",
+            _ => "Working"
+        };
+    }
+}

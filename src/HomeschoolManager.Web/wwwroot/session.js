@@ -37,3 +37,65 @@ window.homeschoolScroll = {
         document.getElementById(id)?.scrollIntoView({ block: "start" });
     }
 };
+
+window.homeschoolMenus = (() => {
+    const cleanupByElement = new WeakMap();
+
+    function disposeDetailsClickAway(details) {
+        const cleanup = cleanupByElement.get(details);
+        if (cleanup) {
+            cleanup();
+        }
+    }
+
+    function initializeDetailsClickAway(details) {
+        if (!details || cleanupByElement.has(details)) {
+            return;
+        }
+
+        const closeIfDetached = () => {
+            if (!document.documentElement.contains(details)) {
+                disposeDetailsClickAway(details);
+                return true;
+            }
+
+            return false;
+        };
+
+        const onPointerDown = (event) => {
+            if (closeIfDetached()) {
+                return;
+            }
+
+            if (details.open && !details.contains(event.target)) {
+                details.open = false;
+            }
+        };
+
+        const onKeyDown = (event) => {
+            if (closeIfDetached()) {
+                return;
+            }
+
+            if (event.key === "Escape" && details.open) {
+                details.open = false;
+                details.querySelector("summary")?.focus();
+            }
+        };
+
+        const cleanup = () => {
+            document.removeEventListener("pointerdown", onPointerDown, true);
+            document.removeEventListener("keydown", onKeyDown, true);
+            cleanupByElement.delete(details);
+        };
+
+        cleanupByElement.set(details, cleanup);
+        document.addEventListener("pointerdown", onPointerDown, true);
+        document.addEventListener("keydown", onKeyDown, true);
+    }
+
+    return {
+        initializeDetailsClickAway,
+        disposeDetailsClickAway
+    };
+})();

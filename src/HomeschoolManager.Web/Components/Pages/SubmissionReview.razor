@@ -4,8 +4,10 @@
 @using HomeschoolManager.Domain.Submissions
 @using HomeschoolManager.Web.Services
 @inject AssignmentSubmissionService Submissions
+@inject SubmissionFilePreviewService FilePreviewService
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Submission Review</PageTitle>
 
@@ -74,6 +76,10 @@ else
                         <dt>Evidence candidate</dt>
                         <dd>@(detail.PortfolioCandidate ? "Yes" : "No")</dd>
                     </div>
+                    <div>
+                        <dt>Student suggested portfolio</dt>
+                        <dd>@(detail.StudentPortfolioCandidate ? "Yes" : "No")</dd>
+                    </div>
                 </dl>
 
                 <h3>Response</h3>
@@ -92,15 +98,66 @@ else
                 }
                 else
                 {
-                    <ul class="submission-file-list">
+                    <ul class="submission-file-list gradebook-file-list">
                         @foreach (var attachment in detail.Attachments)
                         {
                             <li>
-                                <strong>@attachment.OriginalFileName</strong>
-                                <small>@FileSize(attachment.SizeBytes) | @attachment.ContentType | SHA-256 @ShortChecksum(attachment.ChecksumSha256)</small>
+                                <div>
+                                    <strong>@attachment.OriginalFileName</strong>
+                                    <small>@FileSize(attachment.SizeBytes) | @attachment.ContentType | SHA-256 @ShortChecksum(attachment.ChecksumSha256)</small>
+                                </div>
+                                <div class="gradebook-file-actions">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => PreviewFileAsync(attachment)" disabled="@isLoadingFile">Preview</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => DownloadFileAsync(attachment)" disabled="@isLoadingFile">Download</button>
+                                </div>
                             </li>
                         }
                     </ul>
+                }
+            </section>
+
+            <section class="hm-card dashboard-card gradebook-preview-card">
+                <div class="section-heading-row">
+                    <h2>Preview</h2>
+                    <span class="hm-chip">@detail.AssignmentTitle</span>
+                </div>
+
+                @foreach (var message in fileMessages)
+                {
+                    <div class="alert alert-warning">@message</div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(previewDataUrl))
+                {
+                    @if (previewContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <img class="gradebook-file-preview gradebook-media-preview" src="@previewDataUrl" alt="@previewTitle" />
+                    }
+                    else if (previewContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <video class="gradebook-file-preview gradebook-media-preview" src="@previewDataUrl" controls title="@previewTitle"></video>
+                    }
+                    else if (previewContentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="gradebook-audio-preview">
+                            <strong>@previewTitle</strong>
+                            <audio src="@previewDataUrl" controls></audio>
+                        </div>
+                    }
+                    else
+                    {
+                        <iframe
+                            class="gradebook-file-preview"
+                            title="@previewTitle"
+                            src="@previewDataUrl">
+                        </iframe>
+                    }
+                }
+                else
+                {
+                    <div class="gradebook-file-preview-placeholder">
+                        Select Preview from an attached file to view it here.
+                    </div>
                 }
             </section>
         </main>
@@ -122,8 +179,12 @@ else
 
                 <label class="checkbox-row">
                     <input type="checkbox" @bind="markPortfolioCandidate" />
-                    Mark as portfolio candidate
+                    Accept as portfolio candidate
                 </label>
+                @if (detail.StudentPortfolioCandidate)
+                {
+                    <p class="form-text">The student suggested this assignment for portfolio review. Accepting it here keeps it as a candidate until the portfolio item is approved.</p>
+                }
 
                 <div class="review-action-row">
                     <button type="button" class="btn btn-outline-primary" @onclick="ReturnWorkAsync" disabled="@isSaving">Return to student</button>
@@ -146,11 +207,16 @@ else
 
     private bool canView;
     private bool isSaving;
+    private bool isLoadingFile;
     private SubmissionReviewDetail? detail;
     private string reviewNotes = "";
     private string clearConfirmation = "";
     private bool markPortfolioCandidate;
+    private string previewDataUrl = "";
+    private string previewContentType = "";
+    private string previewTitle = "Assignment file preview";
     private readonly List<string> messages = [];
+    private readonly List<string> fileMessages = [];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -182,14 +248,21 @@ else
             detail = result.Value!;
             reviewNotes = detail.ParentReviewNotes;
             clearConfirmation = "";
-            markPortfolioCandidate = detail.PortfolioCandidate;
+            markPortfolioCandidate = detail.PortfolioCandidate || detail.StudentPortfolioCandidate;
             messages.Clear();
+            ResetPreview();
+
+            if (detail.Attachments.Count > 0)
+            {
+                await PreviewFileAsync(detail.Attachments[0]);
+            }
         }
         else
         {
             detail = null;
             messages.Clear();
             messages.AddRange(result.Errors);
+            ResetPreview();
         }
     }
 
@@ -283,6 +356,74 @@ else
         }
     }
 
+    private async Task PreviewFileAsync(SubmissionAttachmentView attachment)
+    {
+        if (Session.CurrentUser is null || detail is null)
+        {
+            return;
+        }
+
+        isLoadingFile = true;
+        fileMessages.Clear();
+        try
+        {
+            var result = await FilePreviewService.GetPreviewAsync(Session.CurrentUser, detail.SubmissionId, attachment.FileId);
+            if (result.Succeeded)
+            {
+                var file = result.Value!;
+                previewDataUrl = DataUrl(file);
+                previewContentType = file.ContentType;
+                previewTitle = $"{attachment.OriginalFileName} preview";
+            }
+            else
+            {
+                previewDataUrl = "";
+                previewContentType = "";
+                fileMessages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isLoadingFile = false;
+        }
+    }
+
+    private async Task DownloadFileAsync(SubmissionAttachmentView attachment)
+    {
+        if (Session.CurrentUser is null || detail is null)
+        {
+            return;
+        }
+
+        isLoadingFile = true;
+        fileMessages.Clear();
+        try
+        {
+            var result = await FilePreviewService.GetDownloadAsync(Session.CurrentUser, detail.SubmissionId, attachment.FileId);
+            if (result.Succeeded)
+            {
+                var file = result.Value!;
+                await JS.InvokeVoidAsync("homeschoolFiles.downloadBase64", file.OriginalFileName, file.ContentType, Convert.ToBase64String(file.Content));
+            }
+            else
+            {
+                fileMessages.AddRange(result.Errors);
+            }
+        }
+        finally
+        {
+            isLoadingFile = false;
+        }
+    }
+
+    private void ResetPreview()
+    {
+        previewDataUrl = "";
+        previewContentType = "";
+        previewTitle = "Assignment file preview";
+        fileMessages.Clear();
+    }
+
     private static string SubmissionStatusLabel(AssignmentSubmissionStatus status)
     {
         return status switch
@@ -314,5 +455,10 @@ else
     private static string ShortChecksum(string checksum)
     {
         return checksum.Length <= 12 ? checksum : checksum[..12];
+    }
+
+    private static string DataUrl(SubmissionFileResponse file)
+    {
+        return $"data:{file.ContentType};base64,{Convert.ToBase64String(file.Content)}";
     }
 }

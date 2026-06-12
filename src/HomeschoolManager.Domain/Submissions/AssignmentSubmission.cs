@@ -22,6 +22,7 @@ public sealed record AssignmentSubmission
     public DateTimeOffset? ClearedAtUtc { get; init; }
     public string ParentReviewNotes { get; init; }
     public bool PortfolioCandidate { get; init; }
+    public bool StudentPortfolioCandidate { get; init; }
     public int DraftNumber { get; init; }
 
     public AssignmentSubmission(
@@ -43,7 +44,8 @@ public sealed record AssignmentSubmission
         string parentReviewNotes,
         bool portfolioCandidate,
         DateTimeOffset? clearedAtUtc = null,
-        int draftNumber = 1)
+        int draftNumber = 1,
+        bool studentPortfolioCandidate = false)
     {
         if (studentId == Guid.Empty)
         {
@@ -90,6 +92,7 @@ public sealed record AssignmentSubmission
         ClearedAtUtc = clearedAtUtc;
         ParentReviewNotes = string.IsNullOrWhiteSpace(parentReviewNotes) ? "" : parentReviewNotes.Trim();
         PortfolioCandidate = portfolioCandidate;
+        StudentPortfolioCandidate = studentPortfolioCandidate;
         DraftNumber = draftNumber;
     }
 }

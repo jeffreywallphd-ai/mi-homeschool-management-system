@@ -2,6 +2,7 @@ using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Application.Assessments;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Portfolio;
+using HomeschoolManager.Application.Records;
 using HomeschoolManager.Application.Requirements;
 using HomeschoolManager.Application.Setup;
 using HomeschoolManager.Application.Submissions;
@@ -29,6 +30,8 @@ public static class DependencyInjection
         services.AddScoped<AssignmentSubmissionService>();
         services.AddScoped<SubmissionFilePreviewService>();
         services.AddScoped<PortfolioService>();
+        services.AddScoped<PortfolioExportService>();
+        services.AddScoped<TranscriptService>();
         services.AddScoped<SetupService>();
         services.AddScoped<RequirementService>();
         services.AddScoped<LocalAccessService>();

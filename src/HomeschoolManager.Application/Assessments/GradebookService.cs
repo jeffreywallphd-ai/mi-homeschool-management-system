@@ -351,6 +351,11 @@ public sealed class GradebookService
 
     private static AssessmentState EffectiveState(AssignmentSubmission? submission, EvidenceRecord? evidence)
     {
+        if (submission?.Status == AssignmentSubmissionStatus.Submitted)
+        {
+            return AssessmentState.NeedsReview;
+        }
+
         if (submission?.Status == AssignmentSubmissionStatus.Returned)
         {
             return AssessmentState.ReturnedForRevision;

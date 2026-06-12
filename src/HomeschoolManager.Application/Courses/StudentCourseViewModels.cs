@@ -85,6 +85,40 @@ public sealed record StudentCourseDashboard(
     IReadOnlyList<string> TermNames,
     IReadOnlyList<StudentCourseCard> Courses);
 
+public sealed record StudentGradebookPage(
+    Guid StudentId,
+    string StudentFirstName,
+    int UpcomingCount,
+    int SubmittedCount,
+    int GradedCount,
+    IReadOnlyList<StudentGradebookAssignmentView> Assignments);
+
+public sealed record StudentGradebookAssignmentView(
+    Guid StudentId,
+    Guid CourseId,
+    string CourseTitle,
+    Guid ModuleId,
+    string ModuleTitle,
+    Guid AssignmentId,
+    string AssignmentTitle,
+    AssignmentStatus AssignmentStatus,
+    string DueTimingLabel,
+    DateOnly? DueDate,
+    StudentGradebookStatus GradebookStatus,
+    string StatusLabel,
+    string LatestResultLabel,
+    DateTimeOffset? LatestSubmittedAtUtc,
+    int DraftCount,
+    IReadOnlyList<StudentAssignmentSubmissionView> Submissions,
+    IReadOnlyList<StudentAssignmentAssessmentFeedbackView> AssessmentFeedback);
+
+public enum StudentGradebookStatus
+{
+    Upcoming = 0,
+    Submitted = 1,
+    Graded = 2
+}
+
 public sealed record StudentModuleObjectiveView(string Text, string LinkedCourseObjective);
 
 public sealed record StudentModuleResourceView(
@@ -235,6 +269,7 @@ public sealed record StudentAssignmentSubmissionView(
     DateTimeOffset? ClearedAtUtc,
     string ParentReviewNotes,
     bool PortfolioCandidate,
+    bool StudentPortfolioCandidate,
     int DraftNumber,
     bool IsFinalDraft,
     int AttachmentCount);

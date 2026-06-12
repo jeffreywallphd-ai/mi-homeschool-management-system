@@ -108,8 +108,11 @@ Implementation roadmaps are currently defined by:
 - [Course Module Lessons Roadmap](roadmaps/course-module-lessons-roadmap.md)
 - [Course Module Assignments Roadmap](roadmaps/course-module-assignments-roadmap.md)
 - [Assignment Submissions and Evidence Roadmap](roadmaps/assignment-submissions-and-evidence-roadmap.md)
+- [Assignment Attempts and Completion Status Roadmap](roadmaps/assignment-attempts-and-completion-status-roadmap.md)
 - [Gradebook and Assessment Review Roadmap](roadmaps/gradebook-assessment-review-roadmap.md)
 - [Student Course Client Roadmap](roadmaps/student-course-client-roadmap.md)
+- [Student Portfolio Creation and Preview Roadmap](roadmaps/student-portfolio-builder-roadmap.md)
+- [Transcript with Course Descriptions Roadmap](roadmaps/transcript-with-course-descriptions-roadmap.md)
 
 Operations requirements are currently defined by:
 
