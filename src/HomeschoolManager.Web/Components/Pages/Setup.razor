@@ -8,6 +8,7 @@
 @inject SetupService SetupService
 @inject RequirementService RequirementService
 @inject SessionState Session
+@inject ProductionStatusService ProductionStatusService
 
 <PageTitle>Setup</PageTitle>
 
@@ -35,12 +36,64 @@ else
         }
         else
         {
+            @if (summary.IsComplete)
+            {
+                <div class="alert alert-success">Setup is complete. The rest of the app is available from the navigation.</div>
+            }
+            else
+            {
+                <div class="alert alert-warning">
+                    Complete and save the required setup sections to unlock the rest of the app:
+                    @string.Join(", ", summary.MissingRequiredAreas ?? [])
+                </div>
+            }
             <ul>
                 <li>Household: @Display(summary.HasHousehold, summary.HouseholdName)</li>
                 <li>School profile: @Display(summary.HasSchoolProfile, summary.SchoolName)</li>
                 <li>Children: @(summary.StudentCount == 0 ? "Not set" : $"{summary.StudentCount} configured")</li>
                 <li>School year: @Display(summary.HasSchoolYear, summary.SchoolYearName)</li>
             </ul>
+        }
+    </section>
+
+    <section class="status-panel production-status-panel">
+        <h2>How Homeschool Manager is running</h2>
+        @if (productionStatus is not null)
+        {
+            <div class="production-status-grid">
+                <div>
+                    <span>Mode</span>
+                    <strong>@productionStatus.HostMode</strong>
+                </div>
+                <div>
+                    <span>Family records folder</span>
+                    <strong>@productionStatus.DataRoot</strong>
+                </div>
+                <div>
+                    <span>Parent/Admin portal</span>
+                    <strong>@productionStatus.AdminSharing</strong>
+                    @if (!string.IsNullOrWhiteSpace(productionStatus.AdminPortalUrl))
+                    {
+                        <small>@productionStatus.AdminPortalUrl</small>
+                    }
+                </div>
+                <div>
+                    <span>Student portal</span>
+                    <strong>@productionStatus.StudentSharing</strong>
+                    @if (!string.IsNullOrWhiteSpace(productionStatus.StudentPortalUrl))
+                    {
+                        <small>@productionStatus.StudentPortalUrl</small>
+                    }
+                </div>
+            </div>
+            @if (productionStatus.IsServiceMode)
+            {
+                <div class="alert alert-info">Background service mode can keep the student portal available while the computer is on, even when no parent is signed in.</div>
+            }
+            else
+            {
+                <div class="alert alert-info">Desktop launcher mode runs while the parent starts Homeschool Manager from Windows.</div>
+            }
         }
     </section>
 
@@ -166,6 +219,7 @@ else
     private readonly List<PageMessage> messages = [];
     private readonly Dictionary<string, string> fieldErrors = [];
     private IReadOnlyList<StudentSetupItem> students = [];
+    private ProductionStatus? productionStatus;
     private HouseholdModel household = new();
     private SchoolModel school = new();
     private StudentModel student = new();
@@ -173,6 +227,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        productionStatus = ProductionStatusService.GetStatus();
         await RefreshSummary();
     }
 

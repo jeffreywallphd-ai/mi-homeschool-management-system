@@ -86,6 +86,18 @@ public interface IHomeschoolRepository
 
     Task SaveTranscriptCourseRecordAsync(TranscriptCourseRecord record, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<GraduationPlan>> GetGraduationPlansAsync(CancellationToken cancellationToken = default);
+
+    Task<GraduationPlan?> GetGraduationPlanAsync(Guid studentId, CancellationToken cancellationToken = default);
+
+    Task SaveGraduationPlanAsync(GraduationPlan plan, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DiplomaDesign>> GetDiplomaDesignsAsync(CancellationToken cancellationToken = default);
+
+    Task<DiplomaDesign?> GetDiplomaDesignAsync(Guid studentId, CancellationToken cancellationToken = default);
+
+    Task SaveDiplomaDesignAsync(DiplomaDesign design, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<CoursePackDefinition>> GetInstalledCoursePacksAsync(CancellationToken cancellationToken = default);
 
     Task SaveInstalledCoursePackAsync(CoursePackDefinition coursePack, CancellationToken cancellationToken = default);

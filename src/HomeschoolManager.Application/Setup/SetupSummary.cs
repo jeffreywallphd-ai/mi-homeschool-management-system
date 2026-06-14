@@ -10,7 +10,9 @@ public sealed record SetupSummary(
     string SchoolName,
     string StudentName,
     string SchoolYearName,
-    int StudentCount = 0);
+    int StudentCount = 0,
+    bool IsComplete = false,
+    IReadOnlyList<string>? MissingRequiredAreas = null);
 
 public sealed record StudentSetupItem(Guid Id, string FirstName, string LastName, int GradeLevel)
 {

@@ -12,6 +12,7 @@ public sealed class SetupService
 {
     private readonly IHomeschoolRepository repository;
     public event Action? StudentsChanged;
+    public event Action? SetupChanged;
 
     public SetupService(IHomeschoolRepository repository)
     {
@@ -26,17 +27,44 @@ public sealed class SetupService
         var students = await repository.GetStudentsAsync(cancellationToken);
         var schoolYear = await repository.GetSchoolYearAsync(cancellationToken);
 
+        var hasHousehold = household is not null;
+        var hasSchoolProfile = schoolProfile is not null;
+        var hasStudent = students.Count > 0 || student is not null;
+        var hasSchoolYear = schoolYear is not null;
+        var missingRequiredAreas = new List<string>();
+        if (!hasHousehold)
+        {
+            missingRequiredAreas.Add("Household");
+        }
+
+        if (!hasSchoolProfile)
+        {
+            missingRequiredAreas.Add("School profile");
+        }
+
+        if (!hasStudent)
+        {
+            missingRequiredAreas.Add("Child");
+        }
+
+        if (!hasSchoolYear)
+        {
+            missingRequiredAreas.Add("School year");
+        }
+
         return new SetupSummary(
-            household is not null,
-            schoolProfile is not null,
-            students.Count > 0 || student is not null,
+            hasHousehold,
+            hasSchoolProfile,
+            hasStudent,
             schoolYear is not null,
             household?.Name ?? "",
             household?.ParentGuardianName ?? "",
             schoolProfile?.SchoolName ?? "",
             student is null ? "" : $"{student.FirstName} {student.LastName}",
             schoolYear?.Name ?? "",
-            students.Count);
+            students.Count,
+            missingRequiredAreas.Count == 0,
+            missingRequiredAreas);
     }
 
     public async Task<SetupDetail> GetDetailAsync(CancellationToken cancellationToken = default)
@@ -95,6 +123,7 @@ public sealed class SetupService
         {
             var household = new Household(Guid.NewGuid(), command.HouseholdName, command.ParentGuardianName);
             await repository.SaveHouseholdAsync(household, cancellationToken);
+            SetupChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)
@@ -135,6 +164,7 @@ public sealed class SetupService
                 command.DiplomaIssueState);
 
             await repository.SaveSchoolProfileAsync(profile, cancellationToken);
+            SetupChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)
@@ -165,6 +195,7 @@ public sealed class SetupService
             var student = new Student(Guid.NewGuid(), household.Id, command.FirstName, command.LastName, command.GradeLevel);
             await repository.SaveStudentAsync(student, cancellationToken);
             StudentsChanged?.Invoke();
+            SetupChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)
@@ -207,6 +238,7 @@ public sealed class SetupService
                 terms);
 
             await repository.SaveSchoolYearAsync(schoolYear, cancellationToken);
+            SetupChanged?.Invoke();
             return OperationResult.Success();
         }
         catch (DomainException ex)

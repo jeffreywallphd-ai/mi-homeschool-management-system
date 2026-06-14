@@ -1,0 +1,613 @@
+@page "/diploma"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Records
+@using HomeschoolManager.Web.Services
+@inject DiplomaService Diplomas
+@inject SessionState Session
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Diploma</PageTitle>
+
+@if (!canView)
+{
+    <h1>Diploma</h1>
+    <div class="alert alert-warning">Sign in as parent/admin to design diplomas.</div>
+}
+else if (designer is null || planEdit is null || designEdit is null)
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
+            </span>
+            <h1>Diploma</h1>
+            <p>Design a family-issued diploma after parent-defined graduation standards are accepted.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/">Back to dashboard</a>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert alert-warning">@message</div>
+    }
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" />
+            </span>
+            <h1>Diploma</h1>
+            <p>Preview the diploma, adjust wording and typography, then export only after graduation readiness is complete.</p>
+        </div>
+        <button class="btn btn-primary" type="button" disabled="@(!designer.Readiness.CanGenerate)" @onclick="DownloadDiplomaAsync">Download PDF</button>
+    </div>
+
+    <div class="gradebook-selector-bar hm-card transcript-selector-bar">
+        <div>
+            <label class="form-label" for="diploma-student">Student</label>
+            <select id="diploma-student" class="form-select" value="@selectedStudentId" @onchange="OnStudentChangedAsync">
+                @foreach (var student in designer.Students)
+                {
+                    <option value="@student.StudentId">@student.Name</option>
+                }
+            </select>
+        </div>
+        <div class="diploma-readiness-summary">
+            <strong>@(designer.Readiness.CanGenerate ? "Ready for PDF export" : "PDF export blocked")</strong>
+            <span>Diploma generation requires accepted parent-defined standards.</span>
+        </div>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert @(lastActionSucceeded ? "alert-success" : "alert-warning")">@message</div>
+    }
+
+    <div class="dashboard-grid diploma-workbench">
+        <main class="dashboard-main">
+            <section class="hm-card dashboard-card diploma-preview-card">
+                <div class="diploma-preview-scroll">
+                    <article class="diploma-sheet" aria-label="Diploma preview">
+                        <div class="diploma-border diploma-border-outer"></div>
+                        <div class="diploma-border diploma-border-middle"></div>
+                        <div class="diploma-border diploma-border-gold"></div>
+                        <div class="diploma-corner diploma-corner-tl"></div>
+                        <div class="diploma-corner diploma-corner-tr"></div>
+                        <div class="diploma-corner diploma-corner-bl"></div>
+                        <div class="diploma-corner diploma-corner-br"></div>
+
+                        <h2 class="diploma-line diploma-school" style="@StyleFor("homeschoolName")">@Display("homeschoolName", designEdit.HomeschoolName)</h2>
+                        <div class="diploma-rule"><span>&#10022;</span></div>
+                        <p class="diploma-line diploma-certifies" style="@StyleFor("certifiesText")">@Display("certifiesText", designEdit.CertifiesText)</p>
+                        <p class="diploma-line diploma-student" style="@StyleFor("studentName")">@Display("studentName", designEdit.StudentName)</p>
+                        <div class="diploma-rule diploma-rule-short"><span>&#9671;</span></div>
+                        <p class="diploma-line diploma-completion" style="@StyleFor("completionText")">@Display("completionText", designEdit.CompletionText)</p>
+                        <p class="diploma-line diploma-title" style="@StyleFor("diplomaTitle")">@Display("diplomaTitle", designEdit.DiplomaTitle)</p>
+                        <div class="diploma-rule diploma-rule-short"><span>&#9671;</span></div>
+                        <p class="diploma-line diploma-privileges" style="@StyleFor("privilegesText")">@Display("privilegesText", designEdit.PrivilegesText)</p>
+                        <div class="diploma-rule diploma-rule-mini"><span>&#10022;</span></div>
+                        <p class="diploma-line diploma-awarded" style="@StyleFor("awardedText")">@designEdit.AwardedText @AwardedPreviewDate()</p>
+
+                        <div class="diploma-footer-row">
+                            <div class="diploma-signature">
+                                <span></span>
+                                <strong style="@StyleFor("signatureLabel")">@Display("signatureLabel", designEdit.SignatureLabel)</strong>
+                            </div>
+                            <div class="diploma-seal" style="@StyleFor("sealText")">@Display("sealText", designEdit.SealText)</div>
+                            <div class="diploma-signature">
+                                <span></span>
+                                <strong style="@StyleFor("dateLabel")">@Display("dateLabel", designEdit.DateLabel)</strong>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
+
+        <aside class="dashboard-support">
+            <section class="hm-card dashboard-card diploma-editor-card">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Graduation Readiness</h2>
+                        <p class="form-text">A diploma PDF stays blocked until these parent-owned decisions are complete.</p>
+                    </div>
+                </div>
+                @if (designer.Readiness.BlockingReasons.Count > 0)
+                {
+                    <ul class="student-readable-list diploma-blockers">
+                        @foreach (var reason in designer.Readiness.BlockingReasons)
+                        {
+                            <li>@reason</li>
+                        }
+                    </ul>
+                }
+                <div class="inline-entry-form">
+                    <label class="form-label" for="grad-title">Plan title</label>
+                    <input id="grad-title" class="form-control" @bind="planEdit.Title" />
+                    <label class="form-label" for="grad-standards">Parent-defined standards summary</label>
+                    <textarea id="grad-standards" class="form-control" rows="4" @bind="planEdit.StandardsSummary"></textarea>
+                    <div class="checkbox-row">
+                        <input id="grad-accepted" class="form-check-input" type="checkbox" @bind="planEdit.StandardsAccepted" />
+                        <label class="form-check-label" for="grad-accepted">Parent accepts these graduation standards</label>
+                    </div>
+                    <div class="checkbox-row">
+                        <input id="grad-satisfied" class="form-check-input" type="checkbox" @bind="planEdit.RequirementsSatisfiedOrWaived" />
+                        <label class="form-check-label" for="grad-satisfied">Requirements are satisfied or explicitly waived by the parent</label>
+                    </div>
+                    <label class="form-label" for="grad-notes">Parent decision notes</label>
+                    <textarea id="grad-notes" class="form-control" rows="3" @bind="planEdit.ParentDecisionNotes"></textarea>
+                    <button class="btn btn-outline-primary" type="button" @onclick="SaveGraduationPlanAsync">Save graduation readiness</button>
+                </div>
+            </section>
+
+            <section class="hm-card dashboard-card diploma-editor-card">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Diploma Text</h2>
+                        <p class="form-text">The background remains transparent for printing on card stock.</p>
+                    </div>
+                </div>
+                <div class="inline-entry-form">
+                    <label class="form-label" for="diploma-school">Homeschool name</label>
+                    <input id="diploma-school" class="form-control" @bind="designEdit.HomeschoolName" />
+                    <label class="form-label" for="diploma-certifies">Certifies line</label>
+                    <input id="diploma-certifies" class="form-control" @bind="designEdit.CertifiesText" />
+                    <label class="form-label" for="diploma-student-name">Student name</label>
+                    <input id="diploma-student-name" class="form-control" @bind="designEdit.StudentName" />
+                    <label class="form-label" for="diploma-completion">Completion statement</label>
+                    <textarea id="diploma-completion" class="form-control" rows="3" @bind="designEdit.CompletionText"></textarea>
+                    <label class="form-label" for="diploma-title">Diploma title</label>
+                    <input id="diploma-title" class="form-control" @bind="designEdit.DiplomaTitle" />
+                    <label class="form-label" for="diploma-privileges">Rights and privileges line</label>
+                    <textarea id="diploma-privileges" class="form-control" rows="2" @bind="designEdit.PrivilegesText"></textarea>
+                    <div class="two-column-form-grid">
+                        <div>
+                            <label class="form-label" for="diploma-awarded-text">Awarded text</label>
+                            <input id="diploma-awarded-text" class="form-control" @bind="designEdit.AwardedText" />
+                        </div>
+                        <div>
+                            <label class="form-label" for="diploma-awarded-date">Awarded date</label>
+                            <input id="diploma-awarded-date" class="form-control" placeholder="YYYY-MM-DD" @bind="designEdit.AwardedDate" />
+                        </div>
+                    </div>
+                    <div class="two-column-form-grid">
+                        <div>
+                            <label class="form-label" for="diploma-signature">Signature label</label>
+                            <input id="diploma-signature" class="form-control" @bind="designEdit.SignatureLabel" />
+                        </div>
+                        <div>
+                            <label class="form-label" for="diploma-date-label">Date label</label>
+                            <input id="diploma-date-label" class="form-control" @bind="designEdit.DateLabel" />
+                        </div>
+                    </div>
+                    <label class="form-label" for="diploma-seal">Seal text</label>
+                    <input id="diploma-seal" class="form-control" @bind="designEdit.SealText" />
+                    <button class="btn btn-outline-primary" type="button" @onclick="SaveDiplomaDesignAsync">Save diploma design</button>
+                </div>
+            </section>
+
+            <section class="hm-card dashboard-card diploma-editor-card">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Typography</h2>
+                        <p class="form-text">Local fonts appear when the browser allows access; otherwise use the built-in choices.</p>
+                    </div>
+                </div>
+                <div class="diploma-style-list">
+                    @foreach (var style in designEdit.TextStyles)
+                    {
+                        <details class="transcript-course-editor">
+                            <summary>
+                                <span>@style.Label</span>
+                                <span class="student-grade-pill">@style.FontSize pt</span>
+                            </summary>
+                            <div class="inline-entry-form">
+                                <label class="form-label" for="@($"font-{style.ElementKey}")">Font family</label>
+                                <select id="@($"font-{style.ElementKey}")" class="form-select diploma-font-select" @bind="style.FontFamily">
+                                    @foreach (var font in fontFamilies)
+                                    {
+                                        <option value="@font" style="@FontOptionStyle(font)">@font</option>
+                                    }
+                                </select>
+                                <div class="two-column-form-grid">
+                                    <div>
+                                        <label class="form-label" for="@($"size-{style.ElementKey}")">Font size</label>
+                                        <input id="@($"size-{style.ElementKey}")" class="form-control" type="number" min="8" max="72" step="1" @bind="style.FontSize" />
+                                    </div>
+                                    <div>
+                                        <label class="form-label" for="@($"spacing-{style.ElementKey}")">Letter spacing</label>
+                                        <input id="@($"spacing-{style.ElementKey}")" class="form-control" type="number" min="0" max="12" step=".5" @bind="style.LetterSpacing" />
+                                    </div>
+                                </div>
+                                <div class="checkbox-row">
+                                    <input id="@($"upper-{style.ElementKey}")" class="form-check-input" type="checkbox" @bind="style.Uppercase" />
+                                    <label class="form-check-label" for="@($"upper-{style.ElementKey}")">Use uppercase styling</label>
+                                </div>
+                            </div>
+                        </details>
+                    }
+                </div>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    private bool canView;
+    private DiplomaDesignerView? designer;
+    private GraduationPlanEditModel? planEdit;
+    private DiplomaDesignEditModel? designEdit;
+    private string selectedStudentId = "";
+    private readonly List<string> messages = [];
+    private readonly List<string> fontFamilies = [];
+    private bool lastActionSucceeded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        canView = Session.IsParentAdmin;
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        if (canView)
+        {
+            await LoadAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || designer is null)
+        {
+            return;
+        }
+
+        await LoadFontsAsync();
+    }
+
+    private async Task LoadAsync(Guid? studentId = null)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await Diplomas.GetDesignerAsync(Session.CurrentUser, studentId);
+        messages.Clear();
+        if (result.Succeeded && result.Value is not null)
+        {
+            designer = result.Value;
+            selectedStudentId = designer.StudentId.ToString();
+            planEdit = GraduationPlanEditModel.From(designer.GraduationPlan);
+            designEdit = DiplomaDesignEditModel.From(designer.Design);
+            SyncFontFamilies();
+        }
+        else
+        {
+            designer = null;
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task LoadFontsAsync()
+    {
+        try
+        {
+            var localFonts = await JS.InvokeAsync<string[]>("homeschoolFonts.availableFamilies");
+            if (localFonts.Length > 0)
+            {
+                fontFamilies.Clear();
+                foreach (var font in localFonts)
+                {
+                    AddFont(font);
+                }
+
+                AddSelectedStyleFonts();
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            SyncFontFamilies();
+        }
+    }
+
+    private void SyncFontFamilies()
+    {
+        if (designer is null)
+        {
+            return;
+        }
+
+        fontFamilies.Clear();
+        foreach (var font in designer.BuiltInFontFamilies)
+        {
+            AddFont(font);
+        }
+
+        AddSelectedStyleFonts();
+    }
+
+    private void AddSelectedStyleFonts()
+    {
+        if (designEdit is null)
+        {
+            return;
+        }
+
+        foreach (var style in designEdit.TextStyles)
+        {
+            AddFont(style.FontFamily);
+        }
+    }
+
+    private void AddFont(string font)
+    {
+        if (!string.IsNullOrWhiteSpace(font) && !fontFamilies.Contains(font, StringComparer.OrdinalIgnoreCase))
+        {
+            fontFamilies.Add(font);
+            fontFamilies.Sort(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private async Task OnStudentChangedAsync(ChangeEventArgs args)
+    {
+        selectedStudentId = args.Value?.ToString() ?? "";
+        await LoadAsync(Guid.TryParse(selectedStudentId, out var studentId) ? studentId : null);
+    }
+
+    private async Task SaveGraduationPlanAsync()
+    {
+        if (Session.CurrentUser is null || designer is null || planEdit is null)
+        {
+            return;
+        }
+
+        messages.Clear();
+        lastActionSucceeded = false;
+        var result = await Diplomas.SaveGraduationPlanAsync(Session.CurrentUser, new SaveGraduationPlanCommand(
+            designer.StudentId,
+            planEdit.Title,
+            planEdit.StandardsSummary,
+            planEdit.StandardsAccepted,
+            planEdit.RequirementsSatisfiedOrWaived,
+            planEdit.ParentDecisionNotes));
+        await HandleSaveResultAsync(result, "Graduation readiness saved.");
+    }
+
+    private async Task SaveDiplomaDesignAsync()
+    {
+        await SaveDiplomaDesignInternalAsync(showSuccessMessage: true);
+    }
+
+    private async Task<bool> SaveDiplomaDesignInternalAsync(bool showSuccessMessage)
+    {
+        if (Session.CurrentUser is null || designer is null || designEdit is null)
+        {
+            return false;
+        }
+
+        messages.Clear();
+        lastActionSucceeded = false;
+        var validDate = TryParseDate(designEdit.AwardedDate, out var awardedDate, out var dateError);
+        if (!validDate)
+        {
+            messages.Add(dateError ?? "Awarded date is not valid.");
+            return false;
+        }
+
+        var result = await Diplomas.SaveDiplomaDesignAsync(Session.CurrentUser, new SaveDiplomaDesignCommand(
+            designer.StudentId,
+            designEdit.TemplateId,
+            designEdit.PageSize,
+            designEdit.HomeschoolName,
+            designEdit.CertifiesText,
+            designEdit.StudentName,
+            designEdit.CompletionText,
+            designEdit.DiplomaTitle,
+            designEdit.PrivilegesText,
+            designEdit.AwardedText,
+            awardedDate,
+            designEdit.SignatureLabel,
+            designEdit.DateLabel,
+            designEdit.SealText,
+            designEdit.TextStyles.Select(style => new DiplomaTextStyleView(style.ElementKey, style.Label, style.FontFamily, style.FontSize, style.Uppercase, style.LetterSpacing)).ToArray()));
+        if (result.Succeeded)
+        {
+            lastActionSucceeded = true;
+            if (showSuccessMessage)
+            {
+                messages.Add("Diploma design saved.");
+            }
+
+            await LoadAsync(designer.StudentId);
+            return true;
+        }
+
+        messages.AddRange(result.Errors);
+        return false;
+    }
+
+    private async Task HandleSaveResultAsync(HomeschoolManager.Application.Common.OperationResult result, string successMessage)
+    {
+        if (result.Succeeded)
+        {
+            lastActionSucceeded = true;
+            messages.Add(successMessage);
+            await LoadAsync(designer?.StudentId);
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task DownloadDiplomaAsync()
+    {
+        if (Session.CurrentUser is null || designer is null)
+        {
+            return;
+        }
+
+        if (!await SaveDiplomaDesignInternalAsync(showSuccessMessage: false))
+        {
+            return;
+        }
+
+        messages.Clear();
+        lastActionSucceeded = false;
+        var result = await Diplomas.CreateDiplomaPdfAsync(Session.CurrentUser, new CreateDiplomaPdfCommand(designer.StudentId));
+        if (!result.Succeeded || result.Value is null)
+        {
+            messages.AddRange(result.Errors);
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            result.Value.FileName,
+            result.Value.ContentType,
+            Convert.ToBase64String(result.Value.Content));
+        lastActionSucceeded = true;
+        messages.Add($"Downloaded {result.Value.FileName}.");
+        await LoadAsync(designer.StudentId);
+    }
+
+    private string StyleFor(string elementKey)
+    {
+        var style = designEdit?.TextStyles.FirstOrDefault(item => string.Equals(item.ElementKey, elementKey, StringComparison.OrdinalIgnoreCase));
+        if (style is null)
+        {
+            return "";
+        }
+
+        var transform = style.Uppercase ? "uppercase" : "none";
+        return $"font-family:'{style.FontFamily}', Georgia, serif; font-size:{style.FontSize}px; letter-spacing:{style.LetterSpacing}px; text-transform:{transform};";
+    }
+
+    private static string FontOptionStyle(string font)
+    {
+        return string.IsNullOrWhiteSpace(font) ? "" : $"font-family:'{font}', Georgia, serif;";
+    }
+
+    private string Display(string elementKey, string value)
+    {
+        var style = designEdit?.TextStyles.FirstOrDefault(item => string.Equals(item.ElementKey, elementKey, StringComparison.OrdinalIgnoreCase));
+        return style?.Uppercase == true ? value.ToUpperInvariant() : value;
+    }
+
+    private string AwardedPreviewDate()
+    {
+        return TryParseDate(designEdit?.AwardedDate ?? "", out var date, out _) && date.HasValue
+            ? date.Value.ToString("MMMM yyyy")
+            : "________________";
+    }
+
+    private static bool TryParseDate(string value, out DateOnly? date, out string? error)
+    {
+        date = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (DateOnly.TryParse(value, out var parsed))
+        {
+            date = parsed;
+            return true;
+        }
+
+        error = "Awarded date is not a valid date.";
+        return false;
+    }
+
+    private sealed class GraduationPlanEditModel
+    {
+        public string Title { get; set; } = "";
+        public string StandardsSummary { get; set; } = "";
+        public bool StandardsAccepted { get; set; }
+        public bool RequirementsSatisfiedOrWaived { get; set; }
+        public string ParentDecisionNotes { get; set; } = "";
+
+        public static GraduationPlanEditModel From(GraduationPlanView view)
+        {
+            return new GraduationPlanEditModel
+            {
+                Title = view.Title,
+                StandardsSummary = view.StandardsSummary,
+                StandardsAccepted = view.StandardsAccepted,
+                RequirementsSatisfiedOrWaived = view.RequirementsSatisfiedOrWaived,
+                ParentDecisionNotes = view.ParentDecisionNotes
+            };
+        }
+    }
+
+    private sealed class DiplomaDesignEditModel
+    {
+        public string TemplateId { get; set; } = "";
+        public string PageSize { get; set; } = "";
+        public string HomeschoolName { get; set; } = "";
+        public string CertifiesText { get; set; } = "";
+        public string StudentName { get; set; } = "";
+        public string CompletionText { get; set; } = "";
+        public string DiplomaTitle { get; set; } = "";
+        public string PrivilegesText { get; set; } = "";
+        public string AwardedText { get; set; } = "";
+        public string AwardedDate { get; set; } = "";
+        public string SignatureLabel { get; set; } = "";
+        public string DateLabel { get; set; } = "";
+        public string SealText { get; set; } = "";
+        public List<DiplomaTextStyleEditModel> TextStyles { get; set; } = [];
+
+        public static DiplomaDesignEditModel From(DiplomaDesignView view)
+        {
+            return new DiplomaDesignEditModel
+            {
+                TemplateId = view.TemplateId,
+                PageSize = view.PageSize,
+                HomeschoolName = view.HomeschoolName,
+                CertifiesText = view.CertifiesText,
+                StudentName = view.StudentName,
+                CompletionText = view.CompletionText,
+                DiplomaTitle = view.DiplomaTitle,
+                PrivilegesText = view.PrivilegesText,
+                AwardedText = view.AwardedText,
+                AwardedDate = view.AwardedDate?.ToString("yyyy-MM-dd") ?? "",
+                SignatureLabel = view.SignatureLabel,
+                DateLabel = view.DateLabel,
+                SealText = view.SealText,
+                TextStyles = view.TextStyles.Select(DiplomaTextStyleEditModel.From).ToList()
+            };
+        }
+    }
+
+    private sealed class DiplomaTextStyleEditModel
+    {
+        public string ElementKey { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string FontFamily { get; set; } = "";
+        public decimal FontSize { get; set; }
+        public bool Uppercase { get; set; }
+        public decimal LetterSpacing { get; set; }
+
+        public static DiplomaTextStyleEditModel From(DiplomaTextStyleView view)
+        {
+            return new DiplomaTextStyleEditModel
+            {
+                ElementKey = view.ElementKey,
+                Label = view.Label,
+                FontFamily = view.FontFamily,
+                FontSize = view.FontSize,
+                Uppercase = view.Uppercase,
+                LetterSpacing = view.LetterSpacing
+            };
+        }
+    }
+}

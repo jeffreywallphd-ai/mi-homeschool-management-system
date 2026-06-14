@@ -34,6 +34,14 @@ Transcript renderers must preserve grade-span truthfulness. A requested high-sch
 
 Transcript packets may be generated as a ZIP archive containing `transcript.html`, `manifest.json`, and `manifest.md`, and may also offer a single PDF packet version for easier sharing or printing. The manifest should include source course identifiers and transcript course record identifiers when present. The PDF packet should preserve the same transcript, course-description appendix, record-note, and source-summary content in one styled file with readable identity, summary, and course-table sections.
 
+## Diploma Rendering
+
+Diploma rendering should receive a complete, validated diploma design model from the application layer. The application layer must verify parent/admin access, accepted graduation readiness, awarded date, signature labeling, and legal wording boundaries before passing the model to a renderer.
+
+The diploma renderer should produce one landscape PDF suitable for printing on diploma cardstock. It must not paint a page background color. Borders, rule lines, corner ornamentation, seal text, signature line, date line, and diploma text are drawn over the transparent page surface.
+
+Line-level typography from the diploma design should be preserved where portable PDF output allows it. When a chosen local font cannot be embedded, the renderer may map the requested font family to a PDF-safe base font while preserving font size, uppercase styling, and letter spacing.
+
 ## Source Contracts
 
 Each renderer should receive a complete document model:

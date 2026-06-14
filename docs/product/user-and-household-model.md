@@ -47,6 +47,17 @@ Required concepts:
 - Diploma signature name.
 - Diploma issue city and state.
 
+## First-Run Setup Gate
+
+Before the parent/admin can use the planning, requirements, gradebook, transcript, diploma, portfolio, or preview areas, the Setup area must have all required starter records saved:
+
+- Household.
+- School profile.
+- At least one child.
+- School year and terms.
+
+Until those records are complete, the parent/admin navigation should expose Setup only, and direct links to other parent/admin pages should return the parent to Setup. This avoids partially initialized screens that cannot function without the basic family, school, student, and year context. Login remains available, and student-facing routes remain governed by the separate student access rules.
+
 ## Access Principle
 
 Parent-first does not mean parent-only. Student workflows are allowed, and older students should be able to meaningfully author their portfolio. High-stakes finalization still passes through explicit parent-owned approval commands.

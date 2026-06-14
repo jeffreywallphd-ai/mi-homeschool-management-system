@@ -15,6 +15,9 @@
 - [ADR-0003: Records and Credentials Module From the Start](ADR-0003-records-and-credentials-module-from-start.md)
 - [ADR-0004: Local-First Parent PC Data Ownership](ADR-0004-local-first-parent-pc-data-ownership.md)
 - [ADR-0005: Parent-Defined Graduation Standards Before Diploma](ADR-0005-parent-defined-graduation-standards-before-diploma.md)
+- [ADR-0006: Production Installer Update and Local Sharing](ADR-0006-production-installer-update-and-local-sharing.md)
+- [ADR-0007: Background Service Mode and Machine Data Root](ADR-0007-background-service-mode-and-machine-data-root.md)
+- [ADR-0008: Parent-Authorized Encrypted External Backups](ADR-0008-parent-authorized-encrypted-external-backups.md)
 
 ## Rule
 

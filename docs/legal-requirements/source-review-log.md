@@ -21,6 +21,7 @@
 | 2026-06-06 | MDE Exemption (f), MCL 380.1561, and MMC overview refresh | Supports displaying statutory rows as the core source and omitting duplicated MDE/MMC aliases in parent-facing requirement lists. |
 | 2026-06-12 | MDE Exemption (f) Home School page refresh for transcript packet wording | No change to project posture. Transcript wording remains family-issued, parent-owned, and avoids state approval, accreditation, compliance, or MDE submission claims. |
 | 2026-06-12 | MDE Exemption (f) Home School page and MCL 380.1561 refresh for transcript coverage wording | No change to project posture. Partial transcript coverage wording remains a records-accuracy statement, not legal compliance, approval, accreditation, or MDE submission guidance. |
+| 2026-06-13 | MDE Exemption (f) Home School page and MCL 380.1561 refresh for diploma wording | No change to project posture. Diploma wording remains family-issued and parent-owned; the system avoids state approval, accreditation, legal certification, legal-compliance, or MDE issuance claims. |
 
 ## Source URLs
 

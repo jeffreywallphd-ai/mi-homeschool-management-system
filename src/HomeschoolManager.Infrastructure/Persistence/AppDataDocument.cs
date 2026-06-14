@@ -43,5 +43,9 @@ public sealed class AppDataDocument
 
     public List<TranscriptCourseRecord> TranscriptCourseRecords { get; set; } = [];
 
+    public List<GraduationPlan> GraduationPlans { get; set; } = [];
+
+    public List<DiplomaDesign> DiplomaDesigns { get; set; } = [];
+
     public List<CoursePackDefinition> InstalledCoursePacks { get; set; } = [];
 }

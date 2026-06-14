@@ -32,4 +32,20 @@ public sealed class AppDataPaths
     public string DatabasePath => Path.Combine(DataDirectory, "homeschool.db");
 
     public string FilesDirectory => Path.Combine(DataRoot, "files");
+
+    public string TemplatesDirectory => Path.Combine(DataRoot, "templates");
+
+    public string BackupsDirectory => Path.Combine(DataRoot, "backups");
+
+    public string AutomaticBackupsDirectory => Path.Combine(BackupsDirectory, "automatic");
+
+    public string ManualBackupsDirectory => Path.Combine(BackupsDirectory, "manual");
+
+    public string ExportsDirectory => Path.Combine(BackupsDirectory, "exports");
+
+    public string LogsDirectory => Path.Combine(DataRoot, "logs");
+
+    public string ConfigDirectory => Path.Combine(DataRoot, "config");
+
+    public string SecretsDirectory => Path.Combine(DataRoot, "secrets");
 }

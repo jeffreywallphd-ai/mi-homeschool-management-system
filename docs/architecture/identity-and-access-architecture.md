@@ -22,6 +22,11 @@ access on port `5172`, with the student listener bound for same Wi-Fi access. Th
 student routes to the student portal, and the student build should not serve parent/admin setup, course editing,
 requirement mapping, records, backup/restore, or admin routes.
 
+Production uses a desktop host to start both portals. The parent/admin and student portals are independently configurable
+for same-computer access or household Wi-Fi access. Same-computer access binds to `127.0.0.1`. Wi-Fi access is explicit,
+uses the selected local network address when provided, and must not expose parent/admin capabilities through the student
+portal.
+
 Parent/admin may have a student preview route inside the admin build. This preview is for reviewing the course, module,
 lesson, and assignment material assigned to a student. It is distinct from the live student portal, runs in the
 parent/admin build, and should not expose student submissions or other student-owned submission activity.

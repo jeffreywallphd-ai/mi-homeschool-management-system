@@ -47,6 +47,10 @@ Course descriptions may be included with a transcript packet as supporting mater
 
 A diploma is family-issued based on parent-defined graduation standards. Diploma generation must not imply state approval, accreditation, or MDE issuance.
 
+Diploma generation must be blocked until the parent/admin has accepted parent-defined graduation standards, marked requirements satisfied or explicitly waived, supplied an awarded date, and supplied parent/admin signature labeling. A diploma design may include editable wording and line-level typography, but saved or generated wording must not imply state approval, accreditation, legal certification, legal compliance, or MDE issuance.
+
+Diploma preview and PDF output should be printable on diploma cardstock. The rendered diploma must not paint a page background color; cardstock is responsible for the paper color. Decorative borders, rule lines, seal wording, signature lines, and date lines are presentation details layered over the transparent page.
+
 ## Course Description Packet
 
 A course-description packet explains courses deeply enough to support colleges, employers, trade schools, transfer evaluators, or personal archives.

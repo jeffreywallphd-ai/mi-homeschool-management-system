@@ -11,7 +11,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">
+        <a class="navbar-brand" href="@BrandHref">
             <img class="hm-nav-brand-icon" src="icons/hm/svg/currentcolor/brand-shield-book.svg" alt="" aria-hidden="true" />
             <span>Homeschool Manager</span>
         </a>
@@ -41,91 +41,115 @@
         else
         {
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-home.svg" alt="" aria-hidden="true" /> Home
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
                 <NavLink class="nav-link" href="setup">
                     <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-setup-gear.svg" alt="" aria-hidden="true" /> Setup
                 </NavLink>
             </div>
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="requirements">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-requirements-clipboard.svg" alt="" aria-hidden="true" /> Requirements
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="courses">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" aria-hidden="true" /> Courses
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="gradebook">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/report-table.svg" alt="" aria-hidden="true" /> Gradebook
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="transcript">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/metric-credit-award.svg" alt="" aria-hidden="true" /> Transcript
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="portfolio">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" aria-hidden="true" /> Portfolio
-                </NavLink>
-            </div>
-
-            <details class="nav-item px-3 student-preview-nav">
-                <summary class="nav-link">
-                    <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-student-preview-eye.svg" alt="" aria-hidden="true" /> Student Preview
-                </summary>
-                @if (students.Count == 0)
-                {
-                    <span class="course-subnav-link student-preview-empty">No children configured</span>
-                }
-                else
-                {
-                    @foreach (var student in students)
-                    {
-                        <NavLink class="nav-link course-subnav-link" href="@($"student-preview/{student.Id}")">
-                            @student.DisplayName
-                        </NavLink>
-                    }
-                }
-            </details>
-
-            @if (activeCourse is not null)
+            @if (setupSummary?.IsComplete == true)
             {
-                <div class="course-subnav px-3">
-                    <div class="course-subnav-heading">@activeCourse.Title</div>
-                    <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}")">Overview</NavLink>
-                    <div class="course-subnav-heading course-modules-heading">Course Modules</div>
-                    @foreach (var module in activeCourse.Modules)
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-home.svg" alt="" aria-hidden="true" /> Home
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="requirements">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-requirements-clipboard.svg" alt="" aria-hidden="true" /> Requirements
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="courses">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-courses-book.svg" alt="" aria-hidden="true" /> Courses
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="gradebook">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/report-table.svg" alt="" aria-hidden="true" /> Gradebook
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="transcript">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/metric-credit-award.svg" alt="" aria-hidden="true" /> Transcript
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="diploma">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" aria-hidden="true" /> Diploma
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="portfolio">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/form-course-description-document.svg" alt="" aria-hidden="true" /> Portfolio
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="backups">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/action-archive.svg" alt="" aria-hidden="true" /> Backup & Restore
+                    </NavLink>
+                </div>
+
+                <details class="nav-item px-3 student-preview-nav">
+                    <summary class="nav-link">
+                        <img class="hm-nav-icon" src="icons/hm/svg/currentcolor/nav-student-preview-eye.svg" alt="" aria-hidden="true" /> Student Preview
+                    </summary>
+                    @if (students.Count == 0)
                     {
-                        <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/{module.Id}")">
-                            @module.SequenceOrder. @module.Title
-                        </NavLink>
+                        <span class="course-subnav-link student-preview-empty">No children configured</span>
                     }
-                    @if (Session.IsParentAdmin)
+                    else
                     {
-                        <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/new")">+ New Module</NavLink>
+                        @foreach (var student in students)
+                        {
+                            <NavLink class="nav-link course-subnav-link" href="@($"student-preview/{student.Id}")">
+                                @student.DisplayName
+                            </NavLink>
+                        }
                     }
+                </details>
+
+                @if (activeCourse is not null)
+                {
+                    <div class="course-subnav px-3">
+                        <div class="course-subnav-heading">@activeCourse.Title</div>
+                        <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}")">Overview</NavLink>
+                        <div class="course-subnav-heading course-modules-heading">Course Modules</div>
+                        @foreach (var module in activeCourse.Modules)
+                        {
+                            <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/{module.Id}")">
+                                @module.SequenceOrder. @module.Title
+                            </NavLink>
+                        }
+                        @if (Session.IsParentAdmin)
+                        {
+                            <NavLink class="nav-link course-subnav-link" href="@($"courses/{activeCourse.Id}/modules/new")">+ New Module</NavLink>
+                        }
+                    </div>
+                }
+
+                <div class="michigan-plan-card mx-3">
+                    <img class="hm-icon" src="icons/hm/svg/currentcolor/nav-michigan-plans-crown.svg" alt="" aria-hidden="true" />
+                    <strong>Michigan Plans</strong>
+                    <span>Manage curriculum plans and requirement mappings.</span>
+                    <NavLink class="michigan-plan-link" href="setup">Go to Setup</NavLink>
                 </div>
             }
-
-            <div class="michigan-plan-card mx-3">
-                <img class="hm-icon" src="icons/hm/svg/currentcolor/nav-michigan-plans-crown.svg" alt="" aria-hidden="true" />
-                <strong>Michigan Plans</strong>
-                <span>Manage curriculum plans and requirement mappings.</span>
-                <NavLink class="michigan-plan-link" href="setup">Go to Setup</NavLink>
-            </div>
+            else
+            {
+                <div class="michigan-plan-card mx-3">
+                    <img class="hm-icon" src="icons/hm/svg/currentcolor/nav-setup-gear.svg" alt="" aria-hidden="true" />
+                    <strong>Finish Setup</strong>
+                    <span>Complete and save the required setup fields to unlock the rest of the app.</span>
+                    <NavLink class="michigan-plan-link" href="setup">Open Setup</NavLink>
+                </div>
+            }
         }
     </nav>
 </div>
@@ -133,19 +157,24 @@
 @code {
     private CourseDetail? activeCourse;
     private IReadOnlyList<StudentSetupItem> students = [];
+    private SetupSummary? setupSummary;
+    private string BrandHref => Session.IsParentAdmin && setupSummary?.IsComplete != true ? "setup" : "";
 
     protected override void OnInitialized()
     {
         Session.Changed += OnSessionChanged;
         CourseService.CourseNavigationChanged += OnCourseNavigationChanged;
+        SetupService.SetupChanged += OnSetupChanged;
         SetupService.StudentsChanged += OnStudentsChanged;
         NavigationManager.LocationChanged += OnLocationChanged;
+        _ = RefreshSetupSummaryAsync();
         _ = RefreshCourseNavigationAsync();
         _ = RefreshStudentsAsync();
     }
 
     private void OnSessionChanged()
     {
+        _ = RefreshSetupSummaryAsync();
         _ = RefreshCourseNavigationAsync();
         _ = RefreshStudentsAsync();
     }
@@ -158,6 +187,12 @@
     private void OnCourseNavigationChanged()
     {
         _ = RefreshCourseNavigationAsync();
+    }
+
+    private void OnSetupChanged()
+    {
+        _ = RefreshSetupSummaryAsync();
+        _ = RefreshStudentsAsync();
     }
 
     private void OnStudentsChanged()
@@ -177,9 +212,27 @@
     private async Task RefreshCourseNavigationAsync()
     {
         activeCourse = null;
-        if (Session.IsParentAdmin && TryGetCourseIdFromCurrentLocation(out var courseId))
+        if (Session.IsParentAdmin && setupSummary?.IsComplete == true && TryGetCourseIdFromCurrentLocation(out var courseId))
         {
             activeCourse = await CourseService.GetCourseDetailAsync(courseId);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshSetupSummaryAsync()
+    {
+        setupSummary = Session.IsParentAdmin
+            ? await SetupService.GetSummaryAsync()
+            : null;
+
+        if (setupSummary?.IsComplete != true)
+        {
+            activeCourse = null;
+        }
+        else
+        {
+            await RefreshCourseNavigationAsync();
         }
 
         await InvokeAsync(StateHasChanged);
@@ -201,6 +254,7 @@
     {
         Session.Changed -= OnSessionChanged;
         CourseService.CourseNavigationChanged -= OnCourseNavigationChanged;
+        SetupService.SetupChanged -= OnSetupChanged;
         SetupService.StudentsChanged -= OnStudentsChanged;
         NavigationManager.LocationChanged -= OnLocationChanged;
     }

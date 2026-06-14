@@ -33,3 +33,8 @@ Product direction and long-term sequencing belong in `docs/product/roadmap.md`. 
 - [Student Course Client Roadmap](student-course-client-roadmap.md)
 - [Student Portfolio Creation and Preview Roadmap](student-portfolio-builder-roadmap.md)
 - [Transcript with Course Descriptions Roadmap](transcript-with-course-descriptions-roadmap.md)
+- [Diploma Creation and Design Roadmap](diploma-creation-design-roadmap.md)
+- [Production Installer Update Roadmap](production-installer-update-roadmap.md)
+- [Background Service Production Mode Roadmap](background-service-production-mode-roadmap.md)
+- [Local Backup and Restore Roadmap](local-backup-and-restore-roadmap.md)
+- [Google Drive and Email Backup Roadmap](google-drive-and-email-backup-roadmap.md)

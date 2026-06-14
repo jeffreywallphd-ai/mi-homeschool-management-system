@@ -396,6 +396,7 @@ internal static class TranscriptPdfRenderer
         {
             current.AppendLine("BT");
             current.Append('/').Append(FontName(font)).Append(' ').Append(Format(size)).AppendLine(" Tf");
+            TextFill(17, 18, 39);
             current.Append(Format(x)).Append(' ').Append(Format(baseline)).AppendLine(" Td");
             current.Append('(').Append(Escape(value)).AppendLine(") Tj");
             current.AppendLine("ET");
@@ -417,6 +418,11 @@ internal static class TranscriptPdfRenderer
         }
 
         private void Fill(int r, int g, int b)
+        {
+            current.Append(Format(r / 255m)).Append(' ').Append(Format(g / 255m)).Append(' ').Append(Format(b / 255m)).AppendLine(" rg");
+        }
+
+        private void TextFill(int r, int g, int b)
         {
             current.Append(Format(r / 255m)).Append(' ').Append(Format(g / 255m)).Append(' ').Append(Format(b / 255m)).AppendLine(" rg");
         }

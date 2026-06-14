@@ -17,6 +17,9 @@
 - Records and credentials supported from the beginning.
 - Parent-defined graduation standards required before diploma generation.
 - Parent/admin login with simple local/Windows credentials, student PIN access, and strict parent/student roles.
+- Production distribution uses a desktop host plus Velopack packaging, with per-portal localhost/Wi-Fi sharing settings.
+- Optional background service production mode uses `%PROGRAMDATA%/HomeschoolManager` as the protected machine-level data root.
+- Optional Google Drive and Gmail backup destinations are allowed only for parent-authorized encrypted full backups under ADR-0008.
 - xUnit-centered testing with bUnit/Playwright added for critical Blazor flows.
 - Tight contracts across UI, application, domain, infrastructure, and tests.
 
@@ -28,7 +31,7 @@
 | Document renderer library | Deferred | Evaluate when implementing generation |
 | PDF engine | Deferred | Evaluate security, portability, licensing, and rendering quality |
 | Automatic backup schedule | Deferred | Manual backup can precede scheduling |
-| Encryption at rest | Deferred | Treat as privacy/security decision requiring review |
+| General encryption at rest | Deferred | Treat broad database/file encryption as a separate privacy/security decision requiring review |
 | Additional jurisdictions | Deferred | Keep model extensible, but seed Michigan first |
 
 ## Escalation Rule

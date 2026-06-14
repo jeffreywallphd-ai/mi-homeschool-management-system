@@ -1,0 +1,948 @@
+@page "/backups"
+@rendermode InteractiveServer
+@using HomeschoolManager.Application.Backups
+@using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.WebUtilities
+@inject BackupService BackupService
+@inject RemoteBackupService RemoteBackupService
+@inject SessionState Session
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Backup & Restore</PageTitle>
+
+@if (!Session.IsParentAdmin)
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/action-archive.svg" alt="" />
+            </span>
+            <h1>Backup & Restore</h1>
+            <p>Create and restore full local backups of family records.</p>
+        </div>
+    </div>
+    <div class="alert alert-warning">Sign in as parent/admin to manage backups.</div>
+}
+else
+{
+    <div class="page-header-bar">
+        <div>
+            <span class="hm-icon-tile" aria-hidden="true">
+                <img class="hm-icon-lg" src="icons/hm/svg/currentcolor/action-archive.svg" alt="" />
+            </span>
+            <h1>Backup & Restore</h1>
+            <p>Create full local backup ZIP files and restore from a validated backup when needed.</p>
+        </div>
+        <button class="btn btn-primary" type="button" @onclick="CreateBackupAsync" disabled="@busy">
+            Create full backup
+        </button>
+    </div>
+
+    @foreach (var message in messages)
+    {
+        <div class="alert @(lastActionSucceeded ? "alert-success" : "alert-warning")">@message</div>
+    }
+
+    <div class="dashboard-grid backup-workbench">
+        <main class="dashboard-main">
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Manual backup</h2>
+                        <p class="form-text">A full backup includes source records, stored files, templates, configuration, manifest, and checksums.</p>
+                    </div>
+                </div>
+
+                @if (latestCreatedBackup is null)
+                {
+                    <p>No backup has been created in this session yet.</p>
+                }
+                else
+                {
+                    <dl class="backup-summary-grid">
+                        <div>
+                            <dt>Backup file</dt>
+                            <dd>@latestCreatedBackup.FileName</dd>
+                        </div>
+                        <div>
+                            <dt>Created</dt>
+                            <dd>@latestCreatedBackup.Manifest.CreatedAtUtc.ToLocalTime().ToString("g")</dd>
+                        </div>
+                        <div>
+                            <dt>Files</dt>
+                            <dd>@latestCreatedBackup.Manifest.FileCount</dd>
+                        </div>
+                        <div>
+                            <dt>Size</dt>
+                            <dd>@FormatBytes(latestCreatedBackup.Content.LongLength)</dd>
+                        </div>
+                    </dl>
+                    <button class="btn btn-outline-primary" type="button" @onclick="DownloadLatestCreatedAsync">
+                        Download latest backup
+                    </button>
+                }
+            </section>
+
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Encrypted off-computer backup</h2>
+                        <p class="form-text">Create a passphrase-protected copy before saving a backup outside this PC.</p>
+                    </div>
+                </div>
+
+                <label class="form-label" for="remote-passphrase">Backup passphrase *</label>
+                <input id="remote-passphrase" class="form-control" type="password" @bind="remotePassphrase" autocomplete="new-password" />
+                <p class="form-text">Keep this passphrase somewhere safe. Homeschool Manager cannot recover it.</p>
+
+                <div class="button-row">
+                    <button class="btn btn-outline-primary" type="button" @onclick="CreateEncryptedBackupDownloadAsync" disabled="@busy">
+                        Download encrypted backup
+                    </button>
+                    <button class="btn btn-primary" type="button" @onclick="UploadGoogleDriveBackupAsync" disabled="@(!CanUseGoogle || busy)">
+                        Save to Google Drive
+                    </button>
+                </div>
+
+                <div class="backup-email-row">
+                    <label class="form-label" for="backup-email">Email recipient</label>
+                    <input id="backup-email" class="form-control" type="email" @bind="backupEmailRecipient" />
+                    <button class="btn btn-outline-primary" type="button" @onclick="CreateGmailDraftAsync" disabled="@(!CanUseGoogle || busy)">
+                        Create Gmail draft
+                    </button>
+                </div>
+
+                <p class="form-text">Gmail drafts are intended for smaller encrypted backups. Larger backups should use Google Drive.</p>
+            </section>
+
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Restore from backup</h2>
+                        <p class="form-text">Choose a full backup ZIP. Homeschool Manager validates it before restore is available.</p>
+                    </div>
+                </div>
+
+                <label class="form-label" for="backup-file">Backup ZIP</label>
+                <InputFile id="backup-file" class="form-control" OnChange="OnBackupFileSelectedAsync" accept=".zip,application/zip" />
+
+                @if (selectedBackupName.Length > 0)
+                {
+                    <div class="backup-selected-file">
+                        <strong>@selectedBackupName</strong>
+                        <span>@FormatBytes(selectedBackupBytes?.LongLength ?? 0)</span>
+                    </div>
+                }
+
+                @if (validationReport is not null)
+                {
+                    <section class="backup-validation-card @(validationReport.IsValid ? "is-valid" : "is-invalid")">
+                        <h3>@(validationReport.IsValid ? "Backup looks ready" : "Backup cannot be restored yet")</h3>
+                        @if (validationReport.Manifest is not null)
+                        {
+                            <dl class="backup-summary-grid">
+                                <div>
+                                    <dt>Created</dt>
+                                    <dd>@validationReport.Manifest.CreatedAtUtc.ToLocalTime().ToString("g")</dd>
+                                </div>
+                                <div>
+                                    <dt>Household</dt>
+                                    <dd>@Blank(validationReport.Manifest.HouseholdName)</dd>
+                                </div>
+                                <div>
+                                    <dt>School</dt>
+                                    <dd>@Blank(validationReport.Manifest.SchoolName)</dd>
+                                </div>
+                                <div>
+                                    <dt>Students</dt>
+                                    <dd>@validationReport.Manifest.Students.Count</dd>
+                                </div>
+                            </dl>
+                        }
+                        @if (validationReport.Errors.Count > 0)
+                        {
+                            <ul class="backup-message-list">
+                                @foreach (var error in validationReport.Errors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        }
+                        @if (validationReport.Warnings.Count > 0)
+                        {
+                            <ul class="backup-message-list">
+                                @foreach (var warning in validationReport.Warnings)
+                                {
+                                    <li>@warning</li>
+                                }
+                            </ul>
+                        }
+                    </section>
+                }
+
+                @if (restorePreview is not null)
+                {
+                    <section class="backup-restore-confirm">
+                        <h3>Restore preview</h3>
+                        <p>Restoring replaces the current Homeschool Manager records with the records from this backup.</p>
+                        <p><strong>@restorePreview.SafetyBackupMessage</strong></p>
+                        <div class="checkbox-row">
+                            <input id="confirm-restore" class="form-check-input" type="checkbox" @bind="confirmRestore" />
+                            <label class="form-check-label" for="confirm-restore">I understand this will replace the current records after creating a safety backup.</label>
+                        </div>
+                        <button class="btn btn-danger" type="button" @onclick="RestoreSelectedBackupAsync" disabled="@(!confirmRestore || busy)">
+                            Restore this backup
+                        </button>
+                    </section>
+                }
+            </section>
+        </main>
+
+        <aside class="dashboard-support">
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Google backup</h2>
+                        <p class="form-text">Connect a parent-owned Google account for encrypted Drive backups and Gmail drafts.</p>
+                    </div>
+                </div>
+
+                <label class="form-label" for="google-client-id">Google OAuth client ID *</label>
+                <input id="google-client-id" class="form-control" @bind="googleClientId" />
+                <div class="button-row">
+                    <button class="btn btn-outline-primary" type="button" @onclick="SaveGoogleSettingsAsync" disabled="@busy">Save</button>
+                    <button class="btn btn-primary" type="button" @onclick="StartGoogleConnectionAsync" disabled="@busy">Connect Google</button>
+                </div>
+
+                @if (remoteStatus is not null)
+                {
+                    <dl class="backup-summary-grid">
+                        <div>
+                            <dt>Status</dt>
+                            <dd>@(remoteStatus.Configuration.IsGoogleConnected ? "Connected" : "Not connected")</dd>
+                        </div>
+                        <div>
+                            <dt>Last Drive backup</dt>
+                            <dd>@FormatDate(remoteStatus.Configuration.LastDriveUploadAtUtc)</dd>
+                        </div>
+                        <div>
+                            <dt>Last Gmail draft</dt>
+                            <dd>@FormatDate(remoteStatus.Configuration.LastGmailDraftAtUtc)</dd>
+                        </div>
+                    </dl>
+
+                    @if (remoteStatus.Warnings.Count > 0)
+                    {
+                        <ul class="backup-message-list">
+                            @foreach (var warning in remoteStatus.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    }
+                }
+
+                <button class="btn btn-outline-danger" type="button" @onclick="DisconnectGoogleAsync" disabled="@(!CanUseGoogle || busy)">
+                    Disconnect Google
+                </button>
+            </section>
+
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Restore from Google Drive</h2>
+                        <p class="form-text">Download an encrypted Drive backup, unlock it here, and validate it before restore.</p>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" @onclick="() => LoadGoogleDriveBackupsAsync()" disabled="@(!CanUseGoogle || busy)">Refresh</button>
+                </div>
+
+                <label class="form-label" for="google-restore-passphrase">Backup passphrase *</label>
+                <input id="google-restore-passphrase" class="form-control" type="password" @bind="googleRestorePassphrase" autocomplete="current-password" />
+
+                @if (driveBackups.Count == 0)
+                {
+                    <p>No Google Drive backups loaded yet.</p>
+                }
+                else
+                {
+                    <div class="backup-history-list">
+                        @foreach (var item in driveBackups)
+                        {
+                            <article class="backup-history-item">
+                                <div>
+                                    <strong>@item.FileName</strong>
+                                    <small>@item.CreatedAtUtc.ToLocalTime().ToString("g")</small>
+                                    <small>@FormatBytes(item.SizeBytes)</small>
+                                </div>
+                                <div class="backup-history-actions">
+                                    <button class="btn btn-outline-primary" type="button" @onclick="() => PreviewGoogleDriveRestoreAsync(item.FileId)" disabled="@busy">Preview</button>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+
+                @if (googleRestorePreview is not null)
+                {
+                    <section class="backup-restore-confirm">
+                        <h3>Google restore preview</h3>
+                        <p>This will restore <strong>@googleRestorePreview.Manifest.HouseholdName</strong> from the selected encrypted Drive backup.</p>
+                        <p><strong>@googleRestorePreview.SafetyBackupMessage</strong></p>
+                        <div class="checkbox-row">
+                            <input id="confirm-google-restore" class="form-check-input" type="checkbox" @bind="confirmGoogleRestore" />
+                            <label class="form-check-label" for="confirm-google-restore">I understand this will replace current records after creating a safety backup.</label>
+                        </div>
+                        <button class="btn btn-danger" type="button" @onclick="RestoreGoogleDriveBackupAsync" disabled="@(!confirmGoogleRestore || busy)">
+                            Restore this Google backup
+                        </button>
+                    </section>
+                }
+            </section>
+
+            <section class="hm-card dashboard-card backup-panel">
+                <div class="section-heading-row">
+                    <div>
+                        <h2>Backup history</h2>
+                        <p class="form-text">Manual backups and restore safety backups stored on this computer.</p>
+                    </div>
+                    <button class="btn btn-outline-primary" type="button" @onclick="() => LoadHistoryAsync()" disabled="@busy">Refresh</button>
+                </div>
+
+                @if (history.Count == 0)
+                {
+                    <p>No saved backups found yet.</p>
+                }
+                else
+                {
+                    <div class="backup-history-list">
+                        @foreach (var item in history)
+                        {
+                            <article class="backup-history-item">
+                                <div>
+                                    <strong>@item.FileName</strong>
+                                    <small>@item.BackupKind backup · @item.CreatedAtUtc.ToLocalTime().ToString("g")</small>
+                                    <small>@FormatBytes(item.SizeBytes) · @item.StudentCount student@(item.StudentCount == 1 ? "" : "s")</small>
+                                </div>
+                                @if (item.Warnings.Count > 0)
+                                {
+                                    <ul>
+                                        @foreach (var warning in item.Warnings)
+                                        {
+                                            <li>@warning</li>
+                                        }
+                                    </ul>
+                                }
+                                <div class="backup-history-actions">
+                                    <button class="btn btn-outline-primary" type="button" @onclick="() => DownloadBackupAsync(item.BackupId)" disabled="@busy">Download</button>
+                                    <button class="btn btn-outline-danger" type="button" @onclick="() => AskDelete(item)" disabled="@busy">Delete</button>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </aside>
+    </div>
+
+    @if (deleteCandidate is not null)
+    {
+        <div class="modal-backdrop-lite">
+            <section class="hm-card confirm-dialog">
+                <h2>Delete backup?</h2>
+                <p>This removes <strong>@deleteCandidate.FileName</strong> from this computer. It does not change current records.</p>
+                <div class="checkbox-row">
+                    <input id="confirm-delete" class="form-check-input" type="checkbox" @bind="confirmDelete" />
+                    <label class="form-check-label" for="confirm-delete">I want to delete this backup file.</label>
+                </div>
+                <div class="dialog-actions">
+                    <button class="btn btn-outline-primary" type="button" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-danger" type="button" @onclick="DeleteBackupAsync" disabled="@(!confirmDelete || busy)">Delete backup</button>
+                </div>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    private const long MaxBackupUploadBytes = 512L * 1024L * 1024L;
+    private readonly List<string> messages = [];
+    private IReadOnlyList<BackupHistoryItem> history = [];
+    private IReadOnlyList<GoogleDriveBackupFile> driveBackups = [];
+    private RemoteBackupStatus? remoteStatus;
+    private BackupDownloadFile? latestCreatedBackup;
+    private BackupValidationReport? validationReport;
+    private BackupRestorePreview? restorePreview;
+    private BackupRestorePreview? googleRestorePreview;
+    private BackupHistoryItem? deleteCandidate;
+    private byte[]? selectedBackupBytes;
+    private string selectedBackupName = "";
+    private string googleClientId = "";
+    private string remotePassphrase = "";
+    private string backupEmailRecipient = "";
+    private string googleRestorePassphrase = "";
+    private string selectedGoogleDriveFileId = "";
+    private bool confirmRestore;
+    private bool confirmGoogleRestore;
+    private bool confirmDelete;
+    private bool lastActionSucceeded;
+    private bool busy;
+
+    private bool CanUseGoogle => remoteStatus?.Configuration.IsGoogleConnected == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        if (Session.IsParentAdmin)
+        {
+            await LoadHistoryAsync();
+            await LoadRemoteStatusAsync(clearMessages: false);
+            AddGoogleCallbackMessages();
+        }
+    }
+
+    private async Task CreateBackupAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await BackupService.CreateBackupAsync(Session.CurrentUser, new CreateBackupCommand());
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            latestCreatedBackup = result.Value;
+            messages.Add($"Created {result.Value.FileName}.");
+            await LoadHistoryAsync(clearMessages: false);
+            await DownloadLatestCreatedAsync();
+            return true;
+        });
+    }
+
+    private async Task CreateEncryptedBackupDownloadAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.CreateEncryptedBackupAsync(
+                Session.CurrentUser,
+                new CreateEncryptedBackupCommand(remotePassphrase));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            await DownloadEncryptedFileAsync(result.Value);
+            messages.Add($"Downloaded encrypted backup {result.Value.FileName}.");
+            await LoadHistoryAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task UploadGoogleDriveBackupAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.UploadGoogleDriveBackupAsync(
+                Session.CurrentUser,
+                new UploadGoogleDriveBackupCommand(remotePassphrase));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add($"Saved encrypted backup to Google Drive as {result.Value.FileName}.");
+            await LoadRemoteStatusAsync(clearMessages: false);
+            await LoadGoogleDriveBackupsAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task CreateGmailDraftAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.CreateGmailBackupDraftAsync(
+                Session.CurrentUser,
+                new CreateGmailBackupDraftCommand(remotePassphrase, backupEmailRecipient));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add($"Created a Gmail draft with {result.Value.FileName} attached.");
+            await LoadRemoteStatusAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task SaveGoogleSettingsAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.SaveGoogleSettingsAsync(
+                Session.CurrentUser,
+                new SaveGoogleBackupSettingsCommand(googleClientId));
+            if (!result.Succeeded)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add("Google backup settings saved.");
+            await LoadRemoteStatusAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task StartGoogleConnectionAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var redirectUri = new Uri(new Uri(Navigation.BaseUri), "backups/google/callback").ToString();
+            var result = await RemoteBackupService.StartGoogleConnectionAsync(
+                Session.CurrentUser,
+                new StartGoogleConnectionCommand(redirectUri));
+            if (!result.Succeeded || string.IsNullOrWhiteSpace(result.Value))
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            Navigation.NavigateTo(result.Value, forceLoad: true);
+            return true;
+        });
+    }
+
+    private async Task DisconnectGoogleAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.DisconnectGoogleAsync(Session.CurrentUser);
+            if (!result.Succeeded)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add("Google backup connection removed from this computer.");
+            driveBackups = [];
+            googleRestorePreview = null;
+            await LoadRemoteStatusAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task OnBackupFileSelectedAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        selectedBackupName = file.Name;
+        selectedBackupBytes = null;
+        validationReport = null;
+        restorePreview = null;
+        confirmRestore = false;
+        messages.Clear();
+        lastActionSucceeded = false;
+
+        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            messages.Add("Choose a Homeschool Manager backup ZIP file.");
+            return;
+        }
+
+        await using var stream = file.OpenReadStream(MaxBackupUploadBytes);
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        selectedBackupBytes = memory.ToArray();
+        await ValidateSelectedBackupAsync();
+    }
+
+    private async Task ValidateSelectedBackupAsync()
+    {
+        if (Session.CurrentUser is null || selectedBackupBytes is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var validation = await BackupService.ValidateBackupAsync(
+                Session.CurrentUser,
+                new ValidateBackupCommand(selectedBackupName, selectedBackupBytes));
+            if (!validation.Succeeded || validation.Value is null)
+            {
+                messages.AddRange(validation.Errors);
+                return false;
+            }
+
+            validationReport = validation.Value;
+            if (!validation.Value.IsValid)
+            {
+                messages.Add("This backup could not be validated for restore.");
+                return false;
+            }
+
+            var preview = await BackupService.PreviewRestoreAsync(
+                Session.CurrentUser,
+                new ValidateBackupCommand(selectedBackupName, selectedBackupBytes));
+            if (!preview.Succeeded || preview.Value is null)
+            {
+                messages.AddRange(preview.Errors);
+                return false;
+            }
+
+            restorePreview = preview.Value;
+            messages.Add("Backup validated. Review the restore preview before continuing.");
+            return true;
+        });
+    }
+
+    private async Task RestoreSelectedBackupAsync()
+    {
+        if (Session.CurrentUser is null || selectedBackupBytes is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await BackupService.RestoreBackupAsync(
+                Session.CurrentUser,
+                new RestoreBackupCommand(selectedBackupName, selectedBackupBytes, confirmRestore));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add($"Restored backup. A safety backup was saved as {result.Value.SafetyBackupFileName}.");
+            confirmRestore = false;
+            restorePreview = null;
+            await LoadHistoryAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task LoadHistoryAsync(bool clearMessages = true)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await BackupService.ListBackupsAsync(Session.CurrentUser);
+        if (result.Succeeded && result.Value is not null)
+        {
+            history = result.Value;
+            if (clearMessages)
+            {
+                messages.Clear();
+            }
+        }
+        else if (clearMessages)
+        {
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task LoadRemoteStatusAsync(bool clearMessages = true)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        var result = await RemoteBackupService.GetStatusAsync(Session.CurrentUser);
+        if (result.Succeeded && result.Value is not null)
+        {
+            remoteStatus = result.Value;
+            googleClientId = remoteStatus.Configuration.GoogleOAuthClientId;
+            if (clearMessages)
+            {
+                messages.Clear();
+            }
+        }
+        else if (clearMessages)
+        {
+            messages.Clear();
+            messages.AddRange(result.Errors);
+        }
+    }
+
+    private async Task LoadGoogleDriveBackupsAsync(bool clearMessages = true)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        if (clearMessages)
+        {
+            messages.Clear();
+        }
+
+        var result = await RemoteBackupService.ListGoogleDriveBackupsAsync(Session.CurrentUser);
+        if (result.Succeeded && result.Value is not null)
+        {
+            driveBackups = result.Value;
+            if (clearMessages)
+            {
+                messages.Add("Google Drive backup list refreshed.");
+                lastActionSucceeded = true;
+            }
+        }
+        else
+        {
+            messages.AddRange(result.Errors);
+            lastActionSucceeded = false;
+        }
+    }
+
+    private async Task PreviewGoogleDriveRestoreAsync(string driveFileId)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        selectedGoogleDriveFileId = driveFileId;
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.PreviewGoogleDriveRestoreAsync(
+                Session.CurrentUser,
+                new PreviewGoogleDriveRestoreCommand(driveFileId, googleRestorePassphrase));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            googleRestorePreview = result.Value;
+            confirmGoogleRestore = false;
+            messages.Add("Google Drive backup decrypted and validated. Review the restore preview before continuing.");
+            return true;
+        });
+    }
+
+    private async Task RestoreGoogleDriveBackupAsync()
+    {
+        if (Session.CurrentUser is null || string.IsNullOrWhiteSpace(selectedGoogleDriveFileId))
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.RestoreGoogleDriveBackupAsync(
+                Session.CurrentUser,
+                new RestoreGoogleDriveBackupCommand(selectedGoogleDriveFileId, googleRestorePassphrase, confirmGoogleRestore));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add($"Restored Google Drive backup. A safety backup was saved as {result.Value.SafetyBackupFileName}.");
+            googleRestorePreview = null;
+            confirmGoogleRestore = false;
+            await LoadHistoryAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task DownloadLatestCreatedAsync()
+    {
+        if (latestCreatedBackup is null)
+        {
+            return;
+        }
+
+        await DownloadFileAsync(latestCreatedBackup);
+    }
+
+    private async Task DownloadBackupAsync(string backupId)
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await BackupService.DownloadBackupAsync(Session.CurrentUser, new DownloadBackupCommand(backupId));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            await DownloadFileAsync(result.Value);
+            messages.Add($"Downloaded {result.Value.FileName}.");
+            return true;
+        });
+    }
+
+    private void AskDelete(BackupHistoryItem item)
+    {
+        deleteCandidate = item;
+        confirmDelete = false;
+    }
+
+    private void CancelDelete()
+    {
+        deleteCandidate = null;
+        confirmDelete = false;
+    }
+
+    private async Task DeleteBackupAsync()
+    {
+        if (Session.CurrentUser is null || deleteCandidate is null)
+        {
+            return;
+        }
+
+        var candidate = deleteCandidate;
+        await RunAsync(async () =>
+        {
+            var result = await BackupService.DeleteBackupAsync(
+                Session.CurrentUser,
+                new DeleteBackupCommand(candidate.BackupId, confirmDelete));
+            if (!result.Succeeded)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            messages.Add($"Deleted {candidate.FileName}.");
+            deleteCandidate = null;
+            confirmDelete = false;
+            await LoadHistoryAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task RunAsync(Func<Task<bool>> action)
+    {
+        busy = true;
+        messages.Clear();
+        lastActionSucceeded = false;
+        try
+        {
+            lastActionSucceeded = await action();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or System.Security.Cryptography.CryptographicException)
+        {
+            messages.Add(ex.Message);
+            lastActionSucceeded = false;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task DownloadFileAsync(BackupDownloadFile file)
+    {
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            file.FileName,
+            file.ContentType,
+            Convert.ToBase64String(file.Content));
+    }
+
+    private async Task DownloadEncryptedFileAsync(EncryptedBackupDownloadFile file)
+    {
+        await JS.InvokeVoidAsync(
+            "homeschoolFiles.downloadBase64",
+            file.FileName,
+            file.ContentType,
+            Convert.ToBase64String(file.Content));
+    }
+
+    private void AddGoogleCallbackMessages()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("google", out var google) && google == "connected")
+        {
+            messages.Add("Google backup is connected.");
+            lastActionSucceeded = true;
+        }
+
+        if (query.TryGetValue("googleError", out var googleError))
+        {
+            messages.Add(googleError.ToString());
+            lastActionSucceeded = false;
+        }
+    }
+
+    private static string Blank(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Not recorded" : value;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024L * 1024L)
+        {
+            return $"{bytes / 1024d / 1024d:0.0} MB";
+        }
+
+        if (bytes >= 1024L)
+        {
+            return $"{bytes / 1024d:0.0} KB";
+        }
+
+        return $"{bytes} bytes";
+    }
+
+    private static string FormatDate(DateTimeOffset? date)
+    {
+        return date?.ToLocalTime().ToString("g") ?? "Not yet";
+    }
+}

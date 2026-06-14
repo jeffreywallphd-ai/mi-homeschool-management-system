@@ -1,4 +1,5 @@
 using HomeschoolManager.Application.Assessments;
+using HomeschoolManager.Application.Backups;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Portfolio;
 using HomeschoolManager.Application.Records;
@@ -19,6 +20,7 @@ using HomeschoolManager.Infrastructure.Configuration;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using HomeschoolManager.Infrastructure.Production;
 
 var tests = new List<(string Name, Func<Task> Test)>
 {
@@ -49,7 +51,12 @@ var tests = new List<(string Name, Func<Task> Test)>
         var service = new SetupService(repository);
         var parent = UserContext.ParentAdmin("Parent");
 
+        var initialSummary = await service.GetSummaryAsync();
+        AssertFalse(initialSummary.IsComplete, "Empty setup should not unlock navigation.");
+        AssertTrue(initialSummary.MissingRequiredAreas?.Contains("Household") == true, "Empty setup should report missing household.");
+
         AssertTrue((await service.CreateHouseholdAsync(parent, new CreateHouseholdCommand("Family", "Parent"))).Succeeded, "Household failed.");
+        AssertFalse((await service.GetSummaryAsync()).IsComplete, "Household alone should not unlock navigation.");
         AssertTrue((await service.ConfigureSchoolProfileAsync(parent, new ConfigureSchoolProfileCommand(
             "Family Homeschool",
             "Parent",
@@ -59,7 +66,9 @@ var tests = new List<(string Name, Func<Task> Test)>
             "Parent",
             "Lansing",
             "Michigan"))).Succeeded, "School profile failed.");
+        AssertFalse((await service.GetSummaryAsync()).IsComplete, "Household and school profile should not unlock navigation without a student and school year.");
         AssertTrue((await service.CreateStudentAsync(parent, new CreateStudentCommand("Student", "Learner", 12))).Succeeded, "Student failed.");
+        AssertFalse((await service.GetSummaryAsync()).IsComplete, "Setup should stay locked until school year is saved.");
         AssertTrue((await service.ConfigureSchoolYearAsync(parent, new ConfigureSchoolYearCommand(
             "2026-2027",
             2026,
@@ -74,6 +83,22 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(summary.HasSchoolProfile, "Missing school profile.");
         AssertTrue(summary.HasStudent, "Missing student.");
         AssertTrue(summary.HasSchoolYear, "Missing school year.");
+        AssertTrue(summary.IsComplete, "Complete setup should unlock navigation.");
+        AssertEqual(0, summary.MissingRequiredAreas?.Count ?? -1, "Complete setup should not report missing areas.");
+    }),
+    ("Admin navigation is gated until setup is complete", () =>
+    {
+        var root = FindRepositoryRoot();
+        var nav = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Layout", "NavMenu.razor"));
+        var layout = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Layout", "MainLayout.razor"));
+        var setupPage = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Setup.razor"));
+
+        AssertTrue(nav.Contains("setupSummary?.IsComplete == true", StringComparison.Ordinal), "Parent/admin navigation should hide non-setup links until setup is complete.");
+        AssertTrue(nav.Contains("Finish Setup", StringComparison.Ordinal), "Navigation should explain why the rest of the app is not shown.");
+        AssertTrue(layout.Contains("EnsureSetupGateAsync", StringComparison.Ordinal), "Main layout should redirect direct links while setup is incomplete.");
+        AssertTrue(layout.Contains("Navigation.NavigateTo(\"/setup\"", StringComparison.Ordinal), "Incomplete setup should redirect parent/admin users to setup.");
+        AssertTrue(setupPage.Contains("MissingRequiredAreas", StringComparison.Ordinal), "Setup page should list missing required setup sections.");
+        return Task.CompletedTask;
     }),
     ("Assessment record requires explicit student course and valid result state", () =>
     {
@@ -3873,11 +3898,443 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(pdfText.Contains("Other transcripts may be available", StringComparison.OrdinalIgnoreCase), "PDF should not imply unavailable grades are included.");
         AssertTrue(pdfText.Contains("grades 9-11", StringComparison.OrdinalIgnoreCase), "PDF should identify the unavailable high school years.");
         AssertTrue(pdfText.Contains(" re", StringComparison.Ordinal), "PDF should draw structured boxes and table cells.");
+        AssertTrue(pdfText.Contains("1 1 1 rg", StringComparison.Ordinal), "PDF should paint white table cell backgrounds.");
+        AssertTrue(pdfText.Contains("0.067 0.071 0.153 rg", StringComparison.Ordinal), "PDF should reset text fill to a dark color.");
+        var courseTextIndex = pdfText.IndexOf("(Assessment Course)", StringComparison.Ordinal);
+        AssertTrue(courseTextIndex > 0, "PDF should include the transcript course title text.");
+        var lastWhiteFillBeforeCourse = pdfText.LastIndexOf("1 1 1 rg", courseTextIndex, StringComparison.Ordinal);
+        var lastDarkFillBeforeCourse = pdfText.LastIndexOf("0.067 0.071 0.153 rg", courseTextIndex, StringComparison.Ordinal);
+        AssertTrue(lastDarkFillBeforeCourse > lastWhiteFillBeforeCourse, "PDF table text should be drawn with dark fill after the white cell background.");
         AssertFalse(pdfText.Contains("Course | Subject | Term", StringComparison.OrdinalIgnoreCase), "PDF should not use the old pipe-delimited text layout.");
         AssertFalse(pdfText.Contains("MDE-approved", StringComparison.OrdinalIgnoreCase), "PDF must not imply MDE approval.");
         AssertFalse(pdfText.Contains("state-approved", StringComparison.OrdinalIgnoreCase), "PDF must not imply state approval.");
         AssertFalse(pdfText.Contains("accredited", StringComparison.OrdinalIgnoreCase), "PDF must not imply accreditation.");
-    }))
+    })),
+    ("Diploma export requires accepted parent graduation readiness", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+        var service = new DiplomaService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        var designer = await service.GetDesignerAsync(parent, student.Id);
+        AssertTrue(designer.Succeeded, "Parent diploma designer should load.");
+        AssertFalse(designer.Value!.Readiness.CanGenerate, "Diploma should be blocked before graduation readiness is accepted.");
+
+        var export = await service.CreateDiplomaPdfAsync(parent, new CreateDiplomaPdfCommand(student.Id));
+        AssertFalse(export.Succeeded, "Diploma PDF should not generate without parent graduation readiness.");
+        AssertTrue(export.Errors.Any(error => error.Contains("graduation", StringComparison.OrdinalIgnoreCase)), "Diploma export should explain the graduation readiness blocker.");
+
+        var studentExport = await service.CreateDiplomaPdfAsync(UserContext.Student("Student"), new CreateDiplomaPdfCommand(student.Id));
+        AssertFalse(studentExport.Succeeded, "Student must not export a diploma.");
+    })),
+    ("Diploma design saves typography and exports a transparent family issued PDF", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+        var service = new DiplomaService(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        var plan = await service.SaveGraduationPlanAsync(parent, new SaveGraduationPlanCommand(
+            student.Id,
+            "Parent-Defined Graduation Plan",
+            "Parent-defined graduation standards based on completed high school coursework and reviewed family records.",
+            true,
+            true,
+            "Parent reviewed completion records and approved diploma readiness."));
+        AssertTrue(plan.Succeeded, "Accepted graduation plan should save.");
+
+        var designer = await service.GetDesignerAsync(parent, student.Id);
+        AssertTrue(designer.Succeeded, "Diploma designer should load after graduation readiness.");
+        var design = designer.Value!.Design;
+        var styles = design.TextStyles
+            .Select(style => style.ElementKey == "studentName"
+                ? style with { FontFamily = "Garamond", FontSize = 48, LetterSpacing = 5, Uppercase = true }
+                : style)
+            .ToArray();
+        var saveDesign = await service.SaveDiplomaDesignAsync(parent, new SaveDiplomaDesignCommand(
+            student.Id,
+            design.TemplateId,
+            design.PageSize,
+            "Riverside Family Homeschool",
+            "This certifies that",
+            "Student Learner",
+            "has satisfactorily completed the parent-defined course of study, including selected Michigan subject-area records, and is therefore awarded this",
+            "High School Diploma",
+            "with all of the rights, honors, and privileges pertaining thereto",
+            "Awarded on",
+            new DateOnly(2027, 6, 1),
+            "Parent / Administrator",
+            "Date",
+            "Family Issued",
+            styles));
+        AssertTrue(saveDesign.Succeeded, "Diploma design should save.");
+
+        var export = await service.CreateDiplomaPdfAsync(parent, new CreateDiplomaPdfCommand(student.Id));
+        AssertTrue(export.Succeeded, "Accepted diploma should export.");
+        AssertEqual("application/pdf", export.Value!.ContentType, "Diploma should export as a PDF.");
+        AssertTrue(export.Value.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase), "Diploma file should use a PDF extension.");
+
+        var pdfText = Encoding.ASCII.GetString(export.Value.Content);
+        AssertTrue(pdfText.StartsWith("%PDF-1.4", StringComparison.Ordinal), "Diploma export should be a PDF document.");
+        AssertTrue(pdfText.Contains("RIVERSIDE FAMILY HOMESCHOOL", StringComparison.Ordinal), "Diploma PDF should include the homeschool name.");
+        AssertTrue(pdfText.Contains("STUDENT LEARNER", StringComparison.Ordinal), "Diploma PDF should include the student name.");
+        AssertTrue(pdfText.Contains("HIGH SCHOOL DIPLOMA", StringComparison.Ordinal), "Diploma PDF should include the diploma title.");
+        AssertTrue(pdfText.Contains("/F4 48 Tf", StringComparison.Ordinal), "Diploma PDF should use the saved student-name font size.");
+        AssertTrue(pdfText.Contains("5 Tc", StringComparison.Ordinal), "Diploma PDF should use the saved student-name letter spacing.");
+        AssertFalse(pdfText.Contains("1 1 1 rg", StringComparison.Ordinal), "Diploma PDF should not paint a white page background over card stock.");
+        AssertFalse(pdfText.Contains("MDE-approved", StringComparison.OrdinalIgnoreCase), "Diploma must not imply MDE approval.");
+        AssertFalse(pdfText.Contains("state-approved", StringComparison.OrdinalIgnoreCase), "Diploma must not imply state approval.");
+        AssertFalse(pdfText.Contains("accredited", StringComparison.OrdinalIgnoreCase), "Diploma must not imply accreditation.");
+    })),
+    ("Diploma wording rejects prohibited legal approval phrases", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+        var service = new DiplomaService(repository);
+        var designer = await service.GetDesignerAsync(UserContext.ParentAdmin("Parent"), student.Id);
+        AssertTrue(designer.Succeeded, "Diploma designer should load.");
+        var design = designer.Value!.Design;
+
+        var save = await service.SaveDiplomaDesignAsync(UserContext.ParentAdmin("Parent"), new SaveDiplomaDesignCommand(
+            student.Id,
+            design.TemplateId,
+            design.PageSize,
+            design.HomeschoolName,
+            design.CertifiesText,
+            design.StudentName,
+            "has completed the course of study prescribed by Michigan law",
+            design.DiplomaTitle,
+            design.PrivilegesText,
+            design.AwardedText,
+            new DateOnly(2027, 6, 1),
+            design.SignatureLabel,
+            design.DateLabel,
+            design.SealText,
+            design.TextStyles));
+        AssertFalse(save.Succeeded, "Diploma wording should reject legal-compliance phrasing.");
+        AssertTrue(save.Errors.Any(error => error.Contains("prescribed by michigan law", StringComparison.OrdinalIgnoreCase)), "Diploma wording error should identify the prohibited phrase.");
+    })),
+    ("Production portal endpoints allow independent localhost and wifi sharing", () =>
+    {
+        var admin = PortalEndpointBuilder.Build(ProductionPortalKind.Admin, new PortalLaunchSettings
+        {
+            Enabled = true,
+            SharingMode = PortalSharingMode.Localhost,
+            Port = 5171
+        });
+        var student = PortalEndpointBuilder.Build(ProductionPortalKind.Student, new PortalLaunchSettings
+        {
+            Enabled = true,
+            SharingMode = PortalSharingMode.Wifi,
+            Port = 5172,
+            WifiHost = "192.168.1.25"
+        });
+
+        AssertEqual("http://127.0.0.1:5171", admin.BindUrl, "Admin localhost binding should stay on loopback.");
+        AssertEqual("http://127.0.0.1:5171", admin.DisplayUrl, "Admin localhost display URL should stay on loopback.");
+        AssertEqual("http://192.168.1.25:5172", student.BindUrl, "Student Wi-Fi binding should use the selected address.");
+        AssertEqual("http://192.168.1.25:5172", student.DisplayUrl, "Student Wi-Fi display URL should use the selected address.");
+        AssertEqual(0, admin.Warnings.Count, "Admin localhost mode should not warn.");
+        AssertEqual(0, student.Warnings.Count, "Student Wi-Fi mode with an address should not warn.");
+        return Task.CompletedTask;
+    }),
+    ("Production wifi sharing warns when no network address is selected", () =>
+    {
+        var endpoint = PortalEndpointBuilder.Build(ProductionPortalKind.Student, new PortalLaunchSettings
+        {
+            Enabled = true,
+            SharingMode = PortalSharingMode.Wifi,
+            Port = 5172,
+            WifiHost = ""
+        });
+
+        AssertEqual("http://0.0.0.0:5172", endpoint.BindUrl, "Missing Wi-Fi address should bind all IPv4 addresses for explicit sharing.");
+        AssertTrue(endpoint.Warnings.Count > 0, "Missing Wi-Fi address should produce a plain warning.");
+        return Task.CompletedTask;
+    }),
+    ("Production settings create local-first folders and persist portal choices", () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerProductionTests", Guid.NewGuid().ToString("N"));
+        var paths = new ProductionPathProvider(root);
+        var store = new ProductionRuntimeSettingsStore(paths);
+        var settings = store.LoadOrCreate();
+        settings.AdminPortal.SharingMode = PortalSharingMode.Localhost;
+        settings.StudentPortal.SharingMode = PortalSharingMode.Wifi;
+        settings.StudentPortal.WifiHost = "192.168.1.30";
+        settings.StudentPortal.Port = 5182;
+        store.Save(settings);
+
+        var reloaded = store.LoadOrCreate();
+        AssertTrue(Directory.Exists(paths.DataDirectory), "Production data directory should exist.");
+        AssertTrue(Directory.Exists(paths.FilesDirectory), "Production files directory should exist.");
+        AssertTrue(Directory.Exists(paths.AutomaticBackupsDirectory), "Production automatic backup directory should exist.");
+        AssertTrue(Directory.Exists(paths.ManualBackupsDirectory), "Production manual backup directory should exist.");
+        AssertTrue(Directory.Exists(paths.ExportsDirectory), "Production exports directory should exist.");
+        AssertTrue(Directory.Exists(paths.LogsDirectory), "Production logs directory should exist.");
+        AssertTrue(Directory.Exists(paths.ConfigDirectory), "Production config directory should exist.");
+        AssertEqual(PortalSharingMode.Wifi, reloaded.StudentPortal.SharingMode, "Student portal sharing mode should persist.");
+        AssertEqual("192.168.1.30", reloaded.StudentPortal.WifiHost, "Student portal Wi-Fi address should persist.");
+        AssertEqual(5182, reloaded.StudentPortal.Port, "Student portal port should persist.");
+        return Task.CompletedTask;
+    }),
+    ("Production service mode uses ProgramData and persists protected-root intent", () =>
+    {
+        var serviceRoot = ProductionPathProvider.GetDefaultRoot(ProductionHostMode.Service);
+        AssertTrue(
+            serviceRoot.Contains(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                StringComparison.OrdinalIgnoreCase),
+            "Service mode should default to the machine-level ProgramData location.");
+        AssertFalse(
+            serviceRoot.Contains(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                StringComparison.OrdinalIgnoreCase),
+            "Service mode should not default to a signed-in user's LocalAppData folder.");
+
+        var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerProductionTests", Guid.NewGuid().ToString("N"));
+        var paths = new ProductionPathProvider(root, ProductionHostMode.Service);
+        var store = new ProductionRuntimeSettingsStore(paths);
+        var settings = store.LoadOrCreate();
+        settings.HostMode = ProductionHostMode.Service;
+        settings.ParentWindowsAccount = "FAMILYPC\\Parent";
+        store.Save(settings);
+
+        var reloaded = store.LoadOrCreate();
+        AssertEqual(ProductionHostMode.Service, paths.HostMode, "The path provider should remember that it is serving service mode.");
+        AssertEqual(ProductionHostMode.Service, reloaded.HostMode, "Service mode should persist in production settings.");
+        AssertEqual("FAMILYPC\\Parent", reloaded.ParentWindowsAccount, "The parent setup account should persist for service data protection.");
+        return Task.CompletedTask;
+    }),
+    ("Service data protection plan excludes broad student-facing Windows access", () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerProductionTests", Guid.NewGuid().ToString("N"));
+        var plan = ServiceDataProtectionPlanBuilder.Build(root, "FAMILYPC\\Parent");
+
+        AssertEqual(root, plan.DataRoot, "The protection plan should target the configured data root.");
+        AssertTrue(plan.Entries.Any(entry => entry.Identity == "NT AUTHORITY\\SYSTEM" && entry.Rights == "FullControl"), "Windows should be able to run the service before sign-in.");
+        AssertTrue(plan.Entries.Any(entry => entry.Identity == "BUILTIN\\Administrators" && entry.Rights == "FullControl"), "Administrators should be able to repair the service data root.");
+        AssertTrue(plan.Entries.Any(entry => entry.Identity == "NT SERVICE\\HomeschoolManager" && entry.Rights == "Modify"), "The service account should be able to save family records.");
+        AssertTrue(plan.Entries.Any(entry => entry.Identity == "FAMILYPC\\Parent" && entry.Rights == "Modify"), "The parent setup account should be included when provided.");
+        AssertFalse(plan.Entries.Any(entry => entry.Identity.Contains("Users", StringComparison.OrdinalIgnoreCase)), "The service data root should not be granted to all Windows users.");
+        return Task.CompletedTask;
+    }),
+    ("Full local backup creates manifest checksums and restorable source files", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        Directory.CreateDirectory(Path.Combine(paths.FilesDirectory, "students", "sample"));
+        await File.WriteAllTextAsync(Path.Combine(paths.FilesDirectory, "students", "sample", "evidence.txt"), "sample evidence");
+        Directory.CreateDirectory(paths.TemplatesDirectory);
+        await File.WriteAllTextAsync(Path.Combine(paths.TemplatesDirectory, "template.txt"), "template");
+        Directory.CreateDirectory(paths.ConfigDirectory);
+        await File.WriteAllTextAsync(Path.Combine(paths.ConfigDirectory, "production-settings.json"), "{}");
+
+        var service = new BackupService(new LocalBackupArchiveStore(paths, repository));
+        var studentBackup = await service.CreateBackupAsync(UserContext.Student("Student"), new CreateBackupCommand());
+        AssertFalse(studentBackup.Succeeded, "Student should not be able to create a full backup.");
+
+        var created = await service.CreateBackupAsync(UserContext.ParentAdmin("Parent"), new CreateBackupCommand());
+        AssertTrue(created.Succeeded, "Parent backup should succeed.");
+        AssertTrue(File.Exists(Path.Combine(paths.ManualBackupsDirectory, created.Value!.FileName)), "Manual backup should be saved under the manual backup folder.");
+        AssertEqual("homeschool-manager.full-backup", created.Value.Manifest.PackageType, "Backup manifest should identify full app backups.");
+        AssertEqual(BackupKind.Manual, created.Value.Manifest.BackupKind, "Manual backup kind should be recorded.");
+        AssertTrue(created.Value.Manifest.Students.Count == 1, "Backup manifest should include student summaries.");
+        AssertTrue(created.Value.Manifest.IncludedFolders.Contains("data"), "Backup manifest should record data folder inclusion.");
+        AssertTrue(created.Value.Manifest.FileCount >= 3, "Backup should count included files.");
+
+        using var stream = new MemoryStream(created.Value.Content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        AssertTrue(archive.GetEntry("manifest.json") is not null, "Backup should include machine-readable manifest.");
+        AssertTrue(archive.GetEntry("manifest.md") is not null, "Backup should include parent-readable manifest.");
+        AssertTrue(archive.GetEntry("checksums.json") is not null, "Backup should include checksums.");
+        AssertTrue(archive.GetEntry("data/homeschool.db") is not null, "Backup should include source records.");
+        AssertTrue(archive.GetEntry("files/students/sample/evidence.txt") is not null, "Backup should include stored files.");
+        AssertTrue(archive.GetEntry("templates/template.txt") is not null, "Backup should include templates.");
+        AssertTrue(archive.GetEntry("config/production-settings.json") is not null, "Backup should include config files.");
+    }),
+    ("Full local backup validation rejects incomplete packages", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var service = new BackupService(new LocalBackupArchiveStore(paths, repository));
+
+        using var invalidStream = new MemoryStream();
+        using (var invalidArchive = new ZipArchive(invalidStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = invalidArchive.CreateEntry("not-a-backup.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("not a full backup");
+        }
+
+        var studentValidation = await service.ValidateBackupAsync(
+            UserContext.Student("Student"),
+            new ValidateBackupCommand("invalid.zip", invalidStream.ToArray()));
+        AssertFalse(studentValidation.Succeeded, "Student should not be able to validate backup files.");
+
+        var validation = await service.ValidateBackupAsync(
+            UserContext.ParentAdmin("Parent"),
+            new ValidateBackupCommand("invalid.zip", invalidStream.ToArray()));
+        AssertTrue(validation.Succeeded, "Parent validation command should return a report.");
+        AssertFalse(validation.Value!.IsValid, "Incomplete backup should be invalid.");
+        AssertTrue(validation.Value.Errors.Any(error => error.Contains("manifest.json", StringComparison.OrdinalIgnoreCase)), "Validation should report missing manifest.");
+    }),
+    ("Full local restore validates backup and creates safety backup first", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var service = new BackupService(new LocalBackupArchiveStore(paths, repository));
+
+        var originalHousehold = await repository.GetHouseholdAsync() ?? throw new InvalidOperationException("Household setup failed.");
+        var created = await service.CreateBackupAsync(parent, new CreateBackupCommand());
+        AssertTrue(created.Succeeded, "Backup should be created before restore.");
+
+        await repository.SaveHouseholdAsync(new Household(originalHousehold.Id, "Changed Family", originalHousehold.ParentGuardianName));
+        AssertEqual("Changed Family", (await repository.GetHouseholdAsync())!.Name, "Mutation before restore should be visible.");
+
+        var preview = await service.PreviewRestoreAsync(parent, new ValidateBackupCommand(created.Value!.FileName, created.Value.Content));
+        AssertTrue(preview.Succeeded, "Restore preview should succeed for valid backups.");
+        AssertTrue(preview.Value!.SafetyBackupMessage.Contains("safety backup", StringComparison.OrdinalIgnoreCase), "Preview should explain the safety backup.");
+
+        var notConfirmed = await service.RestoreBackupAsync(parent, new RestoreBackupCommand(created.Value.FileName, created.Value.Content, false));
+        AssertFalse(notConfirmed.Succeeded, "Restore should require explicit confirmation.");
+
+        var restored = await service.RestoreBackupAsync(parent, new RestoreBackupCommand(created.Value.FileName, created.Value.Content, true));
+        AssertTrue(restored.Succeeded, "Restore should succeed for valid backups.");
+        AssertEqual("Family", (await repository.GetHouseholdAsync())!.Name, "Restore should replace current records with backup records.");
+        AssertEqual(BackupKind.PreRestore, restored.Value!.SafetyBackupManifest.BackupKind, "Restore should create a pre-restore safety backup.");
+        AssertTrue(File.Exists(Path.Combine(paths.AutomaticBackupsDirectory, restored.Value.SafetyBackupFileName)), "Safety backup should be saved under automatic backups.");
+    }),
+    ("Encrypted backup packages round-trip through the local backup validator", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var backupService = new BackupService(new LocalBackupArchiveStore(paths, repository));
+        var created = await backupService.CreateBackupAsync(UserContext.ParentAdmin("Parent"), new CreateBackupCommand());
+        AssertTrue(created.Succeeded, "Source backup should be created.");
+
+        var encryption = new LocalBackupEncryptionService();
+        var encrypted = await encryption.EncryptBackupAsync(created.Value!, "correct horse battery staple");
+        AssertTrue(encrypted.FileName.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase), "Encrypted backup should use the dedicated file extension.");
+        AssertFalse(Encoding.UTF8.GetString(encrypted.Content).Contains("homeschool-manager.full-backup", StringComparison.Ordinal), "Encrypted package should not expose the plain backup manifest text.");
+
+        var decrypted = await encryption.DecryptBackupAsync(encrypted.Content, "correct horse battery staple", encrypted.FileName);
+        var validation = await backupService.ValidateBackupAsync(UserContext.ParentAdmin("Parent"), new ValidateBackupCommand(decrypted.FileName, decrypted.Content));
+        AssertTrue(validation.Succeeded, "Decrypted backup should reach the validator.");
+        AssertTrue(validation.Value!.IsValid, "Decrypted backup should validate as a normal full backup.");
+        AssertThrows<System.Security.Cryptography.CryptographicException>(() =>
+            encryption.DecryptBackupAsync(encrypted.Content, "wrong passphrase", encrypted.FileName).GetAwaiter().GetResult());
+    }),
+    ("Remote backup service requires parent access and uses encrypted Google artifacts", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var backupService = new BackupService(new LocalBackupArchiveStore(paths, repository));
+        var encryption = new LocalBackupEncryptionService();
+        var store = new FakeRemoteBackupStore();
+        var provider = new FakeGoogleBackupProvider();
+        var service = new RemoteBackupService(backupService, encryption, store, provider);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        var studentUpload = await service.UploadGoogleDriveBackupAsync(UserContext.Student("Student"), new UploadGoogleDriveBackupCommand("student passphrase"));
+        AssertFalse(studentUpload.Succeeded, "Student should not be able to upload external backups.");
+
+        var saved = await service.SaveGoogleSettingsAsync(parent, new SaveGoogleBackupSettingsCommand("client-id.apps.googleusercontent.com"));
+        AssertTrue(saved.Succeeded, "Parent should be able to save Google client ID.");
+        var connect = await service.StartGoogleConnectionAsync(parent, new StartGoogleConnectionCommand("http://127.0.0.1:5171/backups/google/callback"));
+        AssertTrue(connect.Succeeded, "Connection URL should be created.");
+        AssertTrue(connect.Value!.Contains("accounts.google.com", StringComparison.Ordinal), "Connection should use Google OAuth.");
+        var pending = await store.GetPendingGoogleConnectionAsync();
+        AssertTrue(pending is not null, "Pending OAuth state should be saved.");
+        var completed = await service.CompleteGoogleConnectionAsync(parent, new CompleteGoogleConnectionCommand(pending!.State, "code", pending.RedirectUri));
+        AssertTrue(completed.Succeeded, "Google connection should complete through provider.");
+
+        var upload = await service.UploadGoogleDriveBackupAsync(parent, new UploadGoogleDriveBackupCommand("parent passphrase"));
+        AssertTrue(upload.Succeeded, "Parent should upload encrypted backup to Drive.");
+        AssertTrue(provider.LastUploadedContent?.Length > 0, "Provider should receive encrypted backup bytes.");
+        AssertFalse(Encoding.UTF8.GetString(provider.LastUploadedContent!).Contains("homeschool-manager.full-backup", StringComparison.Ordinal), "Provider should not receive a plain local backup ZIP.");
+
+        var draft = await service.CreateGmailBackupDraftAsync(parent, new CreateGmailBackupDraftCommand("parent passphrase", "parent@example.com"));
+        AssertTrue(draft.Succeeded, "Parent should create a Gmail draft with encrypted backup.");
+
+        var remoteFiles = await service.ListGoogleDriveBackupsAsync(parent);
+        AssertTrue(remoteFiles.Succeeded && remoteFiles.Value!.Count == 1, "Drive list should include the uploaded encrypted backup.");
+        var driveFiles = remoteFiles.Value!;
+        var preview = await service.PreviewGoogleDriveRestoreAsync(parent, new PreviewGoogleDriveRestoreCommand(driveFiles[0].FileId, "parent passphrase"));
+        AssertTrue(preview.Succeeded, "Downloaded encrypted backup should decrypt and validate for restore preview.");
+    }),
+    ("Backup and restore page is parent-admin routed and documented", () =>
+    {
+        var root = FindRepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Backups.razor"));
+        var nav = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Layout", "NavMenu.razor"));
+        var backupArchitecture = File.ReadAllText(Path.Combine(root, "docs", "architecture", "backup-restore-and-export-architecture.md"));
+        var backupOperations = File.ReadAllText(Path.Combine(root, "docs", "operations", "backup-restore-and-archive-export.md"));
+        var externalBackupAdr = File.ReadAllText(Path.Combine(root, "docs", "adr", "ADR-0008-parent-authorized-encrypted-external-backups.md"));
+        AssertTrue(page.Contains("@page \"/backups\"", StringComparison.Ordinal), "Backup page should be routable.");
+        AssertTrue(page.Contains("Session.IsParentAdmin", StringComparison.Ordinal), "Backup page should check the parent/admin session.");
+        AssertTrue(page.Contains("confirmRestore", StringComparison.Ordinal), "Restore UI should require explicit confirmation.");
+        AssertTrue(page.Contains("RestoreBackupCommand(selectedBackupName, selectedBackupBytes, confirmRestore)", StringComparison.Ordinal), "Restore command should receive the confirmation value.");
+        AssertTrue(page.Contains("Encrypted off-computer backup", StringComparison.Ordinal), "Backup page should expose encrypted external backup controls.");
+        AssertTrue(page.Contains("Create Gmail draft", StringComparison.Ordinal), "Backup page should create Gmail drafts instead of silent email sends.");
+        AssertTrue(nav.Contains("href=\"backups\"", StringComparison.Ordinal), "Parent/admin navigation should link to Backup & Restore.");
+        AssertTrue(backupArchitecture.Contains("checksums.json", StringComparison.Ordinal), "Backup architecture docs should define the implemented ZIP format.");
+        AssertTrue(backupOperations.Contains("pre-restore safety backup", StringComparison.OrdinalIgnoreCase), "Operations docs should explain restore safety backup behavior.");
+        AssertTrue(externalBackupAdr.Contains("encrypted with a parent-entered passphrase", StringComparison.OrdinalIgnoreCase), "External backup ADR should require encrypted remote copies.");
+        return Task.CompletedTask;
+    }),
+    ("Windows release script preserves data outside the app layout and invokes Velopack packaging", () =>
+    {
+        var root = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(root, "tools", "release", "build-windows-release.ps1"));
+        var bashScript = File.ReadAllText(Path.Combine(root, "tools", "release", "build-windows-release.sh"));
+        var hostProgram = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.DesktopHost", "Program.cs"));
+        var hostProject = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.DesktopHost", "HomeschoolManager.DesktopHost.csproj"));
+        var gitignore = File.ReadAllText(Path.Combine(root, ".gitignore"));
+        var releaseReadme = File.ReadAllText(Path.Combine(root, "tools", "release", "README.md"));
+        var installServiceScript = File.ReadAllText(Path.Combine(root, "tools", "release", "install-homeschool-service.ps1"));
+        var migrateServiceScript = File.ReadAllText(Path.Combine(root, "tools", "release", "move-to-service-data-root.ps1"));
+        var setupPage = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Setup.razor"));
+        var productionStatusService = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Services", "ProductionStatusService.cs"));
+        var webProgram = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Program.cs"));
+        var backgroundServiceDoc = File.ReadAllText(Path.Combine(root, "docs", "operations", "background-service-mode.md"));
+        AssertTrue(script.Contains("--packDir $appRoot", StringComparison.Ordinal), "Release script should package only the app layout.");
+        AssertTrue(script.Contains("--mainExe \"HomeschoolManager.exe\"", StringComparison.Ordinal), "Release script should use the desktop host as the main executable.");
+        AssertTrue(script.Contains("desktopDataRoot = \"%LOCALAPPDATA%/HomeschoolManager\"", StringComparison.Ordinal), "Release manifest should document the desktop data root outside app binaries.");
+        AssertTrue(script.Contains("serviceDataRoot = \"%PROGRAMDATA%/HomeschoolManager\"", StringComparison.Ordinal), "Release manifest should document the service data root outside app binaries.");
+        AssertTrue(script.Contains("install-homeschool-service.ps1", StringComparison.Ordinal), "Release layout should include the service installation helper.");
+        AssertTrue(File.Exists(Path.Combine(root, "tools", "release", "install-homeschool-service.ps1")), "Service installation helper should exist.");
+        AssertTrue(File.Exists(Path.Combine(root, "tools", "release", "uninstall-homeschool-service.ps1")), "Service uninstall helper should exist.");
+        AssertTrue(File.Exists(Path.Combine(root, "tools", "release", "move-to-service-data-root.ps1")), "Service migration helper should exist.");
+        AssertFalse(script.Contains("production-settings.json\" -Recurse", StringComparison.OrdinalIgnoreCase), "Release script should not delete production settings.");
+        AssertTrue(bashScript.Contains("build-windows-release.ps1", StringComparison.Ordinal), "Git Bash wrapper should invoke the PowerShell release script.");
+        AssertTrue(bashScript.Contains("\"$@\"", StringComparison.Ordinal), "Git Bash wrapper should pass release arguments through unchanged.");
+        AssertTrue(hostProject.Contains("PackageReference Include=\"Velopack\"", StringComparison.Ordinal), "Desktop host should reference Velopack.");
+        AssertTrue(hostProject.Contains("PackageReference Include=\"Microsoft.Extensions.Hosting.WindowsServices\"", StringComparison.Ordinal), "Desktop host should be able to run as a Windows service.");
+        AssertTrue(hostProgram.Contains("VelopackApp.Build().Run()", StringComparison.Ordinal), "Desktop host should run Velopack startup hooks.");
+        AssertTrue(hostProgram.Contains("AddWindowsService", StringComparison.Ordinal), "Desktop host should register Windows service hosting.");
+        AssertTrue(hostProgram.Contains("ProductionPortalHostedService : BackgroundService", StringComparison.Ordinal), "Desktop host should supervise portals through a hosted service in service mode.");
+        AssertTrue(hostProgram.Contains("--service", StringComparison.Ordinal), "Desktop host should expose an explicit service-mode command.");
+        AssertTrue(hostProgram.Contains("HomeschoolManager__ProductionHostMode", StringComparison.Ordinal), "Portal child processes should receive the production host mode.");
+        AssertTrue(hostProgram.Contains("CheckForUpdatesAsync", StringComparison.Ordinal), "Desktop host should check the configured update feed.");
+        AssertTrue(installServiceScript.Contains("sc.exe create", StringComparison.Ordinal), "Service install helper should create a Windows service.");
+        AssertTrue(installServiceScript.Contains("%ProgramData%", StringComparison.OrdinalIgnoreCase) || installServiceScript.Contains("$env:ProgramData", StringComparison.Ordinal), "Service install helper should target ProgramData.");
+        AssertTrue(installServiceScript.Contains("StudentMode", StringComparison.Ordinal), "Service install helper should allow student portal sharing to be configured separately.");
+        AssertTrue(migrateServiceScript.Contains("robocopy $SourceRoot $BackupRoot", StringComparison.Ordinal), "Service migration helper should back up existing records before copying them.");
+        AssertTrue(setupPage.Contains("How Homeschool Manager is running", StringComparison.Ordinal), "Setup should show production/service status to the parent.");
+        AssertTrue(productionStatusService.Contains("Background service", StringComparison.Ordinal), "Production status service should describe service mode in parent-friendly language.");
+        AssertTrue(webProgram.Contains("HomeschoolManager:DataRoot", StringComparison.Ordinal), "Production support-key storage should follow the configured family data root.");
+        AssertTrue(gitignore.Contains(".codex-verify/", StringComparison.Ordinal), "Temporary verification outputs should be ignored.");
+        AssertTrue(gitignore.Contains("!tools/release/**", StringComparison.Ordinal), "Release tooling should remain trackable.");
+        AssertTrue(releaseReadme.Contains("Update A Production Installation", StringComparison.Ordinal), "Release docs should explain production updates.");
+        AssertTrue(releaseReadme.Contains("Optional Background Service Install", StringComparison.Ordinal), "Release docs should explain service installation.");
+        AssertTrue(backgroundServiceDoc.Contains("Background service mode is optional", StringComparison.Ordinal), "Operations docs should explain service mode in parent-friendly language.");
+        return Task.CompletedTask;
+    })
 };
 
 var failures = new List<string>();
@@ -4105,4 +4562,150 @@ static IReadOnlyList<LessonResourceCommand> LessonResources(params string[] reso
             false,
             "Test resource."))
         .ToArray();
+}
+
+sealed class FakeRemoteBackupStore : IRemoteBackupStore
+{
+    private RemoteBackupConfiguration configuration = new("", null, "", null, null);
+    private GoogleOAuthPendingConnection? pending;
+    private GoogleOAuthTokenSet? tokens;
+    private readonly List<RemoteBackupHistoryItem> history = [];
+
+    public Task<RemoteBackupConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(configuration);
+    }
+
+    public Task SaveGoogleClientIdAsync(string clientId, CancellationToken cancellationToken = default)
+    {
+        configuration = configuration with { GoogleOAuthClientId = clientId };
+        return Task.CompletedTask;
+    }
+
+    public Task SaveGoogleConnectionAsync(GoogleOAuthTokenSet tokenSet, DateTimeOffset connectedAtUtc, CancellationToken cancellationToken = default)
+    {
+        tokens = tokenSet;
+        configuration = configuration with
+        {
+            GoogleConnectedAtUtc = connectedAtUtc,
+            GrantedScopes = tokenSet.Scope
+        };
+        return Task.CompletedTask;
+    }
+
+    public Task<GoogleOAuthTokenSet?> GetGoogleTokensAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(tokens);
+    }
+
+    public Task SaveGoogleTokensAsync(GoogleOAuthTokenSet tokenSet, CancellationToken cancellationToken = default)
+    {
+        tokens = tokenSet;
+        return Task.CompletedTask;
+    }
+
+    public Task DisconnectGoogleAsync(CancellationToken cancellationToken = default)
+    {
+        tokens = null;
+        configuration = configuration with { GoogleConnectedAtUtc = null, GrantedScopes = "" };
+        return Task.CompletedTask;
+    }
+
+    public Task SavePendingGoogleConnectionAsync(GoogleOAuthPendingConnection pending, CancellationToken cancellationToken = default)
+    {
+        this.pending = pending;
+        return Task.CompletedTask;
+    }
+
+    public Task<GoogleOAuthPendingConnection?> GetPendingGoogleConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(pending);
+    }
+
+    public Task ClearPendingGoogleConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        pending = null;
+        return Task.CompletedTask;
+    }
+
+    public Task AddHistoryAsync(RemoteBackupHistoryItem item, CancellationToken cancellationToken = default)
+    {
+        history.Add(item);
+        if (item.Destination == "Google Drive")
+        {
+            configuration = configuration with { LastDriveUploadAtUtc = item.CreatedAtUtc };
+        }
+        else if (item.Destination == "Gmail draft")
+        {
+            configuration = configuration with { LastGmailDraftAtUtc = item.CreatedAtUtc };
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<RemoteBackupHistoryItem>> ListHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<RemoteBackupHistoryItem>>(history.ToArray());
+    }
+}
+
+sealed class FakeGoogleBackupProvider : IGoogleBackupProvider
+{
+    private RemoteEncryptedBackupFile? uploadedFile;
+
+    public byte[]? LastUploadedContent { get; private set; }
+
+    public string BuildAuthorizationUrl(string clientId, string redirectUri, string state, string codeChallenge)
+    {
+        return $"https://accounts.google.com/o/oauth2/v2/auth?client_id={clientId}&state={state}&code_challenge={codeChallenge}";
+    }
+
+    public Task<GoogleConnectionResult> CompleteConnectionAsync(string clientId, string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken = default)
+    {
+        var tokens = new GoogleOAuthTokenSet(
+            "access",
+            "refresh",
+            DateTimeOffset.UtcNow.AddHours(1),
+            "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.compose");
+        return Task.FromResult(new GoogleConnectionResult(DateTimeOffset.UtcNow, tokens.Scope, tokens));
+    }
+
+    public Task<GoogleOAuthTokenSet> RefreshAccessTokenAsync(string clientId, GoogleOAuthTokenSet tokenSet, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(tokenSet with
+        {
+            AccessToken = "refreshed",
+            AccessTokenExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1)
+        });
+    }
+
+    public Task<GoogleDriveUploadResult> UploadDriveBackupAsync(GoogleOAuthTokenSet tokenSet, EncryptedBackupDownloadFile encryptedBackup, CancellationToken cancellationToken = default)
+    {
+        LastUploadedContent = encryptedBackup.Content;
+        uploadedFile = new RemoteEncryptedBackupFile(
+            encryptedBackup.FileName,
+            encryptedBackup.ContentType,
+            encryptedBackup.Content,
+            encryptedBackup.Content.LongLength,
+            encryptedBackup.CreatedAtUtc);
+        return Task.FromResult(new GoogleDriveUploadResult("drive-file-1", encryptedBackup.FileName, encryptedBackup.Content.LongLength, encryptedBackup.CreatedAtUtc));
+    }
+
+    public Task<IReadOnlyList<GoogleDriveBackupFile>> ListDriveBackupsAsync(GoogleOAuthTokenSet tokenSet, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<GoogleDriveBackupFile> files = uploadedFile is null
+            ? []
+            : [new GoogleDriveBackupFile("drive-file-1", uploadedFile.FileName, uploadedFile.SizeBytes, uploadedFile.CreatedAtUtc)];
+        return Task.FromResult(files);
+    }
+
+    public Task<RemoteEncryptedBackupFile> DownloadDriveBackupAsync(GoogleOAuthTokenSet tokenSet, string fileId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(uploadedFile ?? throw new InvalidOperationException("No uploaded file."));
+    }
+
+    public Task<GmailDraftResult> CreateGmailDraftAsync(GoogleOAuthTokenSet tokenSet, EncryptedBackupDownloadFile encryptedBackup, string recipientEmail, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new GmailDraftResult("draft-1", encryptedBackup.FileName, encryptedBackup.Content.LongLength, DateTimeOffset.UtcNow));
+    }
 }

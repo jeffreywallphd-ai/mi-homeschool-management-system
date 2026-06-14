@@ -56,6 +56,12 @@ A graduation packet should be able to include:
 - Selected artifacts.
 - Parent evaluation notes.
 
+## Diploma Preview and Export
+
+The diploma workflow should let the parent/admin record graduation readiness, preview a professional family-issued diploma, adjust diploma wording, adjust font family and size for each text element, and export a printable PDF. The workflow should remain blocked until parent-defined graduation standards are accepted and requirements are satisfied or explicitly waived by the parent.
+
+The diploma preview and PDF should use a transparent page background for cardstock printing and should preserve a traditional diploma layout with a homeschool name, certification line, student name, completion statement, diploma title, rights and privileges line, awarded date, seal, signature line, and date line.
+
 ## Credential Language
 
 Generated records must identify themselves as family-issued or parent-issued when appropriate. They must not imply state submission, MDE approval, accreditation, or legal certification.

@@ -1,20 +1,33 @@
 # Backup Restore and Archive Export
 
 - Status: accepted
-- Last reviewed: 2026-06-06
+- Last reviewed: 2026-06-13
 - Canonical for: operational expectations for backups, restore, and student archive exports
-- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md)
+- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0008](../adr/ADR-0008-parent-authorized-encrypted-external-backups.md)
 - Related docs: [Backup Restore and Export Architecture](../architecture/backup-restore-and-export-architecture.md), [Data Retention Backup and Recovery Standards](../standards/data-retention-backup-and-recovery-standards.md)
-- Related tests: not yet implemented
+- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Remote backup service requires parent access and uses encrypted Google artifacts`
 - Supersedes: none
 
 ## Manual Backup
 
 Manual backup should be available in V1. A parent should be able to create a full backup intentionally before major milestones, document generation, upgrades, or school-year closeout.
 
+Implemented parent/admin workflow:
+
+1. Open Backup & Restore.
+2. Select Create full backup.
+3. The app saves a copy under `backups/manual`.
+4. The app offers the ZIP for download.
+
 ## Automatic Backup
 
 Automatic backup is recommended after manual backup is reliable. Scheduling details are deferred until implementation planning.
+
+Implemented automatic foundation:
+
+- Restore creates a pre-restore safety backup under `backups/automatic` before replacing current records.
+
+Scheduled automatic backups are still deferred.
 
 ## Full Backup Contents
 
@@ -28,6 +41,20 @@ A full backup should include:
 - Checksums where practical.
 - Data/schema version.
 
+Implemented V1 ZIP shape:
+
+```text
+manifest.json
+manifest.md
+checksums.json
+data/
+files/
+templates/
+config/
+```
+
+The backup does not include previous backups or logs.
+
 ## Restore
 
 Restore should:
@@ -37,6 +64,49 @@ Restore should:
 - Check checksums where available.
 - Report missing or damaged content clearly.
 - Avoid silently discarding records.
+- Require parent/admin confirmation.
+- Create a pre-restore safety backup before replacing current records.
+
+Restore replaces active source folders from the selected backup:
+
+- `data/`
+- `files/`
+- `templates/`
+- `config/`
+
+## Google Drive Backup
+
+Google Drive backup is optional. It is for parents who want a second copy away from the family PC.
+
+Parent workflow:
+
+1. Create a Google OAuth desktop/client ID in Google Cloud and paste it into Backup & Restore.
+2. Select Connect Google and approve the requested Drive/Gmail permissions in the browser.
+3. Enter a backup passphrase.
+4. Select Save to Google Drive.
+5. Keep the passphrase somewhere safe and separate from the backup file.
+
+The app creates a normal full local backup first, encrypts it locally, and uploads only the encrypted `.hsmbak` file to a visible `Homeschool Manager Backups` folder in Google Drive.
+
+Google connection tokens are stored locally and are not treated as family source records. After restoring on a new computer, the parent may need to reconnect Google backup.
+
+## Gmail Draft Backup
+
+Gmail backup uses the same Google connection. The app creates a normal full local backup, encrypts it, and creates a Gmail draft with the encrypted `.hsmbak` file attached. The parent reviews and sends the draft manually.
+
+Gmail is best for smaller backup files. Personal Gmail accounts limit attachments to 25 MB, and work or school accounts may have administrator-defined limits. Larger backups should use Google Drive.
+
+## Restore From Google Drive
+
+Parent workflow:
+
+1. Open Backup & Restore.
+2. Refresh Google Drive backups.
+3. Enter the backup passphrase.
+4. Preview the selected backup.
+5. Confirm restore.
+
+The app downloads the encrypted file, decrypts it locally, validates the full backup, and creates a pre-restore safety backup before replacing current records.
 
 ## Student Archive Export
 
@@ -55,3 +125,5 @@ The packet is a family-owned record export, not a full restore package. Creating
 ## User Experience
 
 Backup and restore wording must be nontechnical where possible. The system should explain what will be included and whether the result is a full backup or an archive export.
+
+External-backup wording must also explain that the parent must remember the passphrase because the app cannot recover it.

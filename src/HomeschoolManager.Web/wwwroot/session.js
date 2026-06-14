@@ -38,6 +38,36 @@ window.homeschoolScroll = {
     }
 };
 
+window.homeschoolFonts = {
+    async availableFamilies() {
+        const fallback = [
+            "Arial",
+            "Baskerville",
+            "Calibri",
+            "Cambria",
+            "Courier New",
+            "Garamond",
+            "Georgia",
+            "Palatino Linotype",
+            "Segoe UI",
+            "Times New Roman",
+            "Verdana"
+        ];
+
+        if (!("queryLocalFonts" in window)) {
+            return fallback;
+        }
+
+        try {
+            const fonts = await window.queryLocalFonts();
+            const families = [...new Set(fonts.map(font => font.family).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+            return families.length ? families : fallback;
+        } catch {
+            return fallback;
+        }
+    }
+};
+
 window.homeschoolMenus = (() => {
     const cleanupByElement = new WeakMap();
 

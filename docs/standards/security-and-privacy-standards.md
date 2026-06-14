@@ -3,7 +3,7 @@
 - Status: accepted
 - Last reviewed: 2026-06-06
 - Canonical for: student-record privacy and local-data safety
-- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md)
+- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0008](../adr/ADR-0008-parent-authorized-encrypted-external-backups.md)
 - Related docs: [Local Data and File Storage](../architecture/local-data-and-file-storage.md), [Data Retention Backup and Recovery Standards](data-retention-backup-and-recovery-standards.md)
 - Related tests: not yet implemented
 - Supersedes: none
@@ -19,6 +19,7 @@ All student records, grades, files, portfolio artifacts, and generated documents
 - Do not embed credentials or secrets.
 - Treat generated transcripts, diplomas, and archives as sensitive files.
 - Keep backup/export contents explicit and reviewable.
+- Do not send full backups to external providers unless they are encrypted locally first and explicitly initiated by a parent/admin.
 
 ## Access
 

@@ -1,4 +1,11 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@using HomeschoolManager.Application.Setup
+@using HomeschoolManager.Web.Services
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+@inject SessionState Session
+@inject SetupService SetupService
 
 <PersistentSession />
 
@@ -23,3 +30,58 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">X</span>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.Changed += OnGateChanged;
+        SetupService.SetupChanged += OnGateChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await EnsureSetupGateAsync();
+        }
+    }
+
+    private void OnGateChanged()
+    {
+        _ = EnsureSetupGateAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        _ = EnsureSetupGateAsync();
+    }
+
+    private async Task EnsureSetupGateAsync()
+    {
+        if (!Session.IsParentAdmin || IsSetupAllowedRoute())
+        {
+            return;
+        }
+
+        var summary = await SetupService.GetSummaryAsync();
+        if (!summary.IsComplete)
+        {
+            await InvokeAsync(() => Navigation.NavigateTo("/setup", replace: true));
+        }
+    }
+
+    private bool IsSetupAllowedRoute()
+    {
+        var path = Navigation.ToAbsoluteUri(Navigation.Uri).AbsolutePath.Trim('/');
+        return path.Equals("setup", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("login", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnGateChanged;
+        SetupService.SetupChanged -= OnGateChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

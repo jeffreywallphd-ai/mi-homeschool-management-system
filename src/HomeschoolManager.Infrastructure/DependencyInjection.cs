@@ -1,5 +1,6 @@
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Application.Assessments;
+using HomeschoolManager.Application.Backups;
 using HomeschoolManager.Application.Courses;
 using HomeschoolManager.Application.Portfolio;
 using HomeschoolManager.Application.Records;
@@ -24,6 +25,13 @@ public static class DependencyInjection
         services.AddSingleton<AppDataPaths>();
         services.AddSingleton<IHomeschoolRepository, JsonHomeschoolRepository>();
         services.AddSingleton<ISubmissionFileStore, LocalSubmissionFileStore>();
+        services.AddSingleton<IBackupArchiveStore, LocalBackupArchiveStore>();
+        services.AddSingleton<IBackupEncryptionService, LocalBackupEncryptionService>();
+        services.AddSingleton<IRemoteBackupStore, LocalRemoteBackupStore>();
+        services.AddSingleton<IGoogleBackupProvider, GoogleBackupProvider>();
+        services.AddSingleton<HttpClient>();
+        services.AddScoped<BackupService>();
+        services.AddScoped<RemoteBackupService>();
         services.AddScoped<CourseService>();
         services.AddScoped<StudentCourseService>();
         services.AddScoped<GradebookService>();
@@ -32,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<PortfolioService>();
         services.AddScoped<PortfolioExportService>();
         services.AddScoped<TranscriptService>();
+        services.AddScoped<DiplomaService>();
         services.AddScoped<SetupService>();
         services.AddScoped<RequirementService>();
         services.AddScoped<LocalAccessService>();

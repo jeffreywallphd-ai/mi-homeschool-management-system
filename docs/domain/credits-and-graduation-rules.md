@@ -53,6 +53,8 @@ The system must not generate a diploma unless:
 - Graduation date and issue data are provided.
 - Parent signature name is provided.
 
+The accepted graduation plan is the source record for diploma readiness. Diploma design settings, wording, and typography are presentation records only; they must not replace the parent graduation decision or create a credit award.
+
 ## GPA
 
 GPA calculations must be deterministic, traceable to grade scales, and able to exclude pass/fail or non-GPA courses when the grade scale requires it.

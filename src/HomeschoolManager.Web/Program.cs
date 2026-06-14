@@ -1,5 +1,6 @@
 using HomeschoolManager.Web.Components;
 using HomeschoolManager.Application.Persistence;
+using HomeschoolManager.Application.Backups;
 using HomeschoolManager.Application.Submissions;
 using HomeschoolManager.Infrastructure;
 using HomeschoolManager.Web.Services;
@@ -16,12 +17,14 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHomeschoolManagerInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<SessionState>();
 builder.Services.AddSingleton<PortalState>();
+builder.Services.AddSingleton<ProductionStatusService>();
 
 var dataProtectionDirectory = builder.Environment.IsDevelopment()
     ? Path.Combine(builder.Environment.ContentRootPath, ".dev-data", "DataProtection-Keys")
     : Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HomeschoolManager",
+        builder.Configuration["HomeschoolManager:DataRoot"]
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HomeschoolManager"),
+        "config",
         "DataProtection-Keys");
 Directory.CreateDirectory(dataProtectionDirectory);
 builder.Services.AddDataProtection()
@@ -68,6 +71,36 @@ app.Use(async (context, next) =>
 
 
 app.UseAntiforgery();
+
+app.MapGet("/backups/google/callback", async (
+    HttpContext context,
+    SessionState session,
+    RemoteBackupService remoteBackupService,
+    CancellationToken cancellationToken) =>
+{
+    if (session.CurrentUser is null || !session.IsParentAdmin)
+    {
+        return Results.Redirect("/login");
+    }
+
+    var code = context.Request.Query["code"].ToString();
+    var state = context.Request.Query["state"].ToString();
+    var error = context.Request.Query["error"].ToString();
+    if (!string.IsNullOrWhiteSpace(error))
+    {
+        return Results.Redirect($"/backups?googleError={Uri.EscapeDataString(error)}");
+    }
+
+    var redirectUri = $"{context.Request.Scheme}://{context.Request.Host}/backups/google/callback";
+    var result = await remoteBackupService.CompleteGoogleConnectionAsync(
+        session.CurrentUser,
+        new CompleteGoogleConnectionCommand(state, code, redirectUri),
+        cancellationToken);
+
+    return result.Succeeded
+        ? Results.Redirect("/backups?google=connected")
+        : Results.Redirect($"/backups?googleError={Uri.EscapeDataString(string.Join(" ", result.Errors))}");
+});
 
 app.MapGet("/gradebook/submission-files/{submissionId:guid}/{fileId:guid}/preview", async (
     Guid submissionId,

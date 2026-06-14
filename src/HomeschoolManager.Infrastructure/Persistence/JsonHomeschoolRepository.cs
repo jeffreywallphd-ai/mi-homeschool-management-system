@@ -357,6 +357,62 @@ public sealed class JsonHomeschoolRepository : IHomeschoolRepository
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<GraduationPlan>> GetGraduationPlansAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.GraduationPlans
+            .OrderByDescending(plan => plan.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<GraduationPlan?> GetGraduationPlanAsync(Guid studentId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.GraduationPlans
+            .Where(plan => plan.StudentId == studentId)
+            .OrderByDescending(plan => plan.UpdatedAtUtc)
+            .FirstOrDefault();
+    }
+
+    public async Task SaveGraduationPlanAsync(GraduationPlan plan, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.GraduationPlans.RemoveAll(existing => existing.Id == plan.Id || existing.StudentId == plan.StudentId);
+                document.GraduationPlans.Add(plan);
+            },
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DiplomaDesign>> GetDiplomaDesignsAsync(CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.DiplomaDesigns
+            .OrderByDescending(design => design.UpdatedAtUtc)
+            .ToArray();
+    }
+
+    public async Task<DiplomaDesign?> GetDiplomaDesignAsync(Guid studentId, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadAsync(cancellationToken);
+        return document.DiplomaDesigns
+            .Where(design => design.StudentId == studentId)
+            .OrderByDescending(design => design.UpdatedAtUtc)
+            .FirstOrDefault();
+    }
+
+    public async Task SaveDiplomaDesignAsync(DiplomaDesign design, CancellationToken cancellationToken = default)
+    {
+        await MutateAsync(
+            document =>
+            {
+                document.DiplomaDesigns.RemoveAll(existing => existing.Id == design.Id || existing.StudentId == design.StudentId);
+                document.DiplomaDesigns.Add(design);
+            },
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CoursePackDefinition>> GetInstalledCoursePacksAsync(CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(cancellationToken);

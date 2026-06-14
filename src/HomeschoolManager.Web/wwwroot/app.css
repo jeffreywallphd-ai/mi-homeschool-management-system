@@ -2406,6 +2406,236 @@ small {
     margin: 0 var(--hm-space-4) var(--hm-space-4);
 }
 
+.diploma-workbench {
+    grid-template-columns: minmax(0, 1.35fr) minmax(24rem, .65fr);
+}
+
+.diploma-preview-card,
+.diploma-editor-card,
+.diploma-style-list {
+    display: grid;
+    gap: var(--hm-space-4);
+}
+
+.diploma-preview-scroll {
+    overflow-x: auto;
+    padding: var(--hm-space-4);
+}
+
+.diploma-sheet {
+    position: relative;
+    width: 66rem;
+    min-width: 66rem;
+    aspect-ratio: 11 / 8.5;
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 3.75rem 4.25rem 2.8rem;
+    background: transparent;
+    color: #17171c;
+    text-align: center;
+    overflow: hidden;
+}
+
+.diploma-border {
+    position: absolute;
+    pointer-events: none;
+}
+
+.diploma-border-outer {
+    inset: 1rem;
+    border: .16rem solid #24242a;
+}
+
+.diploma-border-middle {
+    inset: 1.55rem;
+    border: .08rem solid #44414a;
+}
+
+.diploma-border-gold {
+    inset: 2.15rem;
+    border: .08rem solid #a87927;
+}
+
+.diploma-corner {
+    position: absolute;
+    width: 5rem;
+    height: 5rem;
+    border-color: #b47a21;
+    border-style: solid;
+    pointer-events: none;
+}
+
+.diploma-corner::before,
+.diploma-corner::after {
+    content: "";
+    position: absolute;
+    border: .1rem solid #b47a21;
+    border-radius: 50%;
+}
+
+.diploma-corner::before {
+    width: 3.4rem;
+    height: 2.2rem;
+}
+
+.diploma-corner::after {
+    width: 2rem;
+    height: 3.2rem;
+}
+
+.diploma-corner-tl {
+    top: 2rem;
+    left: 2rem;
+    border-width: .14rem 0 0 .14rem;
+    border-top-left-radius: 2rem;
+}
+
+.diploma-corner-tr {
+    top: 2rem;
+    right: 2rem;
+    border-width: .14rem .14rem 0 0;
+    border-top-right-radius: 2rem;
+}
+
+.diploma-corner-bl {
+    bottom: 2rem;
+    left: 2rem;
+    border-width: 0 0 .14rem .14rem;
+    border-bottom-left-radius: 2rem;
+}
+
+.diploma-corner-br {
+    right: 2rem;
+    bottom: 2rem;
+    border-width: 0 .14rem .14rem 0;
+    border-bottom-right-radius: 2rem;
+}
+
+.diploma-line {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    line-height: 1.15;
+}
+
+.diploma-school {
+    margin-top: .4rem;
+}
+
+.diploma-rule {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    width: 28rem;
+    margin: 1.05rem auto;
+    color: #b47a21;
+}
+
+.diploma-rule::before,
+.diploma-rule::after {
+    content: "";
+    flex: 1;
+    border-top: .08rem solid #b47a21;
+}
+
+.diploma-rule-short {
+    width: 26rem;
+    margin-block: .8rem;
+}
+
+.diploma-rule-mini {
+    position: absolute;
+    left: 50%;
+    bottom: 14.8rem;
+    transform: translateX(-50%);
+    width: 18rem;
+    margin: 0;
+}
+
+.diploma-certifies,
+.diploma-completion,
+.diploma-privileges,
+.diploma-awarded {
+    max-width: 44rem;
+    margin-inline: auto;
+}
+
+.diploma-student,
+.diploma-title {
+    margin-block: .8rem;
+}
+
+.diploma-awarded {
+    position: absolute;
+    right: 4.25rem;
+    bottom: 12.2rem;
+    left: 4.25rem;
+    max-width: none;
+    margin-top: 0;
+}
+
+.diploma-footer-row {
+    position: absolute;
+    z-index: 1;
+    right: 6.5rem;
+    bottom: 3.25rem;
+    left: 6.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 8rem minmax(0, 1fr);
+    align-items: end;
+    gap: 3.25rem;
+}
+
+.diploma-signature {
+    display: grid;
+    gap: .65rem;
+    text-align: center;
+}
+
+.diploma-signature span {
+    display: block;
+    height: 1px;
+    border-top: .08rem solid #17171c;
+}
+
+.diploma-seal {
+    display: grid;
+    place-items: center;
+    width: 7.6rem;
+    height: 7.6rem;
+    border: .15rem double #b89452;
+    border-radius: 50%;
+    color: #5a4525;
+    line-height: 1.2;
+    text-align: center;
+    box-shadow: inset 0 0 0 .75rem rgba(184, 148, 82, .1);
+}
+
+.diploma-font-select option {
+    color: #17171c;
+    background: #fff;
+}
+
+.diploma-readiness-summary {
+    display: grid;
+    gap: .2rem;
+    color: var(--hm-muted);
+}
+
+.diploma-readiness-summary strong {
+    color: var(--hm-text-strong);
+}
+
+.diploma-blockers {
+    padding: var(--hm-space-4);
+    border: 1px solid var(--hm-border);
+    border-radius: var(--hm-radius-md);
+    background: var(--hm-warning-soft);
+}
+
 @media (max-width: 1024px) {
     .content-workbench,
     .course-detail-workbench,
@@ -2520,4 +2750,180 @@ small {
     .two-column-field-row {
         grid-template-columns: 1fr;
     }
+}
+
+.production-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.production-status-grid > div {
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    padding: 0.85rem;
+    background: #fbf9ff;
+    min-width: 0;
+}
+
+.production-status-grid span,
+.production-status-grid small {
+    display: block;
+    color: #5f527a;
+    font-size: 0.86rem;
+}
+
+.production-status-grid strong {
+    display: block;
+    color: #1c063d;
+    overflow-wrap: anywhere;
+}
+
+.backup-workbench {
+    align-items: start;
+}
+
+.backup-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.backup-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.85rem;
+    margin: 0;
+}
+
+.backup-summary-grid > div {
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    padding: 0.85rem;
+    background: #fbf9ff;
+    min-width: 0;
+}
+
+.backup-summary-grid dt {
+    color: #5f527a;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.backup-summary-grid dd {
+    color: #1c063d;
+    font-weight: 700;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.backup-selected-file {
+    align-items: center;
+    background: #fbf9ff;
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    justify-content: space-between;
+    padding: 0.75rem 0.85rem;
+}
+
+.backup-selected-file strong {
+    overflow-wrap: anywhere;
+}
+
+.backup-validation-card,
+.backup-restore-confirm {
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.backup-validation-card.is-valid {
+    background: #f4fbf7;
+    border-color: #b9e4ca;
+}
+
+.backup-validation-card.is-invalid {
+    background: #fff8f3;
+    border-color: #f4c7b8;
+}
+
+.backup-validation-card h3,
+.backup-restore-confirm h3 {
+    font-size: 1rem;
+    margin: 0 0 0.75rem;
+}
+
+.backup-message-list {
+    margin: 0.75rem 0 0;
+}
+
+.button-row,
+.backup-email-row {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.backup-email-row {
+    border-top: 1px solid #eee7fb;
+    padding-top: 1rem;
+}
+
+.backup-email-row .form-control {
+    flex: 1 1 14rem;
+}
+
+.backup-history-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.backup-history-item {
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem;
+}
+
+.backup-history-item strong,
+.backup-history-item small {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.backup-history-item small {
+    color: #5f527a;
+}
+
+.backup-history-item ul {
+    margin: 0;
+}
+
+.backup-history-actions,
+.dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.modal-backdrop-lite {
+    align-items: center;
+    background: rgba(28, 6, 61, 0.48);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 1rem;
+    position: fixed;
+    z-index: 1000;
+}
+
+.confirm-dialog {
+    max-width: 34rem;
+    width: min(100%, 34rem);
 }

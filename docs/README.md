@@ -113,12 +113,18 @@ Implementation roadmaps are currently defined by:
 - [Student Course Client Roadmap](roadmaps/student-course-client-roadmap.md)
 - [Student Portfolio Creation and Preview Roadmap](roadmaps/student-portfolio-builder-roadmap.md)
 - [Transcript with Course Descriptions Roadmap](roadmaps/transcript-with-course-descriptions-roadmap.md)
+- [Diploma Creation and Design Roadmap](roadmaps/diploma-creation-design-roadmap.md)
+- [Production Installer Update Roadmap](roadmaps/production-installer-update-roadmap.md)
+- [Background Service Production Mode Roadmap](roadmaps/background-service-production-mode-roadmap.md)
+- [Local Backup and Restore Roadmap](roadmaps/local-backup-and-restore-roadmap.md)
+- [Google Drive and Email Backup Roadmap](roadmaps/google-drive-and-email-backup-roadmap.md)
 
 Operations requirements are currently defined by:
 
 - [Backup Restore and Archive Export](operations/backup-restore-and-archive-export.md)
 - [Generated Records and Family Archive](operations/generated-records-and-family-archive.md)
 - [Local Installation and Data Location](operations/local-installation-and-data-location.md)
+- [Background Service Mode](operations/background-service-mode.md)
 - [Upgrades Migrations and Recovery](operations/upgrades-migrations-and-recovery.md)
 
 ## Documentation Update Rule

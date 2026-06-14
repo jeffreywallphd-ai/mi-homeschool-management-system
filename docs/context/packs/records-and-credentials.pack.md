@@ -16,9 +16,12 @@ Purpose: Report cards, transcripts, diplomas, official packets, and credential w
 - Transcript rows use explicit parent-recorded final grade and earned credit values.
 - Student transcript access is read-only.
 - Diploma generation depends on graduation-plan rules.
+- Diploma design may customize wording and typography, but export still requires accepted parent graduation readiness.
+- Diploma PDF output should preserve a transparent background for cardstock printing.
 
 ## Common Failure Modes
 
 - Fabricating transcript lines from incomplete course data.
 - Inferring earned credit, final grades, or GPA from planned courses, assignments, or assessments.
 - Letting generated files become the only source of truth.
+- Letting diploma wording imply legal compliance, state approval, accreditation, or MDE issuance.

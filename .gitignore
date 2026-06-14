@@ -50,7 +50,10 @@ artifacts/
 .verify-output/
 .build/
 .build-tmp/
-tools/
+.codex-verify/
+tools/*
+!tools/release/
+!tools/release/**
 TestResults/
 coverage/
 *.coverage
