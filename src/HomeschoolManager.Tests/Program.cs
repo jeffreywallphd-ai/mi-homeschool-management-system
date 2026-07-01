@@ -18,6 +18,7 @@ using HomeschoolManager.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using HomeschoolManager.Infrastructure.Configuration;
 using System.IO.Compression;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using HomeschoolManager.Infrastructure.Production;
@@ -4229,6 +4230,80 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertThrows<System.Security.Cryptography.CryptographicException>(() =>
             encryption.DecryptBackupAsync(encrypted.Content, "wrong passphrase", encrypted.FileName).GetAwaiter().GetResult());
     }),
+    ("Synced folder backup prepares native-picker files and records saved copies", async () =>
+    {
+        var (repository, paths) = await CreateRepositoryWithPathsAsync();
+        await CreateSetupAsync(repository);
+        var backupService = new BackupService(new LocalBackupArchiveStore(paths, repository));
+        var encryption = new LocalBackupEncryptionService();
+        var store = new FakeRemoteBackupStore();
+        var provider = new FakeGoogleBackupProvider();
+        var service = new RemoteBackupService(backupService, encryption, store, provider);
+        var parent = UserContext.ParentAdmin("Parent");
+
+        var studentBackup = await service.CreateSyncedFolderBackupAsync(
+            UserContext.Student("Student"),
+            new CreateSyncedFolderBackupCommand(false, ""));
+        AssertFalse(studentBackup.Succeeded, "Student should not create synced folder backups.");
+
+        var plainFolderBackup = await service.CreateSyncedFolderBackupAsync(
+            parent,
+            new CreateSyncedFolderBackupCommand(false, ""));
+        AssertTrue(plainFolderBackup.Succeeded, "Parent should prepare an unencrypted synced folder backup when encryption is not selected.");
+        AssertFalse(plainFolderBackup.Value!.IsEncrypted, "Plain synced folder backup should be marked unencrypted.");
+        AssertTrue(plainFolderBackup.Value.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase), "Plain synced folder backup should keep the normal ZIP extension.");
+        var plainValidation = await backupService.ValidateBackupAsync(parent, new ValidateBackupCommand(plainFolderBackup.Value.FileName, plainFolderBackup.Value.Content));
+        AssertTrue(plainValidation.Succeeded && plainValidation.Value!.IsValid, "Plain synced folder backup should validate as a normal full backup ZIP.");
+
+        var folderBackup = await service.CreateSyncedFolderBackupAsync(
+            parent,
+            new CreateSyncedFolderBackupCommand(true, "parent passphrase"));
+        AssertTrue(folderBackup.Succeeded, "Parent should prepare encrypted synced folder backup.");
+        AssertTrue(folderBackup.Value!.IsEncrypted, "Encrypted synced folder backup should be marked encrypted.");
+        AssertTrue(folderBackup.Value.FileName.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase), "Encrypted synced folder backup should use the encrypted extension.");
+        AssertFalse(Encoding.UTF8.GetString(folderBackup.Value.Content).Contains("homeschool-manager.full-backup", StringComparison.Ordinal), "Encrypted synced folder backup should not expose a plain full backup ZIP.");
+
+        var studentRecord = await service.RecordSyncedFolderBackupAsync(
+            UserContext.Student("Student"),
+            new RecordSyncedFolderBackupCommand(plainFolderBackup.Value.FileName, plainFolderBackup.Value.SizeBytes, false, "Homeschool Manager Backups"));
+        AssertFalse(studentRecord.Succeeded, "Student should not record synced folder backups.");
+
+        var plainRecord = await service.RecordSyncedFolderBackupAsync(
+            parent,
+            new RecordSyncedFolderBackupCommand(plainFolderBackup.Value.FileName, plainFolderBackup.Value.SizeBytes, false, "Homeschool Manager Backups"));
+        AssertTrue(plainRecord.Succeeded, "Parent should record a plain synced folder backup after browser save succeeds.");
+
+        var encryptedRecord = await service.RecordSyncedFolderBackupAsync(
+            parent,
+            new RecordSyncedFolderBackupCommand(folderBackup.Value.FileName, folderBackup.Value.SizeBytes, true, "Homeschool Manager Backups"));
+        AssertTrue(encryptedRecord.Succeeded, "Parent should record an encrypted synced folder backup after browser save succeeds.");
+
+        var status = await service.GetStatusAsync(parent);
+        AssertTrue(status.Succeeded, "Synced folder backup status should load.");
+        AssertTrue(status.Value!.Configuration.LastSyncedFolderBackupAtUtc is not null, "Last synced folder backup date should be recorded.");
+        AssertTrue(status.Value.History.Any(item => item.Destination == "Synced folder" && item.FileName == folderBackup.Value.FileName), "Synced folder backup should be included in remote backup history.");
+        AssertTrue(status.Value.History.Any(item => item.Destination == "Synced folder" && item.FileName == plainFolderBackup.Value.FileName && item.Note.Contains("without encryption", StringComparison.OrdinalIgnoreCase)), "Plain synced folder backup history should record that it was not encrypted.");
+
+        var originalHousehold = await repository.GetHouseholdAsync() ?? throw new InvalidOperationException("Household setup failed.");
+        await repository.SaveHouseholdAsync(new Household(originalHousehold.Id, "Changed Family", originalHousehold.ParentGuardianName));
+        var preview = await service.PreviewEncryptedBackupRestoreAsync(
+            parent,
+            new PreviewEncryptedBackupRestoreCommand(folderBackup.Value.FileName, folderBackup.Value.Content, "parent passphrase"));
+        AssertTrue(preview.Succeeded, "Encrypted synced folder backup should preview after passphrase decrypt.");
+        AssertTrue(preview.Value!.SafetyBackupMessage.Contains("safety backup", StringComparison.OrdinalIgnoreCase), "Encrypted restore preview should explain safety backup.");
+
+        var notConfirmed = await service.RestoreEncryptedBackupAsync(
+            parent,
+            new RestoreEncryptedBackupCommand(folderBackup.Value.FileName, folderBackup.Value.Content, "parent passphrase", false));
+        AssertFalse(notConfirmed.Succeeded, "Encrypted restore should require explicit confirmation.");
+
+        var restored = await service.RestoreEncryptedBackupAsync(
+            parent,
+            new RestoreEncryptedBackupCommand(folderBackup.Value.FileName, folderBackup.Value.Content, "parent passphrase", true));
+        AssertTrue(restored.Succeeded, "Encrypted synced folder backup should restore after confirmation.");
+        AssertEqual("Family", (await repository.GetHouseholdAsync())!.Name, "Encrypted restore should replace current records from decrypted backup.");
+        AssertEqual(BackupKind.PreRestore, restored.Value!.SafetyBackupManifest.BackupKind, "Encrypted restore should create a pre-restore safety backup.");
+    }),
     ("Remote backup service requires parent access and uses encrypted Google artifacts", async () =>
     {
         var (repository, paths) = await CreateRepositoryWithPathsAsync();
@@ -4245,6 +4320,10 @@ var tests = new List<(string Name, Func<Task> Test)>
 
         var saved = await service.SaveGoogleSettingsAsync(parent, new SaveGoogleBackupSettingsCommand("client-id.apps.googleusercontent.com"));
         AssertTrue(saved.Succeeded, "Parent should be able to save Google client ID.");
+
+        var unsupportedCallback = await service.StartGoogleConnectionAsync(parent, new StartGoogleConnectionCommand("http://localhost:5171/backups/google/callback"));
+        AssertFalse(unsupportedCallback.Succeeded, "Google connection should require a loopback IP callback instead of localhost or Wi-Fi host names.");
+
         var connect = await service.StartGoogleConnectionAsync(parent, new StartGoogleConnectionCommand("http://127.0.0.1:5171/backups/google/callback"));
         AssertTrue(connect.Succeeded, "Connection URL should be created.");
         AssertTrue(connect.Value!.Contains("accounts.google.com", StringComparison.Ordinal), "Connection should use Google OAuth.");
@@ -4266,11 +4345,63 @@ var tests = new List<(string Name, Func<Task> Test)>
         var driveFiles = remoteFiles.Value!;
         var preview = await service.PreviewGoogleDriveRestoreAsync(parent, new PreviewGoogleDriveRestoreCommand(driveFiles[0].FileId, "parent passphrase"));
         AssertTrue(preview.Succeeded, "Downloaded encrypted backup should decrypt and validate for restore preview.");
+
+        store.DropTokensKeepingConnection();
+        var staleStatus = await service.GetStatusAsync(parent);
+        AssertTrue(staleStatus.Succeeded, "Status should remain readable when restored config has no local token.");
+        AssertFalse(staleStatus.Value!.Configuration.IsGoogleConnected, "Missing token should force Google backup back to reconnect-needed state.");
+        AssertTrue(staleStatus.Value.Warnings.Any(warning => warning.Contains("reconnected", StringComparison.OrdinalIgnoreCase)), "Status should explain that Google backup needs reconnection.");
+    }),
+    ("Google provider builds Gmail drafts with RFC-style MIME headers", async () =>
+    {
+        var handler = new CapturingGoogleHttpMessageHandler();
+        var provider = new GoogleBackupProvider(new HttpClient(handler));
+        var manifest = new BackupManifest(
+            "homeschool-manager.full-backup",
+            1,
+            BackupKind.Manual,
+            DateTimeOffset.UtcNow,
+            "Parent",
+            "test",
+            1,
+            "Desktop",
+            "Family",
+            "Family Homeschool",
+            [],
+            ["data"],
+            1,
+            3,
+            []);
+        var encrypted = new EncryptedBackupDownloadFile(
+            "encrypted-full-backup-test.hsmbak",
+            "application/octet-stream",
+            Encoding.UTF8.GetBytes("encrypted bytes"),
+            manifest,
+            DateTimeOffset.UtcNow);
+
+        var draft = await provider.CreateGmailDraftAsync(
+            new GoogleOAuthTokenSet("access", "refresh", DateTimeOffset.UtcNow.AddHours(1), "https://www.googleapis.com/auth/gmail.compose"),
+            encrypted,
+            "parent@example.com");
+
+        AssertEqual("draft-1", draft.DraftId, "Draft id should come from Gmail draft response.");
+        AssertTrue(handler.ProfileWasRequested, "Provider should read the connected Gmail address before creating the draft.");
+        AssertTrue(handler.LastDraftRequestJson.Length > 0, "Provider should send a draft request body.");
+        using var document = JsonDocument.Parse(handler.LastDraftRequestJson);
+        var raw = document.RootElement.GetProperty("message").GetProperty("raw").GetString() ?? "";
+        AssertFalse(raw.Contains('+') || raw.Contains('/'), "Gmail raw body should use base64url encoding.");
+        var mime = Encoding.UTF8.GetString(DecodeBase64Url(raw));
+        AssertTrue(mime.Contains("From: connected@example.com", StringComparison.Ordinal), "MIME should include the connected Gmail address.");
+        AssertTrue(mime.Contains("To: parent@example.com", StringComparison.Ordinal), "MIME should include the selected recipient.");
+        AssertTrue(mime.Contains("Date: ", StringComparison.Ordinal), "MIME should include a Date header.");
+        AssertTrue(mime.Contains("Message-ID: ", StringComparison.Ordinal), "MIME should include a Message-ID header.");
+        AssertTrue(mime.Contains("Content-Disposition: attachment; filename=\"encrypted-full-backup-test.hsmbak\"", StringComparison.Ordinal), "MIME should attach the encrypted backup file.");
     }),
     ("Backup and restore page is parent-admin routed and documented", () =>
     {
         var root = FindRepositoryRoot();
         var page = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Backups.razor"));
+        var sessionJs = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "wwwroot", "session.js"));
         var nav = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Layout", "NavMenu.razor"));
         var backupArchitecture = File.ReadAllText(Path.Combine(root, "docs", "architecture", "backup-restore-and-export-architecture.md"));
         var backupOperations = File.ReadAllText(Path.Combine(root, "docs", "operations", "backup-restore-and-archive-export.md"));
@@ -4279,12 +4410,27 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(page.Contains("Session.IsParentAdmin", StringComparison.Ordinal), "Backup page should check the parent/admin session.");
         AssertTrue(page.Contains("confirmRestore", StringComparison.Ordinal), "Restore UI should require explicit confirmation.");
         AssertTrue(page.Contains("RestoreBackupCommand(selectedBackupName, selectedBackupBytes, confirmRestore)", StringComparison.Ordinal), "Restore command should receive the confirmation value.");
-        AssertTrue(page.Contains("Encrypted off-computer backup", StringComparison.Ordinal), "Backup page should expose encrypted external backup controls.");
+        AssertTrue(page.Contains("Synced folder backup", StringComparison.Ordinal), "Backup page should make synced folder backup the default external backup workflow.");
+        AssertFalse(page.Contains("IBackupFolderBrowser", StringComparison.Ordinal), "Backup page should not use a custom in-app folder browser.");
+        AssertTrue(page.Contains("Choose folder", StringComparison.Ordinal), "Backup page should expose the native folder picker action.");
+        AssertTrue(page.Contains("homeschoolFolderBackups.chooseDirectory", StringComparison.Ordinal), "Backup page should invoke the browser folder picker.");
+        AssertTrue(sessionJs.Contains("showDirectoryPicker", StringComparison.Ordinal), "Folder selection should use the browser's native directory picker.");
+        AssertTrue(sessionJs.Contains("createWritable", StringComparison.Ordinal), "Synced folder backup should write through the selected browser folder handle.");
+        AssertTrue(page.Contains("useSyncedFolderEncryption", StringComparison.Ordinal), "Backup page should let parents choose whether to encrypt a synced-folder backup.");
+        AssertTrue(page.Contains("CreateSyncedFolderBackupAsync", StringComparison.Ordinal), "Backup page should prepare encrypted or plain backups for the selected folder.");
+        AssertTrue(page.Contains("RecordSyncedFolderBackupAsync", StringComparison.Ordinal), "Backup page should record synced-folder history after the browser write succeeds.");
+        AssertTrue(page.Contains("PreviewEncryptedBackupRestoreCommand", StringComparison.Ordinal), "Backup page should preview encrypted .hsmbak files for restore.");
+        AssertTrue(page.Contains("Advanced Google API backup", StringComparison.Ordinal), "Backup page should keep Google API backup as an advanced option.");
         AssertTrue(page.Contains("Create Gmail draft", StringComparison.Ordinal), "Backup page should create Gmail drafts instead of silent email sends.");
+        AssertTrue(page.Contains("BuildGoogleLoopbackRedirectUri", StringComparison.Ordinal), "Backup page should build a Google loopback redirect URI.");
+        AssertTrue(page.Contains("\"127.0.0.1\"", StringComparison.Ordinal), "Google connection should use 127.0.0.1 for installed-app OAuth.");
         AssertTrue(nav.Contains("href=\"backups\"", StringComparison.Ordinal), "Parent/admin navigation should link to Backup & Restore.");
         AssertTrue(backupArchitecture.Contains("checksums.json", StringComparison.Ordinal), "Backup architecture docs should define the implemented ZIP format.");
+        AssertTrue(backupArchitecture.Contains("Google Drive for desktop", StringComparison.Ordinal), "Backup architecture docs should describe synced folder backup.");
         AssertTrue(backupOperations.Contains("pre-restore safety backup", StringComparison.OrdinalIgnoreCase), "Operations docs should explain restore safety backup behavior.");
-        AssertTrue(externalBackupAdr.Contains("encrypted with a parent-entered passphrase", StringComparison.OrdinalIgnoreCase), "External backup ADR should require encrypted remote copies.");
+        AssertTrue(backupOperations.Contains("Synced Folder Backup", StringComparison.Ordinal), "Operations docs should make synced folder backup explicit.");
+        AssertTrue(externalBackupAdr.Contains("parent-selected encryption", StringComparison.OrdinalIgnoreCase), "External backup ADR should record the parent-selected synced-folder encryption choice.");
+        AssertTrue(externalBackupAdr.Contains("synced folder", StringComparison.OrdinalIgnoreCase), "External backup ADR should allow parent-chosen synced folders.");
         return Task.CompletedTask;
     }),
     ("Windows release script preserves data outside the app layout and invokes Velopack packaging", () =>
@@ -4535,6 +4681,21 @@ static void AssertThrows<TException>(Action action)
     throw new InvalidOperationException($"Expected {typeof(TException).Name}.");
 }
 
+static byte[] DecodeBase64Url(string value)
+{
+    var padded = value
+        .Replace('-', '+')
+        .Replace('_', '/');
+    padded += (padded.Length % 4) switch
+    {
+        2 => "==",
+        3 => "=",
+        _ => ""
+    };
+
+    return Convert.FromBase64String(padded);
+}
+
 static Guid DeterministicGuid(string value)
 {
     var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value));
@@ -4566,18 +4727,29 @@ static IReadOnlyList<LessonResourceCommand> LessonResources(params string[] reso
 
 sealed class FakeRemoteBackupStore : IRemoteBackupStore
 {
-    private RemoteBackupConfiguration configuration = new("", null, "", null, null);
+    private RemoteBackupConfiguration configuration = new(null, "", null, "", null, null, false);
     private GoogleOAuthPendingConnection? pending;
     private GoogleOAuthTokenSet? tokens;
     private readonly List<RemoteBackupHistoryItem> history = [];
 
     public Task<RemoteBackupConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(configuration);
+        return Task.FromResult(configuration with { HasGoogleToken = tokens is not null });
     }
 
     public Task SaveGoogleClientIdAsync(string clientId, CancellationToken cancellationToken = default)
     {
+        if (!string.Equals(configuration.GoogleOAuthClientId, clientId, StringComparison.Ordinal))
+        {
+            tokens = null;
+            configuration = configuration with
+            {
+                GoogleConnectedAtUtc = null,
+                GrantedScopes = "",
+                HasGoogleToken = false
+            };
+        }
+
         configuration = configuration with { GoogleOAuthClientId = clientId };
         return Task.CompletedTask;
     }
@@ -4588,7 +4760,8 @@ sealed class FakeRemoteBackupStore : IRemoteBackupStore
         configuration = configuration with
         {
             GoogleConnectedAtUtc = connectedAtUtc,
-            GrantedScopes = tokenSet.Scope
+            GrantedScopes = tokenSet.Scope,
+            HasGoogleToken = true
         };
         return Task.CompletedTask;
     }
@@ -4601,14 +4774,21 @@ sealed class FakeRemoteBackupStore : IRemoteBackupStore
     public Task SaveGoogleTokensAsync(GoogleOAuthTokenSet tokenSet, CancellationToken cancellationToken = default)
     {
         tokens = tokenSet;
+        configuration = configuration with { HasGoogleToken = true };
         return Task.CompletedTask;
     }
 
     public Task DisconnectGoogleAsync(CancellationToken cancellationToken = default)
     {
         tokens = null;
-        configuration = configuration with { GoogleConnectedAtUtc = null, GrantedScopes = "" };
+        configuration = configuration with { GoogleConnectedAtUtc = null, GrantedScopes = "", HasGoogleToken = false };
         return Task.CompletedTask;
+    }
+
+    public void DropTokensKeepingConnection()
+    {
+        tokens = null;
+        configuration = configuration with { HasGoogleToken = false };
     }
 
     public Task SavePendingGoogleConnectionAsync(GoogleOAuthPendingConnection pending, CancellationToken cancellationToken = default)
@@ -4631,13 +4811,17 @@ sealed class FakeRemoteBackupStore : IRemoteBackupStore
     public Task AddHistoryAsync(RemoteBackupHistoryItem item, CancellationToken cancellationToken = default)
     {
         history.Add(item);
-        if (item.Destination == "Google Drive")
-        {
-            configuration = configuration with { LastDriveUploadAtUtc = item.CreatedAtUtc };
-        }
-        else if (item.Destination == "Gmail draft")
-        {
-            configuration = configuration with { LastGmailDraftAtUtc = item.CreatedAtUtc };
+            if (item.Destination == "Google Drive")
+            {
+                configuration = configuration with { LastDriveUploadAtUtc = item.CreatedAtUtc };
+            }
+            else if (item.Destination == "Synced folder")
+            {
+                configuration = configuration with { LastSyncedFolderBackupAtUtc = item.CreatedAtUtc };
+            }
+            else if (item.Destination == "Gmail draft")
+            {
+                configuration = configuration with { LastGmailDraftAtUtc = item.CreatedAtUtc };
         }
 
         return Task.CompletedTask;
@@ -4646,6 +4830,42 @@ sealed class FakeRemoteBackupStore : IRemoteBackupStore
     public Task<IReadOnlyList<RemoteBackupHistoryItem>> ListHistoryAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<RemoteBackupHistoryItem>>(history.ToArray());
+    }
+}
+
+sealed class CapturingGoogleHttpMessageHandler : HttpMessageHandler
+{
+    public bool ProfileWasRequested { get; private set; }
+
+    public string LastDraftRequestJson { get; private set; } = "";
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.Method == HttpMethod.Get &&
+            request.RequestUri?.AbsoluteUri.Equals("https://gmail.googleapis.com/gmail/v1/users/me/profile", StringComparison.Ordinal) == true)
+        {
+            ProfileWasRequested = true;
+            return JsonResponse("""{"emailAddress":"connected@example.com"}""");
+        }
+
+        if (request.Method == HttpMethod.Post &&
+            request.RequestUri?.AbsoluteUri.Equals("https://gmail.googleapis.com/gmail/v1/users/me/drafts", StringComparison.Ordinal) == true)
+        {
+            LastDraftRequestJson = request.Content is null
+                ? ""
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return JsonResponse("""{"id":"draft-1"}""");
+        }
+
+        return JsonResponse("""{"error":"unexpected request"}""", HttpStatusCode.NotFound);
+    }
+
+    private static HttpResponseMessage JsonResponse(string json, HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        return new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
     }
 }
 

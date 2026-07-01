@@ -26,6 +26,8 @@ Source records and generated official records should remain available for long-t
 - Validate checksums where available.
 - Report missing or damaged content plainly.
 - Do not silently drop records.
+- Newer application versions should restore older supported full-backup formats.
+- Backup format changes require explicit migration/recovery behavior and compatibility verification before release.
 
 ## Migration Backup Standards
 

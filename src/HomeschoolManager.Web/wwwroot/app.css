@@ -2861,12 +2861,61 @@ small {
     margin: 0.75rem 0 0;
 }
 
+.backup-folder-selection {
+    background: #fbf9ff;
+    border: 1px solid #dfd2f7;
+    border-radius: 8px;
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.85rem;
+}
+
+.backup-folder-selection span,
+.backup-folder-selection small {
+    color: #5f527a;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.backup-folder-selection strong {
+    color: #1c063d;
+    overflow-wrap: anywhere;
+}
+
+.backup-option-row {
+    background: #fbf9ff;
+    border: 1px solid #eee7fb;
+    border-radius: 8px;
+    padding: 0.75rem 0.85rem;
+}
+
+.backup-inline-warning {
+    margin: 0;
+}
+
+.backup-inline-status {
+    color: #5f527a;
+    flex: 1 1 18rem;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
 .button-row,
-.backup-email-row {
+.backup-email-row,
+.backup-encrypted-restore {
     align-items: end;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+}
+
+.backup-encrypted-restore {
+    border-top: 1px solid #eee7fb;
+    padding-top: 1rem;
+}
+
+.backup-encrypted-restore .form-control {
+    flex: 1 1 16rem;
 }
 
 .backup-email-row {
@@ -2910,6 +2959,45 @@ small {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+}
+
+.backup-advanced-panel {
+    display: block;
+}
+
+.backup-advanced-panel details {
+    display: grid;
+    gap: 1rem;
+}
+
+.backup-advanced-panel summary {
+    align-items: start;
+    cursor: pointer;
+    display: grid;
+    gap: 0.25rem;
+    list-style-position: inside;
+}
+
+.backup-advanced-panel summary span {
+    color: #160033;
+    font-weight: 800;
+}
+
+.backup-advanced-panel summary small {
+    color: #5f527a;
+    font-size: 0.86rem;
+}
+
+.backup-advanced-content {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.backup-advanced-divider {
+    border-top: 1px solid #eee7fb;
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
 }
 
 .modal-backdrop-lite {

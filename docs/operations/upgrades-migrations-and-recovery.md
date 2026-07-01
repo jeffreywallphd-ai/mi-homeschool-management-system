@@ -21,6 +21,13 @@ The system should track:
 - Data format version when needed.
 - Backup manifest version.
 
+Backup compatibility expectation:
+
+- Newer application versions should remain able to restore older supported full backups.
+- Backup format or schema changes should include an explicit migration path for older supported backups.
+- If a backup is too old or damaged to restore automatically, the app should say so plainly and point the parent/admin toward documented recovery options.
+- New backup files are not required to restore in older application versions.
+
 ## Backup Before Migration
 
 Production/family use should default to creating or requiring a backup before migration.
@@ -79,3 +86,4 @@ Migration tests should cover:
 - Backup opt-out warning path.
 - Dev opt-out default.
 - Preservation of records, files, and generated-document references.
+- Restore compatibility from older supported backup fixtures into the current application version.

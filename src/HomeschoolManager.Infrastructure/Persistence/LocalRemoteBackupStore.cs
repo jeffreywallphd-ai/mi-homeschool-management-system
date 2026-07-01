@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using HomeschoolManager.Application.Backups;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -24,7 +25,8 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
     public async Task<RemoteBackupConfiguration> GetConfigurationAsync(CancellationToken cancellationToken = default)
     {
         var document = await ReadDocumentAsync(cancellationToken);
-        return ToConfiguration(document);
+        var hasGoogleToken = await GetGoogleTokensAsync(cancellationToken) is not null;
+        return ToConfiguration(document, hasGoogleToken);
     }
 
     public async Task SaveGoogleClientIdAsync(string clientId, CancellationToken cancellationToken = default)
@@ -33,6 +35,13 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
         try
         {
             var document = await ReadDocumentAsync(cancellationToken);
+            if (!string.Equals(document.GoogleOAuthClientId, clientId, StringComparison.Ordinal))
+            {
+                document.GoogleConnectedAtUtc = null;
+                document.GrantedScopes = "";
+                TryDeleteTokenFile();
+            }
+
             document.GoogleOAuthClientId = clientId;
             await WriteDocumentAsync(document, cancellationToken);
         }
@@ -70,9 +79,16 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
             return null;
         }
 
-        await using var stream = File.OpenRead(path);
-        var token = await JsonSerializer.DeserializeAsync<GoogleTokenDocument>(stream, JsonOptions, cancellationToken);
-        return token is null ? null : FromProtectedToken(token);
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            var token = await JsonSerializer.DeserializeAsync<GoogleTokenDocument>(stream, JsonOptions, cancellationToken);
+            return token is null ? null : FromProtectedToken(token);
+        }
+        catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public async Task SaveGoogleTokensAsync(GoogleOAuthTokenSet tokenSet, CancellationToken cancellationToken = default)
@@ -89,11 +105,7 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
             document.GoogleConnectedAtUtc = null;
             document.GrantedScopes = "";
             await WriteDocumentAsync(document, cancellationToken);
-            var tokenPath = TokenPath();
-            if (File.Exists(tokenPath))
-            {
-                File.Delete(tokenPath);
-            }
+            TryDeleteTokenFile();
         }
         finally
         {
@@ -150,6 +162,10 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
             {
                 document.LastDriveUploadAtUtc = item.CreatedAtUtc;
             }
+            else if (item.Destination.Equals("Synced folder", StringComparison.OrdinalIgnoreCase))
+            {
+                document.LastSyncedFolderBackupAtUtc = item.CreatedAtUtc;
+            }
             else if (item.Destination.Equals("Gmail draft", StringComparison.OrdinalIgnoreCase))
             {
                 document.LastGmailDraftAtUtc = item.CreatedAtUtc;
@@ -198,14 +214,16 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
         await JsonSerializer.SerializeAsync(stream, token, JsonOptions, cancellationToken);
     }
 
-    private RemoteBackupConfiguration ToConfiguration(RemoteBackupDocument document)
+    private static RemoteBackupConfiguration ToConfiguration(RemoteBackupDocument document, bool hasGoogleToken)
     {
         return new RemoteBackupConfiguration(
+            document.LastSyncedFolderBackupAtUtc,
             document.GoogleOAuthClientId,
             document.GoogleConnectedAtUtc,
             document.GrantedScopes,
             document.LastDriveUploadAtUtc,
-            document.LastGmailDraftAtUtc);
+            document.LastGmailDraftAtUtc,
+            hasGoogleToken);
     }
 
     private GoogleTokenDocument ToProtectedToken(GoogleOAuthTokenSet tokenSet)
@@ -232,8 +250,19 @@ public sealed class LocalRemoteBackupStore : IRemoteBackupStore
 
     private string TokenPath() => Path.Combine(SecretsDirectory(), "google-backup-token.json");
 
+    private void TryDeleteTokenFile()
+    {
+        var tokenPath = TokenPath();
+        if (File.Exists(tokenPath))
+        {
+            File.Delete(tokenPath);
+        }
+    }
+
     private sealed class RemoteBackupDocument
     {
+        public DateTimeOffset? LastSyncedFolderBackupAtUtc { get; set; }
+
         public string GoogleOAuthClientId { get; set; } = "";
 
         public DateTimeOffset? GoogleConnectedAtUtc { get; set; }

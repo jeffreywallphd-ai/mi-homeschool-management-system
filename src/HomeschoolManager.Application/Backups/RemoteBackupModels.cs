@@ -1,15 +1,17 @@
 namespace HomeschoolManager.Application.Backups;
 
 public sealed record RemoteBackupConfiguration(
+    DateTimeOffset? LastSyncedFolderBackupAtUtc,
     string GoogleOAuthClientId,
     DateTimeOffset? GoogleConnectedAtUtc,
     string GrantedScopes,
     DateTimeOffset? LastDriveUploadAtUtc,
-    DateTimeOffset? LastGmailDraftAtUtc)
+    DateTimeOffset? LastGmailDraftAtUtc,
+    bool HasGoogleToken)
 {
     public bool HasGoogleClientId => !string.IsNullOrWhiteSpace(GoogleOAuthClientId);
 
-    public bool IsGoogleConnected => GoogleConnectedAtUtc is not null;
+    public bool IsGoogleConnected => GoogleConnectedAtUtc is not null && HasGoogleToken;
 }
 
 public sealed record RemoteBackupStatus(
@@ -47,6 +49,14 @@ public sealed record GoogleDriveUploadResult(
     string FileName,
     long SizeBytes,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record SyncedFolderBackupFile(
+    string FileName,
+    string ContentType,
+    byte[] Content,
+    long SizeBytes,
+    DateTimeOffset CreatedAtUtc,
+    bool IsEncrypted);
 
 public sealed record GoogleDriveBackupFile(
     string FileId,

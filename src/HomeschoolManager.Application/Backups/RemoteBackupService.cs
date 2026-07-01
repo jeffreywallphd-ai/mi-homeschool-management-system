@@ -39,14 +39,13 @@ public sealed class RemoteBackupService
         var configuration = await remoteStore.GetConfigurationAsync(cancellationToken);
         var history = await remoteStore.ListHistoryAsync(cancellationToken);
         var warnings = new List<string>();
-        if (!configuration.HasGoogleClientId)
+        if (configuration.GoogleConnectedAtUtc is not null && !configuration.HasGoogleToken)
         {
-            warnings.Add("Add a Google OAuth client ID before connecting Google Drive or Gmail.");
+            warnings.Add("Google backup needs to be reconnected on this computer.");
         }
-
-        if (!configuration.IsGoogleConnected)
+        else if (configuration.HasGoogleClientId && !configuration.IsGoogleConnected)
         {
-            warnings.Add("Google is not connected yet.");
+            warnings.Add("Advanced Google backup is not connected yet.");
         }
 
         return OperationResult<RemoteBackupStatus>.Success(new RemoteBackupStatus(configuration, history, warnings));
@@ -92,6 +91,11 @@ public sealed class RemoteBackupService
         if (string.IsNullOrWhiteSpace(command.RedirectUri))
         {
             return OperationResult<string>.Failure("The Google connection callback address could not be prepared.");
+        }
+
+        if (!IsSupportedLoopbackRedirect(command.RedirectUri))
+        {
+            return OperationResult<string>.Failure("Google backup must be connected from the computer running Homeschool Manager using a 127.0.0.1 loopback callback.");
         }
 
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
@@ -213,6 +217,81 @@ public sealed class RemoteBackupService
         return OperationResult<GoogleDriveUploadResult>.Success(upload);
     }
 
+    public async Task<OperationResult<SyncedFolderBackupFile>> CreateSyncedFolderBackupAsync(
+        UserContext user,
+        CreateSyncedFolderBackupCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<SyncedFolderBackupFile>.Failure(authorized.Errors.ToArray());
+        }
+
+        if (command.EncryptBackup)
+        {
+            var encrypted = await CreateEncryptedBackupAsync(
+                user,
+                new CreateEncryptedBackupCommand(command.Passphrase),
+                cancellationToken);
+            if (!encrypted.Succeeded || encrypted.Value is null)
+            {
+                return OperationResult<SyncedFolderBackupFile>.Failure(encrypted.Errors.ToArray());
+            }
+
+            return OperationResult<SyncedFolderBackupFile>.Success(new SyncedFolderBackupFile(
+                encrypted.Value.FileName,
+                encrypted.Value.ContentType,
+                encrypted.Value.Content,
+                encrypted.Value.Content.LongLength,
+                encrypted.Value.CreatedAtUtc,
+                true));
+        }
+
+        var backup = await backupService.CreateBackupAsync(user, new CreateBackupCommand(), cancellationToken);
+        if (!backup.Succeeded || backup.Value is null)
+        {
+            return OperationResult<SyncedFolderBackupFile>.Failure(backup.Errors.ToArray());
+        }
+
+        return OperationResult<SyncedFolderBackupFile>.Success(new SyncedFolderBackupFile(
+            backup.Value.FileName,
+            backup.Value.ContentType,
+            backup.Value.Content,
+            backup.Value.Content.LongLength,
+            backup.Value.Manifest.CreatedAtUtc,
+            false));
+    }
+
+    public async Task<OperationResult> RecordSyncedFolderBackupAsync(
+        UserContext user,
+        RecordSyncedFolderBackupCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return authorized;
+        }
+
+        var fileName = Path.GetFileName(command.FileName);
+        if (string.IsNullOrWhiteSpace(fileName) || command.SizeBytes <= 0)
+        {
+            return OperationResult.Failure("The synced-folder backup record could not be saved.");
+        }
+
+        var folderName = string.IsNullOrWhiteSpace(command.FolderName)
+            ? "selected folder"
+            : command.FolderName.Trim();
+        var note = command.IsEncrypted
+            ? $"Encrypted backup saved to {folderName}."
+            : $"Full backup ZIP saved to {folderName} without encryption.";
+        await remoteStore.AddHistoryAsync(
+            new RemoteBackupHistoryItem("Synced folder", fileName, folderName, DateTimeOffset.UtcNow, command.SizeBytes, note),
+            cancellationToken);
+        return OperationResult.Success();
+    }
+
     public async Task<OperationResult<GmailDraftResult>> CreateGmailBackupDraftAsync(
         UserContext user,
         CreateGmailBackupDraftCommand command,
@@ -297,6 +376,60 @@ public sealed class RemoteBackupService
             cancellationToken);
     }
 
+    public async Task<OperationResult<BackupRestorePreview>> PreviewEncryptedBackupRestoreAsync(
+        UserContext user,
+        PreviewEncryptedBackupRestoreCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<BackupRestorePreview>.Failure(authorized.Errors.ToArray());
+        }
+
+        var decrypted = await DecryptEncryptedBackupAsync(
+            command.Content,
+            command.Passphrase,
+            command.FileName,
+            cancellationToken);
+        if (!decrypted.Succeeded || decrypted.Value is null)
+        {
+            return OperationResult<BackupRestorePreview>.Failure(decrypted.Errors.ToArray());
+        }
+
+        return await backupService.PreviewRestoreAsync(
+            user,
+            new ValidateBackupCommand(decrypted.Value.FileName, decrypted.Value.Content),
+            cancellationToken);
+    }
+
+    public async Task<OperationResult<BackupRestoreResult>> RestoreEncryptedBackupAsync(
+        UserContext user,
+        RestoreEncryptedBackupCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var authorized = AuthorizationGuard.RequireParentAdmin(user);
+        if (!authorized.Succeeded)
+        {
+            return OperationResult<BackupRestoreResult>.Failure(authorized.Errors.ToArray());
+        }
+
+        var decrypted = await DecryptEncryptedBackupAsync(
+            command.Content,
+            command.Passphrase,
+            command.FileName,
+            cancellationToken);
+        if (!decrypted.Succeeded || decrypted.Value is null)
+        {
+            return OperationResult<BackupRestoreResult>.Failure(decrypted.Errors.ToArray());
+        }
+
+        return await backupService.RestoreBackupAsync(
+            user,
+            new RestoreBackupCommand(decrypted.Value.FileName, decrypted.Value.Content, command.ConfirmReplaceCurrentRecords),
+            cancellationToken);
+    }
+
     private async Task<OperationResult<DecryptedBackupFile>> DownloadAndDecryptAsync(
         UserContext user,
         string driveFileId,
@@ -320,6 +453,38 @@ public sealed class RemoteBackupService
         {
             return OperationResult<DecryptedBackupFile>.Success(
                 await encryptionService.DecryptBackupAsync(encrypted.Content, passphrase, encrypted.FileName, cancellationToken));
+        }
+        catch (InvalidDataException)
+        {
+            return OperationResult<DecryptedBackupFile>.Failure("The encrypted backup could not be opened with that passphrase.");
+        }
+        catch (CryptographicException)
+        {
+            return OperationResult<DecryptedBackupFile>.Failure("The encrypted backup could not be opened with that passphrase.");
+        }
+    }
+
+    private async Task<OperationResult<DecryptedBackupFile>> DecryptEncryptedBackupAsync(
+        byte[] encryptedContent,
+        string passphrase,
+        string encryptedFileName,
+        CancellationToken cancellationToken)
+    {
+        var passphraseError = ValidatePassphrase(passphrase);
+        if (passphraseError is not null)
+        {
+            return OperationResult<DecryptedBackupFile>.Failure(passphraseError);
+        }
+
+        if (encryptedContent.Length == 0)
+        {
+            return OperationResult<DecryptedBackupFile>.Failure("Choose an encrypted backup file first.");
+        }
+
+        try
+        {
+            return OperationResult<DecryptedBackupFile>.Success(
+                await encryptionService.DecryptBackupAsync(encryptedContent, passphrase, encryptedFileName, cancellationToken));
         }
         catch (InvalidDataException)
         {
@@ -368,6 +533,14 @@ public sealed class RemoteBackupService
         return passphrase.Length < MinimumPassphraseLength
             ? "Use a backup passphrase that is at least 8 characters long."
             : null;
+    }
+
+    private static bool IsSupportedLoopbackRedirect(string redirectUri)
+    {
+        return Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Host, "::1", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string Base64Url(byte[] bytes)

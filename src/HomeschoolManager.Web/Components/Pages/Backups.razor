@@ -88,51 +88,82 @@ else
             <section class="hm-card dashboard-card backup-panel">
                 <div class="section-heading-row">
                     <div>
-                        <h2>Encrypted off-computer backup</h2>
-                        <p class="form-text">Create a passphrase-protected copy before saving a backup outside this PC.</p>
+                        <h2>Synced folder backup</h2>
+                        <p class="form-text">Save a copy to a Google Drive for desktop, OneDrive, Dropbox, USB, or other folder you control.</p>
                     </div>
                 </div>
 
-                <label class="form-label" for="remote-passphrase">Backup passphrase *</label>
-                <input id="remote-passphrase" class="form-control" type="password" @bind="remotePassphrase" autocomplete="new-password" />
-                <p class="form-text">Keep this passphrase somewhere safe. Homeschool Manager cannot recover it.</p>
+                <div class="backup-folder-selection">
+                    <span>Synced backup folder *</span>
+                    <strong>@syncedFolderDisplayName</strong>
+                    <small>The browser opens the normal system folder picker. For privacy, the full folder path is not shown to Homeschool Manager.</small>
+                </div>
 
                 <div class="button-row">
-                    <button class="btn btn-outline-primary" type="button" @onclick="CreateEncryptedBackupDownloadAsync" disabled="@busy">
+                    <button class="btn btn-outline-primary" type="button" @onclick="ChooseSyncedFolderAsync" disabled="@busy">
+                        Choose folder
+                    </button>
+                    @if (syncedFolderSelected)
+                    {
+                        <span class="backup-inline-status">Ready to save to the selected folder.</span>
+                    }
+                </div>
+
+                <div class="checkbox-row backup-option-row">
+                    <input id="synced-backup-encryption" class="form-check-input" type="checkbox" @bind="useSyncedFolderEncryption" />
+                    <label class="form-check-label" for="synced-backup-encryption">Encrypt this synced-folder backup with a passphrase.</label>
+                </div>
+
+                @if (useSyncedFolderEncryption)
+                {
+                    <label class="form-label" for="synced-backup-passphrase">Backup passphrase *</label>
+                    <input id="synced-backup-passphrase" class="form-control" type="password" @bind="syncedBackupPassphrase" autocomplete="new-password" />
+                    <p class="form-text">Keep this passphrase somewhere safe. Homeschool Manager cannot recover it.</p>
+                }
+                else
+                {
+                    <div class="alert alert-warning backup-inline-warning">This saves a normal full backup ZIP. Anyone with access to that synced folder can open the backup.</div>
+                }
+
+                <div class="button-row">
+                    <button class="btn btn-primary" type="button" @onclick="SaveBackupToSyncedFolderAsync" disabled="@(!syncedFolderSelected || busy)">
+                        Save backup to selected folder
+                    </button>
+                    <button class="btn btn-outline-primary" type="button" @onclick="CreateEncryptedBackupDownloadAsync" disabled="@(!useSyncedFolderEncryption || busy)">
                         Download encrypted backup
                     </button>
-                    <button class="btn btn-primary" type="button" @onclick="UploadGoogleDriveBackupAsync" disabled="@(!CanUseGoogle || busy)">
-                        Save to Google Drive
-                    </button>
                 </div>
 
-                <div class="backup-email-row">
-                    <label class="form-label" for="backup-email">Email recipient</label>
-                    <input id="backup-email" class="form-control" type="email" @bind="backupEmailRecipient" />
-                    <button class="btn btn-outline-primary" type="button" @onclick="CreateGmailDraftAsync" disabled="@(!CanUseGoogle || busy)">
-                        Create Gmail draft
-                    </button>
-                </div>
-
-                <p class="form-text">Gmail drafts are intended for smaller encrypted backups. Larger backups should use Google Drive.</p>
+                <p class="form-text">Google Drive for desktop or another sync app handles the cloud copy after Homeschool Manager writes this file.</p>
             </section>
 
             <section class="hm-card dashboard-card backup-panel">
                 <div class="section-heading-row">
                     <div>
                         <h2>Restore from backup</h2>
-                        <p class="form-text">Choose a full backup ZIP. Homeschool Manager validates it before restore is available.</p>
+                        <p class="form-text">Choose a full backup ZIP or encrypted .hsmbak file. Homeschool Manager validates it before restore is available.</p>
                     </div>
                 </div>
 
-                <label class="form-label" for="backup-file">Backup ZIP</label>
-                <InputFile id="backup-file" class="form-control" OnChange="OnBackupFileSelectedAsync" accept=".zip,application/zip" />
+                <label class="form-label" for="backup-file">Backup file</label>
+                <InputFile id="backup-file" class="form-control" OnChange="OnBackupFileSelectedAsync" accept=".zip,.hsmbak,application/zip,application/octet-stream" />
 
                 @if (selectedBackupName.Length > 0)
                 {
                     <div class="backup-selected-file">
                         <strong>@selectedBackupName</strong>
                         <span>@FormatBytes(selectedBackupBytes?.LongLength ?? 0)</span>
+                    </div>
+                }
+
+                @if (selectedBackupIsEncrypted)
+                {
+                    <div class="backup-encrypted-restore">
+                        <label class="form-label" for="encrypted-restore-passphrase">Backup passphrase *</label>
+                        <input id="encrypted-restore-passphrase" class="form-control" type="password" @bind="encryptedRestorePassphrase" autocomplete="current-password" />
+                        <button class="btn btn-primary" type="button" @onclick="PreviewEncryptedBackupRestoreAsync" disabled="@(selectedBackupBytes is null || busy)">
+                            Preview encrypted backup
+                        </button>
                     </div>
                 }
 
@@ -201,104 +232,123 @@ else
         </main>
 
         <aside class="dashboard-support">
-            <section class="hm-card dashboard-card backup-panel">
-                <div class="section-heading-row">
-                    <div>
-                        <h2>Google backup</h2>
-                        <p class="form-text">Connect a parent-owned Google account for encrypted Drive backups and Gmail drafts.</p>
-                    </div>
-                </div>
+            <section class="hm-card dashboard-card backup-panel backup-advanced-panel">
+                <details>
+                    <summary>
+                        <span>Advanced Google API backup</span>
+                        <small>OAuth client ID, Drive API upload, and Gmail drafts</small>
+                    </summary>
 
-                <label class="form-label" for="google-client-id">Google OAuth client ID *</label>
-                <input id="google-client-id" class="form-control" @bind="googleClientId" />
-                <div class="button-row">
-                    <button class="btn btn-outline-primary" type="button" @onclick="SaveGoogleSettingsAsync" disabled="@busy">Save</button>
-                    <button class="btn btn-primary" type="button" @onclick="StartGoogleConnectionAsync" disabled="@busy">Connect Google</button>
-                </div>
-
-                @if (remoteStatus is not null)
-                {
-                    <dl class="backup-summary-grid">
-                        <div>
-                            <dt>Status</dt>
-                            <dd>@(remoteStatus.Configuration.IsGoogleConnected ? "Connected" : "Not connected")</dd>
+                    <div class="backup-advanced-content">
+                        <label class="form-label" for="google-client-id">Google OAuth client ID *</label>
+                        <input id="google-client-id" class="form-control" @bind="googleClientId" />
+                        <div class="button-row">
+                            <button class="btn btn-outline-primary" type="button" @onclick="SaveGoogleSettingsAsync" disabled="@busy">Save</button>
+                            <button class="btn btn-primary" type="button" @onclick="StartGoogleConnectionAsync" disabled="@busy">Connect Google</button>
                         </div>
-                        <div>
-                            <dt>Last Drive backup</dt>
-                            <dd>@FormatDate(remoteStatus.Configuration.LastDriveUploadAtUtc)</dd>
-                        </div>
-                        <div>
-                            <dt>Last Gmail draft</dt>
-                            <dd>@FormatDate(remoteStatus.Configuration.LastGmailDraftAtUtc)</dd>
-                        </div>
-                    </dl>
 
-                    @if (remoteStatus.Warnings.Count > 0)
-                    {
-                        <ul class="backup-message-list">
-                            @foreach (var warning in remoteStatus.Warnings)
-                            {
-                                <li>@warning</li>
-                            }
-                        </ul>
-                    }
-                }
-
-                <button class="btn btn-outline-danger" type="button" @onclick="DisconnectGoogleAsync" disabled="@(!CanUseGoogle || busy)">
-                    Disconnect Google
-                </button>
-            </section>
-
-            <section class="hm-card dashboard-card backup-panel">
-                <div class="section-heading-row">
-                    <div>
-                        <h2>Restore from Google Drive</h2>
-                        <p class="form-text">Download an encrypted Drive backup, unlock it here, and validate it before restore.</p>
-                    </div>
-                    <button class="btn btn-outline-primary" type="button" @onclick="() => LoadGoogleDriveBackupsAsync()" disabled="@(!CanUseGoogle || busy)">Refresh</button>
-                </div>
-
-                <label class="form-label" for="google-restore-passphrase">Backup passphrase *</label>
-                <input id="google-restore-passphrase" class="form-control" type="password" @bind="googleRestorePassphrase" autocomplete="current-password" />
-
-                @if (driveBackups.Count == 0)
-                {
-                    <p>No Google Drive backups loaded yet.</p>
-                }
-                else
-                {
-                    <div class="backup-history-list">
-                        @foreach (var item in driveBackups)
+                        @if (remoteStatus is not null)
                         {
-                            <article class="backup-history-item">
+                            <dl class="backup-summary-grid">
                                 <div>
-                                    <strong>@item.FileName</strong>
-                                    <small>@item.CreatedAtUtc.ToLocalTime().ToString("g")</small>
-                                    <small>@FormatBytes(item.SizeBytes)</small>
+                                    <dt>Status</dt>
+                                    <dd>@(remoteStatus.Configuration.IsGoogleConnected ? "Connected" : "Not connected")</dd>
                                 </div>
-                                <div class="backup-history-actions">
-                                    <button class="btn btn-outline-primary" type="button" @onclick="() => PreviewGoogleDriveRestoreAsync(item.FileId)" disabled="@busy">Preview</button>
+                                <div>
+                                    <dt>Last API Drive backup</dt>
+                                    <dd>@FormatDate(remoteStatus.Configuration.LastDriveUploadAtUtc)</dd>
                                 </div>
-                            </article>
+                                <div>
+                                    <dt>Last Gmail draft</dt>
+                                    <dd>@FormatDate(remoteStatus.Configuration.LastGmailDraftAtUtc)</dd>
+                                </div>
+                            </dl>
+
+                            @if (remoteStatus.Warnings.Count > 0)
+                            {
+                                <ul class="backup-message-list">
+                                    @foreach (var warning in remoteStatus.Warnings)
+                                    {
+                                        <li>@warning</li>
+                                    }
+                                </ul>
+                            }
+                        }
+
+                        <label class="form-label" for="google-backup-passphrase">Advanced backup passphrase *</label>
+                        <input id="google-backup-passphrase" class="form-control" type="password" @bind="googleBackupPassphrase" autocomplete="new-password" />
+                        <p class="form-text">Google Drive API and Gmail draft backups are always encrypted before leaving this computer.</p>
+
+                        <div class="button-row">
+                            <button class="btn btn-outline-primary" type="button" @onclick="UploadGoogleDriveBackupAsync" disabled="@(!CanUseGoogle || busy)">
+                                Save to Google Drive API
+                            </button>
+                            <button class="btn btn-outline-danger" type="button" @onclick="DisconnectGoogleAsync" disabled="@(!CanUseGoogle || busy)">
+                                Disconnect Google
+                            </button>
+                        </div>
+
+                        <div class="backup-email-row">
+                            <label class="form-label" for="backup-email">Email recipient</label>
+                            <input id="backup-email" class="form-control" type="email" @bind="backupEmailRecipient" />
+                            <button class="btn btn-outline-primary" type="button" @onclick="CreateGmailDraftAsync" disabled="@(!CanUseGoogle || busy)">
+                                Create Gmail draft
+                            </button>
+                        </div>
+
+                        <div class="backup-advanced-divider"></div>
+
+                        <div class="section-heading-row">
+                            <div>
+                                <h2>Restore from Google Drive API</h2>
+                                <p class="form-text">Download an encrypted API backup, unlock it here, and validate it before restore.</p>
+                            </div>
+                            <button class="btn btn-outline-primary" type="button" @onclick="() => LoadGoogleDriveBackupsAsync()" disabled="@(!CanUseGoogle || busy)">Refresh</button>
+                        </div>
+
+                        <label class="form-label" for="google-restore-passphrase">Backup passphrase *</label>
+                        <input id="google-restore-passphrase" class="form-control" type="password" @bind="googleRestorePassphrase" autocomplete="current-password" />
+
+                        @if (driveBackups.Count == 0)
+                        {
+                            <p>No Google Drive backups loaded yet.</p>
+                        }
+                        else
+                        {
+                            <div class="backup-history-list">
+                                @foreach (var item in driveBackups)
+                                {
+                                    <article class="backup-history-item">
+                                        <div>
+                                            <strong>@item.FileName</strong>
+                                            <small>@item.CreatedAtUtc.ToLocalTime().ToString("g")</small>
+                                            <small>@FormatBytes(item.SizeBytes)</small>
+                                        </div>
+                                        <div class="backup-history-actions">
+                                            <button class="btn btn-outline-primary" type="button" @onclick="() => PreviewGoogleDriveRestoreAsync(item.FileId)" disabled="@busy">Preview</button>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        }
+
+                        @if (googleRestorePreview is not null)
+                        {
+                            <section class="backup-restore-confirm">
+                                <h3>Google restore preview</h3>
+                                <p>This will restore <strong>@googleRestorePreview.Manifest.HouseholdName</strong> from the selected encrypted Drive backup.</p>
+                                <p><strong>@googleRestorePreview.SafetyBackupMessage</strong></p>
+                                <div class="checkbox-row">
+                                    <input id="confirm-google-restore" class="form-check-input" type="checkbox" @bind="confirmGoogleRestore" />
+                                    <label class="form-check-label" for="confirm-google-restore">I understand this will replace current records after creating a safety backup.</label>
+                                </div>
+                                <button class="btn btn-danger" type="button" @onclick="RestoreGoogleDriveBackupAsync" disabled="@(!confirmGoogleRestore || busy)">
+                                    Restore this Google backup
+                                </button>
+                            </section>
                         }
                     </div>
-                }
-
-                @if (googleRestorePreview is not null)
-                {
-                    <section class="backup-restore-confirm">
-                        <h3>Google restore preview</h3>
-                        <p>This will restore <strong>@googleRestorePreview.Manifest.HouseholdName</strong> from the selected encrypted Drive backup.</p>
-                        <p><strong>@googleRestorePreview.SafetyBackupMessage</strong></p>
-                        <div class="checkbox-row">
-                            <input id="confirm-google-restore" class="form-check-input" type="checkbox" @bind="confirmGoogleRestore" />
-                            <label class="form-check-label" for="confirm-google-restore">I understand this will replace current records after creating a safety backup.</label>
-                        </div>
-                        <button class="btn btn-danger" type="button" @onclick="RestoreGoogleDriveBackupAsync" disabled="@(!confirmGoogleRestore || busy)">
-                            Restore this Google backup
-                        </button>
-                    </section>
-                }
+                </details>
             </section>
 
             <section class="hm-card dashboard-card backup-panel">
@@ -378,11 +428,17 @@ else
     private BackupHistoryItem? deleteCandidate;
     private byte[]? selectedBackupBytes;
     private string selectedBackupName = "";
+    private string syncedFolderDisplayName = "No folder selected";
     private string googleClientId = "";
-    private string remotePassphrase = "";
+    private string syncedBackupPassphrase = "";
+    private string googleBackupPassphrase = "";
     private string backupEmailRecipient = "";
+    private string encryptedRestorePassphrase = "";
     private string googleRestorePassphrase = "";
     private string selectedGoogleDriveFileId = "";
+    private bool syncedFolderSelected;
+    private bool useSyncedFolderEncryption = true;
+    private bool selectedBackupIsEncrypted;
     private bool confirmRestore;
     private bool confirmGoogleRestore;
     private bool confirmDelete;
@@ -442,7 +498,7 @@ else
         {
             var result = await RemoteBackupService.CreateEncryptedBackupAsync(
                 Session.CurrentUser,
-                new CreateEncryptedBackupCommand(remotePassphrase));
+                new CreateEncryptedBackupCommand(syncedBackupPassphrase));
             if (!result.Succeeded || result.Value is null)
             {
                 messages.AddRange(result.Errors);
@@ -452,6 +508,79 @@ else
             await DownloadEncryptedFileAsync(result.Value);
             messages.Add($"Downloaded encrypted backup {result.Value.FileName}.");
             await LoadHistoryAsync(clearMessages: false);
+            return true;
+        });
+    }
+
+    private async Task ChooseSyncedFolderAsync()
+    {
+        await RunAsync(async () =>
+        {
+            var result = await JS.InvokeAsync<FolderPickerResult>("homeschoolFolderBackups.chooseDirectory");
+            if (result.Succeeded)
+            {
+                syncedFolderSelected = true;
+                syncedFolderDisplayName = result.DirectoryNameOrDefault();
+                messages.Add($"Selected {syncedFolderDisplayName}.");
+                return true;
+            }
+
+            syncedFolderSelected = false;
+            syncedFolderDisplayName = "No folder selected";
+            if (!result.Canceled)
+            {
+                messages.Add(result.ErrorOrDefault("The folder could not be selected."));
+            }
+
+            return false;
+        });
+    }
+
+    private async Task SaveBackupToSyncedFolderAsync()
+    {
+        if (Session.CurrentUser is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.CreateSyncedFolderBackupAsync(
+                Session.CurrentUser,
+                new CreateSyncedFolderBackupCommand(useSyncedFolderEncryption, syncedBackupPassphrase));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            var writeResult = await JS.InvokeAsync<FolderWriteResult>(
+                "homeschoolFolderBackups.saveBase64File",
+                result.Value.FileName,
+                result.Value.ContentType,
+                Convert.ToBase64String(result.Value.Content));
+            if (!writeResult.Succeeded)
+            {
+                messages.Add(writeResult.ErrorOrDefault("The backup file could not be saved to the selected folder."));
+                return false;
+            }
+
+            var record = await RemoteBackupService.RecordSyncedFolderBackupAsync(
+                Session.CurrentUser,
+                new RecordSyncedFolderBackupCommand(
+                    result.Value.FileName,
+                    result.Value.SizeBytes,
+                    result.Value.IsEncrypted,
+                    writeResult.DirectoryNameOrDefault()));
+            if (!record.Succeeded)
+            {
+                messages.AddRange(record.Errors);
+                return false;
+            }
+
+            var backupType = result.Value.IsEncrypted ? "encrypted backup" : "full backup ZIP";
+            messages.Add($"Saved {backupType} to {writeResult.DirectoryNameOrDefault()}.");
+            await LoadRemoteStatusAsync(clearMessages: false);
             return true;
         });
     }
@@ -467,7 +596,7 @@ else
         {
             var result = await RemoteBackupService.UploadGoogleDriveBackupAsync(
                 Session.CurrentUser,
-                new UploadGoogleDriveBackupCommand(remotePassphrase));
+                new UploadGoogleDriveBackupCommand(googleBackupPassphrase));
             if (!result.Succeeded || result.Value is null)
             {
                 messages.AddRange(result.Errors);
@@ -492,7 +621,7 @@ else
         {
             var result = await RemoteBackupService.CreateGmailBackupDraftAsync(
                 Session.CurrentUser,
-                new CreateGmailBackupDraftCommand(remotePassphrase, backupEmailRecipient));
+                new CreateGmailBackupDraftCommand(googleBackupPassphrase, backupEmailRecipient));
             if (!result.Succeeded || result.Value is null)
             {
                 messages.AddRange(result.Errors);
@@ -538,7 +667,7 @@ else
 
         await RunAsync(async () =>
         {
-            var redirectUri = new Uri(new Uri(Navigation.BaseUri), "backups/google/callback").ToString();
+            var redirectUri = BuildGoogleLoopbackRedirectUri();
             var result = await RemoteBackupService.StartGoogleConnectionAsync(
                 Session.CurrentUser,
                 new StartGoogleConnectionCommand(redirectUri));
@@ -582,15 +711,18 @@ else
         var file = args.File;
         selectedBackupName = file.Name;
         selectedBackupBytes = null;
+        selectedBackupIsEncrypted = file.Name.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase);
+        encryptedRestorePassphrase = "";
         validationReport = null;
         restorePreview = null;
         confirmRestore = false;
         messages.Clear();
         lastActionSucceeded = false;
 
-        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+            !file.Name.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase))
         {
-            messages.Add("Choose a Homeschool Manager backup ZIP file.");
+            messages.Add("Choose a Homeschool Manager backup ZIP or encrypted .hsmbak file.");
             return;
         }
 
@@ -598,6 +730,12 @@ else
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory);
         selectedBackupBytes = memory.ToArray();
+        if (selectedBackupIsEncrypted)
+        {
+            messages.Add("Enter the backup passphrase, then preview this encrypted backup.");
+            return;
+        }
+
         await ValidateSelectedBackupAsync();
     }
 
@@ -636,7 +774,34 @@ else
             }
 
             restorePreview = preview.Value;
+            selectedBackupIsEncrypted = false;
             messages.Add("Backup validated. Review the restore preview before continuing.");
+            return true;
+        });
+    }
+
+    private async Task PreviewEncryptedBackupRestoreAsync()
+    {
+        if (Session.CurrentUser is null || selectedBackupBytes is null)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var result = await RemoteBackupService.PreviewEncryptedBackupRestoreAsync(
+                Session.CurrentUser,
+                new PreviewEncryptedBackupRestoreCommand(selectedBackupName, selectedBackupBytes, encryptedRestorePassphrase));
+            if (!result.Succeeded || result.Value is null)
+            {
+                messages.AddRange(result.Errors);
+                return false;
+            }
+
+            restorePreview = result.Value;
+            validationReport = null;
+            confirmRestore = false;
+            messages.Add("Encrypted backup decrypted and validated. Review the restore preview before continuing.");
             return true;
         });
     }
@@ -650,9 +815,13 @@ else
 
         await RunAsync(async () =>
         {
-            var result = await BackupService.RestoreBackupAsync(
-                Session.CurrentUser,
-                new RestoreBackupCommand(selectedBackupName, selectedBackupBytes, confirmRestore));
+            var result = selectedBackupIsEncrypted
+                ? await RemoteBackupService.RestoreEncryptedBackupAsync(
+                    Session.CurrentUser,
+                    new RestoreEncryptedBackupCommand(selectedBackupName, selectedBackupBytes, encryptedRestorePassphrase, confirmRestore))
+                : await BackupService.RestoreBackupAsync(
+                    Session.CurrentUser,
+                    new RestoreBackupCommand(selectedBackupName, selectedBackupBytes, confirmRestore));
             if (!result.Succeeded || result.Value is null)
             {
                 messages.AddRange(result.Errors);
@@ -662,6 +831,7 @@ else
             messages.Add($"Restored backup. A safety backup was saved as {result.Value.SafetyBackupFileName}.");
             confirmRestore = false;
             restorePreview = null;
+            encryptedRestorePassphrase = "";
             await LoadHistoryAsync(clearMessages: false);
             return true;
         });
@@ -875,7 +1045,7 @@ else
         {
             lastActionSucceeded = await action();
         }
-        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or JSException or System.Security.Cryptography.CryptographicException)
         {
             messages.Add(ex.Message);
             lastActionSucceeded = false;
@@ -944,5 +1114,46 @@ else
     private static string FormatDate(DateTimeOffset? date)
     {
         return date?.ToLocalTime().ToString("g") ?? "Not yet";
+    }
+
+    private string BuildGoogleLoopbackRedirectUri()
+    {
+        var baseUri = new Uri(Navigation.BaseUri);
+        var port = baseUri.IsDefaultPort
+            ? baseUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80
+            : baseUri.Port;
+        return new UriBuilder(Uri.UriSchemeHttp, "127.0.0.1", port, "backups/google/callback").Uri.ToString();
+    }
+
+    private sealed class FolderPickerResult
+    {
+        public bool Succeeded { get; set; }
+
+        public bool Canceled { get; set; }
+
+        public string? DirectoryName { get; set; }
+
+        public string? Error { get; set; }
+
+        public string DirectoryNameOrDefault() =>
+            string.IsNullOrWhiteSpace(DirectoryName) ? "selected folder" : DirectoryName;
+
+        public string ErrorOrDefault(string fallback) =>
+            string.IsNullOrWhiteSpace(Error) ? fallback : Error;
+    }
+
+    private sealed class FolderWriteResult
+    {
+        public bool Succeeded { get; set; }
+
+        public string? DirectoryName { get; set; }
+
+        public string? Error { get; set; }
+
+        public string DirectoryNameOrDefault() =>
+            string.IsNullOrWhiteSpace(DirectoryName) ? "selected folder" : DirectoryName;
+
+        public string ErrorOrDefault(string fallback) =>
+            string.IsNullOrWhiteSpace(Error) ? fallback : Error;
     }
 }

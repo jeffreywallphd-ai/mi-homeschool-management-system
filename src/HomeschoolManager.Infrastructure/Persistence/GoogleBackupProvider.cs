@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -200,7 +201,8 @@ public sealed class GoogleBackupProvider : IGoogleBackupProvider
             throw new InvalidOperationException("This encrypted backup is too large for a reliable Gmail attachment. Use Google Drive backup instead.");
         }
 
-        var mime = BuildMimeMessage(recipientEmail, encryptedBackup);
+        var fromEmail = await GetGmailProfileEmailAsync(tokenSet, cancellationToken);
+        var mime = BuildMimeMessage(fromEmail, recipientEmail, encryptedBackup);
         var raw = Base64Url(Encoding.UTF8.GetBytes(mime));
         var body = new
         {
@@ -257,6 +259,22 @@ public sealed class GoogleBackupProvider : IGoogleBackupProvider
         return created.Id;
     }
 
+    private async Task<string> GetGmailProfileEmailAsync(
+        GoogleOAuthTokenSet tokenSet,
+        CancellationToken cancellationToken)
+    {
+        using var request = Authorized(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/profile", tokenSet);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, "Gmail account details could not be read.", cancellationToken);
+        var profile = await ReadJsonAsync<GmailProfileResponse>(response, cancellationToken);
+        if (string.IsNullOrWhiteSpace(profile.EmailAddress))
+        {
+            throw new InvalidOperationException("Gmail did not return the connected email address.");
+        }
+
+        return profile.EmailAddress;
+    }
+
     private async Task<TokenResponse> PostTokenAsync(
         IReadOnlyDictionary<string, string> values,
         CancellationToken cancellationToken)
@@ -311,13 +329,21 @@ public sealed class GoogleBackupProvider : IGoogleBackupProvider
                 : details;
     }
 
-    private static string BuildMimeMessage(string recipientEmail, EncryptedBackupDownloadFile encryptedBackup)
+    private static string BuildMimeMessage(
+        string fromEmail,
+        string recipientEmail,
+        EncryptedBackupDownloadFile encryptedBackup)
     {
         var boundary = "hm-backup-" + Guid.NewGuid().ToString("N");
         var attachment = Convert.ToBase64String(encryptedBackup.Content, Base64FormattingOptions.InsertLineBreaks);
+        var createdAt = DateTimeOffset.UtcNow.ToString("r", CultureInfo.InvariantCulture);
+        var messageId = $"<{Guid.NewGuid():N}@homeschool-manager.local>";
         var builder = new StringBuilder();
-        builder.AppendLine($"To: {recipientEmail}");
+        builder.AppendLine($"From: {SanitizeHeaderValue(fromEmail)}");
+        builder.AppendLine($"To: {SanitizeHeaderValue(recipientEmail)}");
         builder.AppendLine("Subject: Homeschool Manager encrypted backup");
+        builder.AppendLine($"Date: {createdAt}");
+        builder.AppendLine($"Message-ID: {messageId}");
         builder.AppendLine("MIME-Version: 1.0");
         builder.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
         builder.AppendLine();
@@ -327,13 +353,19 @@ public sealed class GoogleBackupProvider : IGoogleBackupProvider
         builder.AppendLine("This Gmail draft contains an encrypted Homeschool Manager backup. Keep the backup passphrase in a separate safe place; it is required to restore this file.");
         builder.AppendLine();
         builder.AppendLine($"--{boundary}");
-        builder.AppendLine($"Content-Type: {BackupContentType}; name=\"{encryptedBackup.FileName}\"");
+        builder.AppendLine($"Content-Type: {BackupContentType}; name=\"{SanitizeHeaderValue(encryptedBackup.FileName)}\"");
         builder.AppendLine("Content-Transfer-Encoding: base64");
-        builder.AppendLine($"Content-Disposition: attachment; filename=\"{encryptedBackup.FileName}\"");
+        builder.AppendLine($"Content-Disposition: attachment; filename=\"{SanitizeHeaderValue(encryptedBackup.FileName)}\"");
         builder.AppendLine();
         builder.AppendLine(attachment);
         builder.AppendLine($"--{boundary}--");
         return builder.ToString();
+    }
+
+    private static string SanitizeHeaderValue(string value)
+    {
+        return value.Replace("\r", "", StringComparison.Ordinal)
+            .Replace("\n", "", StringComparison.Ordinal);
     }
 
     private static string BuildQuery(IReadOnlyDictionary<string, string?> values)
@@ -371,4 +403,6 @@ public sealed class GoogleBackupProvider : IGoogleBackupProvider
         DateTimeOffset? CreatedTime);
 
     private sealed record GmailDraftResponse(string Id);
+
+    private sealed record GmailProfileResponse(string EmailAddress);
 }

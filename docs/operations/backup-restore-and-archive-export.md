@@ -1,11 +1,11 @@
 # Backup Restore and Archive Export
 
 - Status: accepted
-- Last reviewed: 2026-06-13
+- Last reviewed: 2026-07-01
 - Canonical for: operational expectations for backups, restore, and student archive exports
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0008](../adr/ADR-0008-parent-authorized-encrypted-external-backups.md)
 - Related docs: [Backup Restore and Export Architecture](../architecture/backup-restore-and-export-architecture.md), [Data Retention Backup and Recovery Standards](../standards/data-retention-backup-and-recovery-standards.md)
-- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Remote backup service requires parent access and uses encrypted Google artifacts`
+- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Synced folder backup prepares native-picker files and records saved copies`, `Remote backup service requires parent access and uses encrypted Google artifacts`, `Google provider builds Gmail drafts with RFC-style MIME headers`
 - Supersedes: none
 
 ## Manual Backup
@@ -74,29 +74,58 @@ Restore replaces active source folders from the selected backup:
 - `templates/`
 - `config/`
 
-## Google Drive Backup
+## Synced Folder Backup
 
-Google Drive backup is optional. It is for parents who want a second copy away from the family PC.
+Synced folder backup is the default off-computer workflow for parents who want a second copy away from the family PC without creating Google developer credentials. It works with Google Drive for desktop, OneDrive, Dropbox, USB drives, network folders, and other folders the parent controls.
 
 Parent workflow:
 
+1. Install and sign in to Google Drive for desktop or another sync app, if using cloud storage.
+2. Choose or create a folder such as `Homeschool Manager Backups`.
+3. In Backup & Restore, select Choose folder and use the browser/operating-system folder picker to choose that folder.
+4. Leave encryption selected and enter a backup passphrase, or intentionally turn encryption off after reading the warning.
+5. Select Save backup to synced folder.
+6. If encryption was used, keep the passphrase somewhere safe and separate from the backup file.
+
+The app creates a normal full local backup first. With encryption selected, it encrypts the backup locally and writes an `.hsmbak` file to the selected folder through the browser-granted folder handle. With encryption turned off, it writes a normal full-backup ZIP to the selected folder. The sync app is responsible for copying that file to the parent's cloud account. Homeschool Manager does not store encryption passphrases and cannot recover them. Browsers do not expose the full selected folder path to Homeschool Manager.
+
+## Restore From Encrypted Backup
+
+Parent workflow:
+
+1. Open Backup & Restore.
+2. Choose a full backup ZIP or encrypted `.hsmbak` file.
+3. For `.hsmbak` files, enter the backup passphrase.
+4. Preview the backup.
+5. Confirm restore.
+
+The app decrypts encrypted backup files locally, validates the full backup, and creates a pre-restore safety backup before replacing current records. Plain ZIP backups are validated directly before restore.
+
+## Advanced Google API Backup
+
+Google API backup remains available as an advanced option for families or project maintainers who intentionally configure a Google OAuth client ID. It is not the default parent workflow.
+
+Advanced parent workflow:
+
 1. Create a Google OAuth desktop/client ID in Google Cloud and paste it into Backup & Restore.
-2. Select Connect Google and approve the requested Drive/Gmail permissions in the browser.
+2. On the computer running Homeschool Manager, select Connect Google and approve the requested Drive/Gmail permissions in the browser.
 3. Enter a backup passphrase.
-4. Select Save to Google Drive.
+4. Select Save to Google Drive API.
 5. Keep the passphrase somewhere safe and separate from the backup file.
 
 The app creates a normal full local backup first, encrypts it locally, and uploads only the encrypted `.hsmbak` file to a visible `Homeschool Manager Backups` folder in Google Drive.
 
-Google connection tokens are stored locally and are not treated as family source records. After restoring on a new computer, the parent may need to reconnect Google backup.
+Google uses an installed-app loopback callback on `127.0.0.1`. This means Google connection must be started from the same Windows session and computer that is hosting Homeschool Manager, not from another device on Wi-Fi sharing.
 
-## Gmail Draft Backup
+Google connection tokens are stored locally and are not treated as family source records. After restoring on a new computer, changing the Google client ID, or moving data to a different Windows account, the parent may need to reconnect Google backup. The Backup & Restore page should show this as a reconnect-needed state instead of claiming Google is connected.
 
-Gmail backup uses the same Google connection. The app creates a normal full local backup, encrypts it, and creates a Gmail draft with the encrypted `.hsmbak` file attached. The parent reviews and sends the draft manually.
+## Advanced Gmail Draft Backup
+
+Gmail draft backup uses the same advanced Google API connection. The app creates a normal full local backup, encrypts it, and creates a Gmail draft with the encrypted `.hsmbak` file attached. The draft is created from the connected Gmail account, includes normal MIME email headers, and is left for the parent to review and send manually.
 
 Gmail is best for smaller backup files. Personal Gmail accounts limit attachments to 25 MB, and work or school accounts may have administrator-defined limits. Larger backups should use Google Drive.
 
-## Restore From Google Drive
+## Advanced Restore From Google Drive API
 
 Parent workflow:
 
@@ -126,4 +155,4 @@ The packet is a family-owned record export, not a full restore package. Creating
 
 Backup and restore wording must be nontechnical where possible. The system should explain what will be included and whether the result is a full backup or an archive export.
 
-External-backup wording must also explain that the parent must remember the passphrase because the app cannot recover it.
+External-backup wording must explain when a backup is encrypted, when it is a plain ZIP, and that the parent must remember any passphrase because the app cannot recover it.

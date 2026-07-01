@@ -15,9 +15,30 @@ public sealed record CreateEncryptedBackupCommand(
 
 public sealed record UploadGoogleDriveBackupCommand(string Passphrase);
 
+public sealed record CreateSyncedFolderBackupCommand(
+    bool EncryptBackup,
+    string Passphrase);
+
+public sealed record RecordSyncedFolderBackupCommand(
+    string FileName,
+    long SizeBytes,
+    bool IsEncrypted,
+    string FolderName);
+
 public sealed record CreateGmailBackupDraftCommand(
     string Passphrase,
     string RecipientEmail);
+
+public sealed record PreviewEncryptedBackupRestoreCommand(
+    string FileName,
+    byte[] Content,
+    string Passphrase);
+
+public sealed record RestoreEncryptedBackupCommand(
+    string FileName,
+    byte[] Content,
+    string Passphrase,
+    bool ConfirmReplaceCurrentRecords);
 
 public sealed record PreviewGoogleDriveRestoreCommand(
     string DriveFileId,
