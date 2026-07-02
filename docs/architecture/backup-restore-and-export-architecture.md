@@ -5,7 +5,7 @@
 - Canonical for: backup, restore, archive, and export architecture
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0008](../adr/ADR-0008-parent-authorized-encrypted-external-backups.md)
 - Related docs: [Local Data and File Storage](local-data-and-file-storage.md), [Backup Restore and Archive Export](../operations/backup-restore-and-archive-export.md)
-- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Synced folder backup prepares native-picker files and records saved copies`, `Remote backup service requires parent access and uses encrypted Google artifacts`, `Google provider builds Gmail drafts with RFC-style MIME headers`
+- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Synced folder backup prepares native-picker files and records saved copies`, `Remote backup service requires parent access and uses encrypted Google artifacts`, `Google provider builds Gmail drafts with RFC-style MIME headers`, `Setup page offers restore from backup only before setup is complete`
 - Supersedes: none
 
 ## Backup Principle
@@ -80,6 +80,7 @@ Advanced Google API backup can also store encrypted files in a visible `Homescho
 - Restore from Google Drive must download the encrypted package, decrypt locally with the parent passphrase, and then use the normal full-backup validation and restore rules.
 - Restore from a local encrypted `.hsmbak` file must decrypt locally with the parent passphrase, then use the normal full-backup validation and restore rules.
 - Restore from a plain synced-folder ZIP uses the same normal full-backup validation and restore rules as a manual backup ZIP.
+- Before required setup is complete, the Setup page may expose a startup restore path for full backup ZIP and encrypted `.hsmbak` files. After setup is complete, restore should be available only from Backup & Restore.
 
 ## Contract Rule
 

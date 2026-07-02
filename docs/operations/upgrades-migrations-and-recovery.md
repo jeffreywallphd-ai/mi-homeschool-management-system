@@ -1,7 +1,7 @@
 # Upgrades Migrations and Recovery
 
 - Status: accepted
-- Last reviewed: 2026-06-13
+- Last reviewed: 2026-07-01
 - Canonical for: upgrade, migration, backup-before-migration, and recovery expectations
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0007](../adr/ADR-0007-background-service-mode-and-machine-data-root.md)
 - Related docs: [Backup Restore and Export Architecture](../architecture/backup-restore-and-export-architecture.md), [Backup Restore and Archive Export](backup-restore-and-archive-export.md), [Background Service Mode](background-service-mode.md), [Data Retention Backup and Recovery Standards](../standards/data-retention-backup-and-recovery-standards.md)
@@ -36,7 +36,7 @@ The parent/admin may opt out of backup before migration only after a clear warni
 
 Development mode should default to opt out of backup before migration because dev data may be disposable and repeated backups would slow iteration.
 
-Production update packages replace application binaries only. They must not include family data. Before an update performs data-format or schema changes, the app should create or require a local backup under the production backup folder.
+Production update packages replace application binaries only. They must not include family data. Desktop-mode family data belongs under `%LOCALAPPDATA%/HomeschoolManagerData`, separate from the Velopack app folder. Before applying an available desktop update, the desktop host creates a local automatic safety backup when backup-before-update is enabled. Before an update performs data-format or schema changes, the app should create or require a local backup under the production backup folder.
 
 The local Backup & Restore page can create a full backup ZIP under `backups/manual`. Restore creates a pre-restore safety backup under `backups/automatic` before replacing current records.
 
@@ -54,7 +54,13 @@ Service-mode updates must not delete or overwrite `%PROGRAMDATA%/HomeschoolManag
 
 ## Desktop To Service Migration
 
-Switching from desktop mode to service mode is a data-location migration. The migration helper must copy records from `%LOCALAPPDATA%/HomeschoolManager` to `%PROGRAMDATA%/HomeschoolManager`, create a backup first, and leave the original folder in place.
+Switching from desktop mode to service mode is a data-location migration. The migration helper must copy records from `%LOCALAPPDATA%/HomeschoolManagerData` to `%PROGRAMDATA%/HomeschoolManager`, create a backup first, and leave the original folder in place. If the newer desktop data folder is not present, the helper may fall back to the legacy prerelease desktop folder at `%LOCALAPPDATA%/HomeschoolManager`.
+
+## Legacy Desktop Data Root Migration
+
+Prerelease desktop builds may have kept family records in `%LOCALAPPDATA%/HomeschoolManager`, which can overlap with installer-owned files. Current desktop builds use `%LOCALAPPDATA%/HomeschoolManagerData`.
+
+On first launch, desktop mode copies known family-data folders from the legacy folder to the new data folder only when the new data folder is empty. It leaves the legacy folder in place, records a migration marker under `config/`, and does not copy installer-owned binary folders.
 
 ## Migration Rules
 

@@ -2,6 +2,10 @@ namespace HomeschoolManager.Infrastructure.Production;
 
 public sealed class ProductionPathProvider
 {
+    public const string DesktopDataFolderName = "HomeschoolManagerData";
+    public const string LegacyDesktopDataFolderName = "HomeschoolManager";
+    public const string ServiceDataFolderName = "HomeschoolManager";
+
     public ProductionPathProvider(string? rootOverride = null, ProductionHostMode hostMode = ProductionHostMode.Desktop)
     {
         HostMode = hostMode;
@@ -39,8 +43,18 @@ public sealed class ProductionPathProvider
         var folder = hostMode == ProductionHostMode.Service
             ? Environment.SpecialFolder.CommonApplicationData
             : Environment.SpecialFolder.LocalApplicationData;
+        var folderName = hostMode == ProductionHostMode.Service
+            ? ServiceDataFolderName
+            : DesktopDataFolderName;
 
-        return Path.Combine(Environment.GetFolderPath(folder), "HomeschoolManager");
+        return Path.Combine(Environment.GetFolderPath(folder), folderName);
+    }
+
+    public static string GetLegacyDesktopRoot()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            LegacyDesktopDataFolderName);
     }
 
     public void EnsureDirectories()

@@ -101,6 +101,31 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(setupPage.Contains("MissingRequiredAreas", StringComparison.Ordinal), "Setup page should list missing required setup sections.");
         return Task.CompletedTask;
     }),
+    ("Setup page offers restore from backup only before setup is complete", () =>
+    {
+        var root = FindRepositoryRoot();
+        var setupPage = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Setup.razor"));
+        var setupService = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Application", "Setup", "SetupService.cs"));
+        var backupArchitecture = File.ReadAllText(Path.Combine(root, "docs", "architecture", "backup-restore-and-export-architecture.md"));
+        var backupOperations = File.ReadAllText(Path.Combine(root, "docs", "operations", "backup-restore-and-archive-export.md"));
+        var localBackupPack = File.ReadAllText(Path.Combine(root, "docs", "context", "packs", "local-data-backup-restore.pack.md"));
+
+        AssertTrue(setupPage.Contains("Set up from backup", StringComparison.Ordinal), "Setup should offer a backup restore path before first setup is complete.");
+        AssertTrue(setupPage.Contains("summary is not null && !summary.IsComplete", StringComparison.Ordinal), "Startup restore should only render while setup is incomplete.");
+        AssertTrue(setupPage.Contains("OnStartupBackupFileSelectedAsync", StringComparison.Ordinal), "Setup restore should use the normal browser file picker.");
+        AssertTrue(setupPage.Contains("ValidateBackupCommand(startupBackupName, startupBackupBytes)", StringComparison.Ordinal), "Setup restore should validate selected backups before preview.");
+        AssertTrue(setupPage.Contains("BackupService.PreviewRestoreAsync", StringComparison.Ordinal), "Setup restore should preview plain full backup ZIP files.");
+        AssertTrue(setupPage.Contains("PreviewEncryptedBackupRestoreCommand", StringComparison.Ordinal), "Setup restore should preview encrypted .hsmbak files.");
+        AssertTrue(setupPage.Contains("RestoreStartupBackupAsync", StringComparison.Ordinal), "Setup restore should have a confirmed restore action.");
+        AssertTrue(setupPage.Contains("startupConfirmRestore", StringComparison.Ordinal), "Setup restore should require explicit parent confirmation.");
+        AssertTrue(setupPage.Contains("NotifyRecordsRestored", StringComparison.Ordinal), "Setup restore should notify navigation after restored records are loaded.");
+        AssertFalse(setupPage.Contains("StartGoogleConnectionAsync", StringComparison.Ordinal), "First-run setup restore should not expose advanced Google API backup.");
+        AssertTrue(setupService.Contains("public void NotifyRecordsRestored()", StringComparison.Ordinal), "Setup service should expose a restore notification for setup-dependent navigation.");
+        AssertTrue(backupArchitecture.Contains("Before required setup is complete", StringComparison.Ordinal), "Architecture docs should record the startup restore boundary.");
+        AssertTrue(backupOperations.Contains("First Launch Restore From Backup", StringComparison.Ordinal), "Operations docs should explain first-launch restore.");
+        AssertTrue(localBackupPack.Contains("Setup may offer restore", StringComparison.Ordinal), "Backup context pack should summarize the startup restore rule.");
+        return Task.CompletedTask;
+    }),
     ("Assessment record requires explicit student course and valid result state", () =>
     {
         var studentId = Guid.NewGuid();
@@ -3930,6 +3955,39 @@ var tests = new List<(string Name, Func<Task> Test)>
         var studentExport = await service.CreateDiplomaPdfAsync(UserContext.Student("Student"), new CreateDiplomaPdfCommand(student.Id));
         AssertFalse(studentExport.Succeeded, "Student must not export a diploma.");
     })),
+    ("Diploma default design uses setup signature name and formal seal", (Func<Task>)(async () =>
+    {
+        var repository = await CreateRepositoryAsync();
+        await CreateSetupAsync(repository);
+        var parent = UserContext.ParentAdmin("Parent");
+        var setupService = new SetupService(repository);
+        var profile = await setupService.ConfigureSchoolProfileAsync(parent, new ConfigureSchoolProfileCommand(
+            "Riverside Family Homeschool",
+            "Jeff Wall",
+            "Michigan",
+            new DateOnly(2026, 8, 24),
+            "Michigan Exemption 3(f)",
+            "Jeff Wall",
+            "Lansing",
+            "Michigan"));
+        AssertTrue(profile.Succeeded, "School profile with diploma signature name should save.");
+
+        var student = await repository.GetStudentAsync() ?? throw new InvalidOperationException("Student setup failed.");
+        var service = new DiplomaService(repository);
+        var designer = await service.GetDesignerAsync(parent, student.Id);
+        AssertTrue(designer.Succeeded, "Diploma designer should load.");
+        AssertEqual("Jeff Wall", designer.Value!.Design.SignatureLabel, "Default diploma signature label should use setup diploma signature name.");
+
+        var root = FindRepositoryRoot();
+        var css = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "wwwroot", "app.css"));
+        var renderer = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Application", "Records", "DiplomaPdfRenderer.cs"));
+        AssertTrue(css.Contains("repeating-conic-gradient", StringComparison.Ordinal), "Diploma preview seal should use rosette styling.");
+        AssertTrue(css.Contains(".diploma-seal::before", StringComparison.Ordinal), "Diploma preview seal should include an inner medallion layer.");
+        AssertTrue(renderer.Contains("ScallopedSeal", StringComparison.Ordinal), "Diploma PDF should draw a scalloped seal.");
+        AssertTrue(renderer.Contains("FilledCircle", StringComparison.Ordinal), "Diploma PDF should draw a filled medallion center.");
+        AssertTrue(renderer.Contains("PdfPointsPerCssPixel", StringComparison.Ordinal), "Diploma PDF should convert preview CSS units into PDF points.");
+        AssertTrue(renderer.Contains("CenterBlock", StringComparison.Ordinal), "Diploma PDF should use flowing text blocks instead of independent fixed baselines.");
+    })),
     ("Diploma design saves typography and exports a transparent family issued PDF", (Func<Task>)(async () =>
     {
         var repository = await CreateRepositoryAsync();
@@ -3983,12 +4041,19 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(pdfText.Contains("RIVERSIDE FAMILY HOMESCHOOL", StringComparison.Ordinal), "Diploma PDF should include the homeschool name.");
         AssertTrue(pdfText.Contains("STUDENT LEARNER", StringComparison.Ordinal), "Diploma PDF should include the student name.");
         AssertTrue(pdfText.Contains("HIGH SCHOOL DIPLOMA", StringComparison.Ordinal), "Diploma PDF should include the diploma title.");
-        AssertTrue(pdfText.Contains("/F4 48 Tf", StringComparison.Ordinal), "Diploma PDF should use the saved student-name font size.");
-        AssertTrue(pdfText.Contains("5 Tc", StringComparison.Ordinal), "Diploma PDF should use the saved student-name letter spacing.");
+        AssertTrue(pdfText.Contains("/F3 36 Tf", StringComparison.Ordinal), "Diploma PDF should convert the saved student-name preview size into PDF points.");
+        AssertTrue(pdfText.Contains("3.75 Tc", StringComparison.Ordinal), "Diploma PDF should convert saved student-name letter spacing into PDF points.");
+        AssertFalse(pdfText.Contains("/F4 48 Tf", StringComparison.Ordinal), "Diploma PDF should not treat browser preview pixels as raw PDF points.");
+        AssertFalse(pdfText.Contains("0 -20 Td", StringComparison.Ordinal), "Diploma PDF should not use fixed multiline leading that can overlap later sections.");
         AssertFalse(pdfText.Contains("1 1 1 rg", StringComparison.Ordinal), "Diploma PDF should not paint a white page background over card stock.");
         AssertFalse(pdfText.Contains("MDE-approved", StringComparison.OrdinalIgnoreCase), "Diploma must not imply MDE approval.");
         AssertFalse(pdfText.Contains("state-approved", StringComparison.OrdinalIgnoreCase), "Diploma must not imply state approval.");
         AssertFalse(pdfText.Contains("accredited", StringComparison.OrdinalIgnoreCase), "Diploma must not imply accreditation.");
+
+        var root = FindRepositoryRoot();
+        var diplomaPage = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Diploma.razor"));
+        AssertTrue(diplomaPage.Contains("@style.FontSize px", StringComparison.Ordinal), "Diploma editor should label font sizes using the same unit model as the preview.");
+        AssertFalse(diplomaPage.Contains("@style.FontSize pt", StringComparison.Ordinal), "Diploma editor should not label preview-sized typography as PDF points.");
     })),
     ("Diploma wording rejects prohibited legal approval phrases", (Func<Task>)(async () =>
     {
@@ -4059,6 +4124,10 @@ var tests = new List<(string Name, Func<Task> Test)>
     }),
     ("Production settings create local-first folders and persist portal choices", () =>
     {
+        var defaultDesktopRoot = ProductionPathProvider.GetDefaultRoot(ProductionHostMode.Desktop);
+        AssertTrue(defaultDesktopRoot.Contains("HomeschoolManagerData", StringComparison.OrdinalIgnoreCase), "Desktop production data should default to the update-safe data folder.");
+        AssertFalse(defaultDesktopRoot.EndsWith($"{Path.DirectorySeparatorChar}HomeschoolManager", StringComparison.OrdinalIgnoreCase), "Desktop production data should not live in the Velopack app folder.");
+
         var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerProductionTests", Guid.NewGuid().ToString("N"));
         var paths = new ProductionPathProvider(root);
         var store = new ProductionRuntimeSettingsStore(paths);
@@ -4080,6 +4149,34 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertEqual(PortalSharingMode.Wifi, reloaded.StudentPortal.SharingMode, "Student portal sharing mode should persist.");
         AssertEqual("192.168.1.30", reloaded.StudentPortal.WifiHost, "Student portal Wi-Fi address should persist.");
         AssertEqual(5182, reloaded.StudentPortal.Port, "Student portal port should persist.");
+        return Task.CompletedTask;
+    }),
+    ("Production desktop data migrates from legacy installer-owned folder", () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), "HomeschoolManagerProductionTests", Guid.NewGuid().ToString("N"));
+        var legacyRoot = Path.Combine(root, "HomeschoolManager");
+        var targetRoot = Path.Combine(root, "HomeschoolManagerData");
+        Directory.CreateDirectory(Path.Combine(legacyRoot, "data"));
+        Directory.CreateDirectory(Path.Combine(legacyRoot, "files", "students"));
+        Directory.CreateDirectory(Path.Combine(legacyRoot, "config"));
+        Directory.CreateDirectory(Path.Combine(legacyRoot, "current"));
+        File.WriteAllText(Path.Combine(legacyRoot, "data", "homeschool.db"), "legacy records");
+        File.WriteAllText(Path.Combine(legacyRoot, "files", "students", "evidence.txt"), "legacy evidence");
+        File.WriteAllText(Path.Combine(legacyRoot, "config", "production-settings.json"), "{}");
+        File.WriteAllText(Path.Combine(legacyRoot, "current", "HomeschoolManager.exe"), "app binary should not be copied");
+
+        var paths = new ProductionPathProvider(targetRoot);
+        var migrated = ProductionDataRootMigrator.MigrateLegacyDesktopRootIfNeeded(paths, legacyRoot);
+        AssertTrue(migrated.Migrated, "Legacy desktop records should migrate when the new data folder is empty.");
+        AssertTrue(File.Exists(Path.Combine(targetRoot, "data", "homeschool.db")), "Migrated desktop data should include source records.");
+        AssertTrue(File.Exists(Path.Combine(targetRoot, "files", "students", "evidence.txt")), "Migrated desktop data should include stored files.");
+        AssertTrue(File.Exists(Path.Combine(targetRoot, "config", "production-settings.json")), "Migrated desktop data should include production settings.");
+        AssertTrue(File.Exists(Path.Combine(targetRoot, "config", "legacy-desktop-data-migration.json")), "Migration should leave a marker in the new data folder.");
+        AssertTrue(File.Exists(Path.Combine(legacyRoot, "data", "homeschool.db")), "Migration should leave the legacy folder in place as a safety copy.");
+        AssertFalse(Directory.Exists(Path.Combine(targetRoot, "current")), "Migration should not copy Velopack app binary folders.");
+
+        var secondRun = ProductionDataRootMigrator.MigrateLegacyDesktopRootIfNeeded(paths, legacyRoot);
+        AssertFalse(secondRun.Migrated, "Migration should not overwrite a new data folder that already contains family data.");
         return Task.CompletedTask;
     }),
     ("Production service mode uses ProgramData and persists protected-root intent", () =>
@@ -4446,11 +4543,13 @@ var tests = new List<(string Name, Func<Task> Test)>
         var migrateServiceScript = File.ReadAllText(Path.Combine(root, "tools", "release", "move-to-service-data-root.ps1"));
         var setupPage = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Components", "Pages", "Setup.razor"));
         var productionStatusService = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Services", "ProductionStatusService.cs"));
+        var appDataPaths = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Infrastructure", "Persistence", "AppDataPaths.cs"));
+        var studentPortalProgram = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.StudentPortal.Web", "Program.cs"));
         var webProgram = File.ReadAllText(Path.Combine(root, "src", "HomeschoolManager.Web", "Program.cs"));
         var backgroundServiceDoc = File.ReadAllText(Path.Combine(root, "docs", "operations", "background-service-mode.md"));
         AssertTrue(script.Contains("--packDir $appRoot", StringComparison.Ordinal), "Release script should package only the app layout.");
         AssertTrue(script.Contains("--mainExe \"HomeschoolManager.exe\"", StringComparison.Ordinal), "Release script should use the desktop host as the main executable.");
-        AssertTrue(script.Contains("desktopDataRoot = \"%LOCALAPPDATA%/HomeschoolManager\"", StringComparison.Ordinal), "Release manifest should document the desktop data root outside app binaries.");
+        AssertTrue(script.Contains("desktopDataRoot = \"%LOCALAPPDATA%/HomeschoolManagerData\"", StringComparison.Ordinal), "Release manifest should document the update-safe desktop data root outside app binaries.");
         AssertTrue(script.Contains("serviceDataRoot = \"%PROGRAMDATA%/HomeschoolManager\"", StringComparison.Ordinal), "Release manifest should document the service data root outside app binaries.");
         AssertTrue(script.Contains("install-homeschool-service.ps1", StringComparison.Ordinal), "Release layout should include the service installation helper.");
         AssertTrue(File.Exists(Path.Combine(root, "tools", "release", "install-homeschool-service.ps1")), "Service installation helper should exist.");
@@ -4464,6 +4563,8 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(hostProgram.Contains("VelopackApp.Build().Run()", StringComparison.Ordinal), "Desktop host should run Velopack startup hooks.");
         AssertTrue(hostProgram.Contains("AddWindowsService", StringComparison.Ordinal), "Desktop host should register Windows service hosting.");
         AssertTrue(hostProgram.Contains("ProductionPortalHostedService : BackgroundService", StringComparison.Ordinal), "Desktop host should supervise portals through a hosted service in service mode.");
+        AssertTrue(hostProgram.Contains("ProductionDataRootMigrator.MigrateLegacyDesktopRootIfNeeded", StringComparison.Ordinal), "Desktop host should migrate legacy desktop data out of the installer-owned folder before loading settings.");
+        AssertTrue(hostProgram.Contains("CreatePreUpdateBackupAsync", StringComparison.Ordinal), "Desktop host should create a safety backup before applying app updates.");
         AssertTrue(hostProgram.Contains("--service", StringComparison.Ordinal), "Desktop host should expose an explicit service-mode command.");
         AssertTrue(hostProgram.Contains("HomeschoolManager__ProductionHostMode", StringComparison.Ordinal), "Portal child processes should receive the production host mode.");
         AssertTrue(hostProgram.Contains("CheckForUpdatesAsync", StringComparison.Ordinal), "Desktop host should check the configured update feed.");
@@ -4473,7 +4574,9 @@ var tests = new List<(string Name, Func<Task> Test)>
         AssertTrue(migrateServiceScript.Contains("robocopy $SourceRoot $BackupRoot", StringComparison.Ordinal), "Service migration helper should back up existing records before copying them.");
         AssertTrue(setupPage.Contains("How Homeschool Manager is running", StringComparison.Ordinal), "Setup should show production/service status to the parent.");
         AssertTrue(productionStatusService.Contains("Background service", StringComparison.Ordinal), "Production status service should describe service mode in parent-friendly language.");
+        AssertTrue(appDataPaths.Contains("ProductionPathProvider.DesktopDataFolderName", StringComparison.Ordinal), "Fallback app data paths should use the update-safe desktop data folder.");
         AssertTrue(webProgram.Contains("HomeschoolManager:DataRoot", StringComparison.Ordinal), "Production support-key storage should follow the configured family data root.");
+        AssertTrue(studentPortalProgram.Contains("HomeschoolManager:DataRoot", StringComparison.Ordinal), "Student portal support-key storage should follow the configured family data root.");
         AssertTrue(gitignore.Contains(".codex-verify/", StringComparison.Ordinal), "Temporary verification outputs should be ignored.");
         AssertTrue(gitignore.Contains("!tools/release/**", StringComparison.Ordinal), "Release tooling should remain trackable.");
         AssertTrue(releaseReadme.Contains("Update A Production Installation", StringComparison.Ordinal), "Release docs should explain production updates.");

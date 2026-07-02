@@ -1,10 +1,13 @@
 @page "/setup"
 @rendermode InteractiveServer
+@using HomeschoolManager.Application.Backups
 @using HomeschoolManager.Application.Common
 @using HomeschoolManager.Application.Requirements
 @using HomeschoolManager.Application.Setup
 @using HomeschoolManager.Domain.Access
 @using HomeschoolManager.Web.Services
+@inject BackupService BackupService
+@inject RemoteBackupService RemoteBackupService
 @inject SetupService SetupService
 @inject RequirementService RequirementService
 @inject SessionState Session
@@ -55,6 +58,99 @@ else
             </ul>
         }
     </section>
+
+    @if (summary is not null && !summary.IsComplete)
+    {
+        <section class="form-section first-run-restore-panel backup-panel">
+            <h2>Set up from backup</h2>
+            <p>If you already have a Homeschool Manager full backup, restore it here instead of filling setup out by hand. This option is only available until setup is complete.</p>
+
+            <label class="form-label" for="startup-backup-file">Backup file</label>
+            <InputFile id="startup-backup-file" class="form-control" OnChange="OnStartupBackupFileSelectedAsync" accept=".zip,.hsmbak,application/zip,application/octet-stream" disabled="@startupRestoreBusy" />
+            <p class="form-text">Choose a full backup ZIP or encrypted .hsmbak file. The backup will be checked before restore is available.</p>
+
+            @if (startupBackupName.Length > 0)
+            {
+                <div class="backup-selected-file">
+                    <strong>@startupBackupName</strong>
+                    <span>@FormatBytes(startupBackupBytes?.LongLength ?? 0)</span>
+                </div>
+            }
+
+            @if (startupBackupIsEncrypted)
+            {
+                <div class="backup-encrypted-restore">
+                    <label class="form-label" for="startup-encrypted-restore-passphrase">Backup passphrase *</label>
+                    <input id="startup-encrypted-restore-passphrase" class="form-control" type="password" @bind="startupEncryptedRestorePassphrase" autocomplete="current-password" disabled="@startupRestoreBusy" />
+                    <button class="btn btn-primary" type="button" @onclick="PreviewStartupEncryptedBackupRestoreAsync" disabled="@(startupBackupBytes is null || startupRestoreBusy)">
+                        Preview encrypted backup
+                    </button>
+                </div>
+            }
+
+            @if (startupValidationReport is not null)
+            {
+                <section class="backup-validation-card @(startupValidationReport.IsValid ? "is-valid" : "is-invalid")">
+                    <h3>@(startupValidationReport.IsValid ? "Backup looks ready" : "Backup cannot be restored yet")</h3>
+                    @if (startupValidationReport.Manifest is not null)
+                    {
+                        <dl class="backup-summary-grid">
+                            <div>
+                                <dt>Created</dt>
+                                <dd>@startupValidationReport.Manifest.CreatedAtUtc.ToLocalTime().ToString("g")</dd>
+                            </div>
+                            <div>
+                                <dt>Household</dt>
+                                <dd>@Blank(startupValidationReport.Manifest.HouseholdName)</dd>
+                            </div>
+                            <div>
+                                <dt>School</dt>
+                                <dd>@Blank(startupValidationReport.Manifest.SchoolName)</dd>
+                            </div>
+                            <div>
+                                <dt>Students</dt>
+                                <dd>@startupValidationReport.Manifest.Students.Count</dd>
+                            </div>
+                        </dl>
+                    }
+                    @if (startupValidationReport.Errors.Count > 0)
+                    {
+                        <ul class="backup-message-list">
+                            @foreach (var error in startupValidationReport.Errors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    }
+                    @if (startupValidationReport.Warnings.Count > 0)
+                    {
+                        <ul class="backup-message-list">
+                            @foreach (var warning in startupValidationReport.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+
+            @if (startupRestorePreview is not null)
+            {
+                <section class="backup-restore-confirm">
+                    <h3>Restore preview</h3>
+                    <p>Restoring replaces any setup details already entered on this computer with the records from this backup.</p>
+                    <p><strong>@startupRestorePreview.SafetyBackupMessage</strong></p>
+                    <div class="checkbox-row">
+                        <input id="startup-confirm-restore" class="form-check-input" type="checkbox" @bind="startupConfirmRestore" disabled="@startupRestoreBusy" />
+                        <label class="form-check-label" for="startup-confirm-restore">I understand this will replace current records after creating a safety backup.</label>
+                    </div>
+                    <button class="btn btn-danger" type="button" @onclick="RestoreStartupBackupAsync" disabled="@(!startupConfirmRestore || startupRestoreBusy)">
+                        Restore this backup
+                    </button>
+                </section>
+            }
+        </section>
+    }
 
     <section class="status-panel production-status-panel">
         <h2>How Homeschool Manager is running</h2>
@@ -215,11 +311,20 @@ else
 }
 
 @code {
+    private const long MaxBackupUploadBytes = 512L * 1024L * 1024L;
     private SetupSummary? summary;
     private readonly List<PageMessage> messages = [];
     private readonly Dictionary<string, string> fieldErrors = [];
     private IReadOnlyList<StudentSetupItem> students = [];
     private ProductionStatus? productionStatus;
+    private BackupValidationReport? startupValidationReport;
+    private BackupRestorePreview? startupRestorePreview;
+    private byte[]? startupBackupBytes;
+    private string startupBackupName = "";
+    private string startupEncryptedRestorePassphrase = "";
+    private bool startupBackupIsEncrypted;
+    private bool startupConfirmRestore;
+    private bool startupRestoreBusy;
     private HouseholdModel household = new();
     private SchoolModel school = new();
     private StudentModel student = new();
@@ -298,6 +403,163 @@ else
         await Run(() => RequirementService.SeedMichiganAsync(ParentUser()));
     }
 
+    private async Task OnStartupBackupFileSelectedAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        startupBackupName = file.Name;
+        startupBackupBytes = null;
+        startupBackupIsEncrypted = file.Name.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase);
+        startupEncryptedRestorePassphrase = "";
+        startupValidationReport = null;
+        startupRestorePreview = null;
+        startupConfirmRestore = false;
+        messages.Clear();
+        fieldErrors.Clear();
+
+        if (summary?.IsComplete == true)
+        {
+            messages.Add(new PageMessage("Setup is already complete. Use Backup & Restore for future restores.", "alert alert-warning"));
+            return;
+        }
+
+        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+            !file.Name.EndsWith(".hsmbak", StringComparison.OrdinalIgnoreCase))
+        {
+            messages.Add(new PageMessage("Choose a Homeschool Manager backup ZIP or encrypted .hsmbak file.", "alert alert-warning"));
+            return;
+        }
+
+        startupRestoreBusy = true;
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxBackupUploadBytes);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            startupBackupBytes = memory.ToArray();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            messages.Add(new PageMessage(ex.Message, "alert alert-danger"));
+            return;
+        }
+        finally
+        {
+            startupRestoreBusy = false;
+        }
+
+        if (startupBackupIsEncrypted)
+        {
+            messages.Add(new PageMessage("Enter the backup passphrase, then preview this encrypted backup.", "alert alert-info"));
+            return;
+        }
+
+        await ValidateStartupBackupAsync();
+    }
+
+    private async Task ValidateStartupBackupAsync()
+    {
+        if (Session.CurrentUser is null || startupBackupBytes is null || summary?.IsComplete == true)
+        {
+            return;
+        }
+
+        await RunStartupRestoreAsync(async () =>
+        {
+            var validation = await BackupService.ValidateBackupAsync(
+                Session.CurrentUser,
+                new ValidateBackupCommand(startupBackupName, startupBackupBytes));
+            if (!validation.Succeeded || validation.Value is null)
+            {
+                AddMessages(validation.Errors, "alert alert-danger");
+                return false;
+            }
+
+            startupValidationReport = validation.Value;
+            if (!validation.Value.IsValid)
+            {
+                messages.Add(new PageMessage("This backup could not be validated for restore.", "alert alert-danger"));
+                return false;
+            }
+
+            var preview = await BackupService.PreviewRestoreAsync(
+                Session.CurrentUser,
+                new ValidateBackupCommand(startupBackupName, startupBackupBytes));
+            if (!preview.Succeeded || preview.Value is null)
+            {
+                AddMessages(preview.Errors, "alert alert-danger");
+                return false;
+            }
+
+            startupRestorePreview = preview.Value;
+            startupBackupIsEncrypted = false;
+            messages.Add(new PageMessage("Backup validated. Review the restore preview before continuing.", "alert alert-success"));
+            return true;
+        });
+    }
+
+    private async Task PreviewStartupEncryptedBackupRestoreAsync()
+    {
+        if (Session.CurrentUser is null || startupBackupBytes is null || summary?.IsComplete == true)
+        {
+            return;
+        }
+
+        await RunStartupRestoreAsync(async () =>
+        {
+            var preview = await RemoteBackupService.PreviewEncryptedBackupRestoreAsync(
+                Session.CurrentUser,
+                new PreviewEncryptedBackupRestoreCommand(startupBackupName, startupBackupBytes, startupEncryptedRestorePassphrase));
+            if (!preview.Succeeded || preview.Value is null)
+            {
+                AddMessages(preview.Errors, "alert alert-danger");
+                return false;
+            }
+
+            startupRestorePreview = preview.Value;
+            startupValidationReport = null;
+            startupConfirmRestore = false;
+            messages.Add(new PageMessage("Encrypted backup decrypted and validated. Review the restore preview before continuing.", "alert alert-success"));
+            return true;
+        });
+    }
+
+    private async Task RestoreStartupBackupAsync()
+    {
+        if (Session.CurrentUser is null || startupBackupBytes is null)
+        {
+            return;
+        }
+
+        if (summary?.IsComplete == true)
+        {
+            messages.Clear();
+            messages.Add(new PageMessage("Setup is already complete. Use Backup & Restore for future restores.", "alert alert-warning"));
+            return;
+        }
+
+        await RunStartupRestoreAsync(async () =>
+        {
+            var result = startupBackupIsEncrypted
+                ? await RemoteBackupService.RestoreEncryptedBackupAsync(
+                    Session.CurrentUser,
+                    new RestoreEncryptedBackupCommand(startupBackupName, startupBackupBytes, startupEncryptedRestorePassphrase, startupConfirmRestore))
+                : await BackupService.RestoreBackupAsync(
+                    Session.CurrentUser,
+                    new RestoreBackupCommand(startupBackupName, startupBackupBytes, startupConfirmRestore));
+            if (!result.Succeeded || result.Value is null)
+            {
+                AddMessages(result.Errors, "alert alert-danger");
+                return false;
+            }
+
+            messages.Add(new PageMessage($"Restored backup. A safety backup was saved as {result.Value.SafetyBackupFileName}.", "alert alert-success"));
+            ResetStartupRestore();
+            await RefreshSummary();
+            SetupService.NotifyRecordsRestored();
+            return true;
+        });
+    }
+
     private async Task<bool> Run(Func<Task<OperationResult>> action)
     {
         messages.Clear();
@@ -312,6 +574,25 @@ else
 
         messages.AddRange(result.Errors.Select(error => new PageMessage(error, "alert alert-danger")));
         return false;
+    }
+
+    private async Task RunStartupRestoreAsync(Func<Task<bool>> action)
+    {
+        startupRestoreBusy = true;
+        messages.Clear();
+        fieldErrors.Clear();
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.Security.Cryptography.CryptographicException)
+        {
+            messages.Add(new PageMessage(ex.Message, "alert alert-danger"));
+        }
+        finally
+        {
+            startupRestoreBusy = false;
+        }
     }
 
     private async Task RefreshSummary()
@@ -356,6 +637,42 @@ else
     private static string Display(bool exists, string value)
     {
         return exists ? value : "Not set";
+    }
+
+    private static string Blank(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "Not recorded" : value;
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024L * 1024L)
+        {
+            return $"{bytes / 1024d / 1024d:0.0} MB";
+        }
+
+        if (bytes >= 1024L)
+        {
+            return $"{bytes / 1024d:0.0} KB";
+        }
+
+        return $"{bytes} bytes";
+    }
+
+    private void AddMessages(IEnumerable<string> errors, string cssClass)
+    {
+        messages.AddRange(errors.Select(error => new PageMessage(error, cssClass)));
+    }
+
+    private void ResetStartupRestore()
+    {
+        startupValidationReport = null;
+        startupRestorePreview = null;
+        startupBackupBytes = null;
+        startupBackupName = "";
+        startupEncryptedRestorePassphrase = "";
+        startupBackupIsEncrypted = false;
+        startupConfirmRestore = false;
     }
 
     private MarkupString ValidationFor(string key)

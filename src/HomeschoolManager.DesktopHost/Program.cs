@@ -1,6 +1,10 @@
+using HomeschoolManager.Application.Backups;
+using HomeschoolManager.Infrastructure.Configuration;
+using HomeschoolManager.Infrastructure.Persistence;
 using HomeschoolManager.Infrastructure.Production;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,6 +15,15 @@ VelopackApp.Build().Run();
 var command = HostCommand.Parse(args);
 var rootOverride = Environment.GetEnvironmentVariable("HOMESCHOOL_MANAGER_PRODUCTION_ROOT");
 var paths = new ProductionPathProvider(rootOverride, command.HostMode);
+if (command.HostMode == ProductionHostMode.Desktop && string.IsNullOrWhiteSpace(rootOverride))
+{
+    var migration = ProductionDataRootMigrator.MigrateLegacyDesktopRootIfNeeded(paths);
+    if (migration.Migrated)
+    {
+        Console.WriteLine(migration.Message);
+    }
+}
+
 var store = new ProductionRuntimeSettingsStore(paths);
 var settings = store.LoadOrCreate();
 command.Apply(settings);
@@ -47,7 +60,7 @@ if (command.HostMode == ProductionHostMode.Desktop
     && !command.SkipUpdateCheck
     && !string.IsNullOrWhiteSpace(settings.UpdateFeedUrl))
 {
-    await TryApplyUpdatesAsync(settings.UpdateFeedUrl);
+    await TryApplyUpdatesAsync(settings.UpdateFeedUrl, paths, settings.BackupBeforeUpdate);
 }
 
 var context = new ProductionRunContext(
@@ -119,7 +132,7 @@ static void OpenBrowser(string url)
     }
 }
 
-static async Task TryApplyUpdatesAsync(string updateFeedUrl)
+static async Task TryApplyUpdatesAsync(string updateFeedUrl, ProductionPathProvider paths, bool backupBeforeUpdate)
 {
     try
     {
@@ -130,6 +143,12 @@ static async Task TryApplyUpdatesAsync(string updateFeedUrl)
             return;
         }
 
+        if (backupBeforeUpdate && ProductionDataRootMigrator.HasFamilyData(paths.Root))
+        {
+            var backupFileName = await CreatePreUpdateBackupAsync(paths);
+            Console.WriteLine($"Created pre-update safety backup: {backupFileName}");
+        }
+
         await manager.DownloadUpdatesAsync(update);
         manager.ApplyUpdatesAndRestart(update);
     }
@@ -137,6 +156,20 @@ static async Task TryApplyUpdatesAsync(string updateFeedUrl)
     {
         Console.WriteLine($"Update check skipped: {ex.Message}");
     }
+}
+
+static async Task<string> CreatePreUpdateBackupAsync(ProductionPathProvider productionPaths)
+{
+    var options = Options.Create(new HomeschoolManagerOptions
+    {
+        DataRoot = productionPaths.Root,
+        UseDevelopmentDataRoot = false
+    });
+    var appDataPaths = new AppDataPaths(options);
+    var repository = new JsonHomeschoolRepository(appDataPaths);
+    var archiveStore = new LocalBackupArchiveStore(appDataPaths, repository);
+    var backup = await archiveStore.CreateBackupAsync("Homeschool Manager updater", BackupKind.Automatic);
+    return backup.FileName;
 }
 
 internal sealed record HostSummary(

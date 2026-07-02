@@ -1,3 +1,5 @@
+using HomeschoolManager.Infrastructure.Production;
+
 namespace HomeschoolManager.Web.Services;
 
 public sealed record ProductionStatus(
@@ -23,13 +25,12 @@ public sealed class ProductionStatusService
     public ProductionStatus GetStatus()
     {
         var hostMode = configuration["HomeschoolManager:ProductionHostMode"] ?? "Desktop";
-        var dataRoot = configuration["HomeschoolManager:DataRoot"] ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HomeschoolManager");
+        var isServiceMode = string.Equals(hostMode, "Service", StringComparison.OrdinalIgnoreCase);
+        var dataRoot = configuration["HomeschoolManager:DataRoot"] ?? ProductionPathProvider.GetDefaultRoot(
+            isServiceMode ? ProductionHostMode.Service : ProductionHostMode.Desktop);
         var settingsPath = configuration["HomeschoolManager:ProductionSettingsPath"] ?? Path.Combine(dataRoot, "config", "production-settings.json");
         var adminPortalUrl = configuration["HomeschoolManager:AdminPortalUrl"] ?? "";
         var studentPortalUrl = configuration["HomeschoolManager:StudentPortalUrl"] ?? configuration["HomeschoolManager:StudentPortalBaseUrl"] ?? "";
-        var isServiceMode = string.Equals(hostMode, "Service", StringComparison.OrdinalIgnoreCase);
 
         return new ProductionStatus(
             isServiceMode ? "Background service" : "Desktop launcher",

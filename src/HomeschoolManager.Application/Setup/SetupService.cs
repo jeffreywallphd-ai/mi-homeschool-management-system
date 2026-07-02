@@ -108,6 +108,12 @@ public sealed class SetupService
         return students.Select(ToSetupItem).ToArray();
     }
 
+    public void NotifyRecordsRestored()
+    {
+        StudentsChanged?.Invoke();
+        SetupChanged?.Invoke();
+    }
+
     public async Task<OperationResult> CreateHouseholdAsync(
         UserContext user,
         CreateHouseholdCommand command,

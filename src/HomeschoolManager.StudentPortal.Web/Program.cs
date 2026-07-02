@@ -1,5 +1,6 @@
 using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Infrastructure;
+using HomeschoolManager.Infrastructure.Production;
 using HomeschoolManager.StudentPortal.Web.Components;
 using HomeschoolManager.StudentPortal.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -17,8 +18,9 @@ builder.Services.AddSingleton<SessionState>();
 var dataProtectionDirectory = builder.Environment.IsDevelopment()
     ? Path.Combine(builder.Environment.ContentRootPath, ".dev-data", "DataProtection-Keys")
     : Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HomeschoolManager",
+        builder.Configuration["HomeschoolManager:DataRoot"]
+            ?? ProductionPathProvider.GetDefaultRoot(ProductionHostMode.Desktop),
+        "config",
         "DataProtection-Keys");
 Directory.CreateDirectory(dataProtectionDirectory);
 builder.Services.AddDataProtection()

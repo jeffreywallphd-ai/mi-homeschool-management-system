@@ -1,7 +1,7 @@
 # Background Service Mode
 
 - Status: accepted
-- Last reviewed: 2026-06-13
+- Last reviewed: 2026-07-01
 - Canonical for: optional Windows background service installation and service-mode data location
 - Related ADRs: [ADR-0007](../adr/ADR-0007-background-service-mode-and-machine-data-root.md)
 - Related docs: [Local Installation and Data Location](local-installation-and-data-location.md), [Upgrades Migrations and Recovery](upgrades-migrations-and-recovery.md)
@@ -19,7 +19,7 @@ This mode is intended for families who want a child to use the student portal fr
 Normal desktop mode stores family records under the parent account:
 
 ```text
-%LOCALAPPDATA%/HomeschoolManager
+%LOCALAPPDATA%/HomeschoolManagerData
 ```
 
 Background service mode stores one shared service copy under the computer-level data folder:
@@ -51,6 +51,8 @@ If the family already used desktop mode, run the migration helper before install
 ```
 
 The helper copies the existing parent-account data folder to `%PROGRAMDATA%/HomeschoolManager` and creates a backup first. It does not delete the original folder.
+
+If the newer desktop data folder is not present, the helper falls back to the legacy prerelease desktop folder at `%LOCALAPPDATA%/HomeschoolManager`.
 
 ## Installing The Service
 

@@ -24,7 +24,7 @@ In service mode:
 - Parent/admin and student portal sharing settings remain independent.
 - Parent/admin sharing defaults to `Localhost`.
 - Student sharing defaults to `Localhost` until the parent enables Wi-Fi sharing.
-- The existing desktop-host mode remains available and continues to use `%LOCALAPPDATA%/HomeschoolManager` by default.
+- The existing desktop-host mode remains available and uses `%LOCALAPPDATA%/HomeschoolManagerData` by default.
 
 ## Consequences
 

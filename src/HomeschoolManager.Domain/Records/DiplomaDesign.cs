@@ -96,12 +96,12 @@ public sealed record DiplomaTextStyle
 
         if (fontSize is < 8 or > 96)
         {
-            throw new DomainException("Diploma font sizes must be between 8 and 96 points.");
+            throw new DomainException("Diploma font sizes must be between 8 and 96 display units.");
         }
 
         if (letterSpacing is < 0 or > 16)
         {
-            throw new DomainException("Diploma letter spacing must be between 0 and 16 points.");
+            throw new DomainException("Diploma letter spacing must be between 0 and 16 display units.");
         }
 
         ElementKey = elementKey.Trim();

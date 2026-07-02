@@ -223,6 +223,7 @@ public sealed class DiplomaService
     {
         var studentName = StudentName(student);
         var schoolName = string.IsNullOrWhiteSpace(profile?.SchoolName) ? "Family Homeschool" : profile!.SchoolName;
+        var signatureLabel = string.IsNullOrWhiteSpace(profile?.DiplomaSignatureName) ? "Parent / Administrator" : profile!.DiplomaSignatureName;
         DateOnly? awardedDate = plan?.AcceptedAtUtc is null ? null : DateOnly.FromDateTime(plan.AcceptedAtUtc.Value.LocalDateTime);
         return new DiplomaDesign(
             Guid.NewGuid(),
@@ -238,7 +239,7 @@ public sealed class DiplomaService
             "with all of the rights, honors, and privileges pertaining thereto",
             "Awarded on",
             awardedDate,
-            "Parent / Administrator",
+            signatureLabel,
             "Date",
             "Family Issued",
             DiplomaTextStyle.DefaultStyles,

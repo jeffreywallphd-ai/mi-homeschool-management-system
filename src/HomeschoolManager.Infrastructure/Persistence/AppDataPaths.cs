@@ -1,4 +1,5 @@
 using HomeschoolManager.Infrastructure.Configuration;
+using HomeschoolManager.Infrastructure.Production;
 using Microsoft.Extensions.Options;
 
 namespace HomeschoolManager.Infrastructure.Persistence;
@@ -22,7 +23,9 @@ public sealed class AppDataPaths
             }
 
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var folderName = options.UseDevelopmentDataRoot ? "HomeschoolManager-Dev" : "HomeschoolManager";
+            var folderName = options.UseDevelopmentDataRoot
+                ? "HomeschoolManager-Dev"
+                : ProductionPathProvider.DesktopDataFolderName;
             return Path.Combine(localAppData, folderName);
         }
     }

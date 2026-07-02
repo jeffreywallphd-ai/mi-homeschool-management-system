@@ -1,5 +1,5 @@
 param(
-    [string]$SourceRoot = "$env:LOCALAPPDATA\HomeschoolManager",
+    [string]$SourceRoot = "",
 
     [string]$TargetRoot = "$env:ProgramData\HomeschoolManager",
 
@@ -12,6 +12,17 @@ $ErrorActionPreference = "Stop"
 
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "Please run this script from an Administrator PowerShell window. Windows requires that to write to ProgramData."
+}
+
+if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
+    $preferredDesktopRoot = "$env:LOCALAPPDATA\HomeschoolManagerData"
+    $legacyDesktopRoot = "$env:LOCALAPPDATA\HomeschoolManager"
+    if (Test-Path -LiteralPath $preferredDesktopRoot) {
+        $SourceRoot = $preferredDesktopRoot
+    }
+    else {
+        $SourceRoot = $legacyDesktopRoot
+    }
 }
 
 if (-not (Test-Path -LiteralPath $SourceRoot)) {

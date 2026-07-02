@@ -5,7 +5,7 @@
 - Canonical for: operational expectations for backups, restore, and student archive exports
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0008](../adr/ADR-0008-parent-authorized-encrypted-external-backups.md)
 - Related docs: [Backup Restore and Export Architecture](../architecture/backup-restore-and-export-architecture.md), [Data Retention Backup and Recovery Standards](../standards/data-retention-backup-and-recovery-standards.md)
-- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Synced folder backup prepares native-picker files and records saved copies`, `Remote backup service requires parent access and uses encrypted Google artifacts`, `Google provider builds Gmail drafts with RFC-style MIME headers`
+- Related tests: `Full local backup creates manifest checksums and restorable source files`, `Full local backup validation rejects incomplete packages`, `Full local restore validates backup and creates safety backup first`, `Encrypted backup packages round-trip through the local backup validator`, `Synced folder backup prepares native-picker files and records saved copies`, `Remote backup service requires parent access and uses encrypted Google artifacts`, `Google provider builds Gmail drafts with RFC-style MIME headers`, `Setup page offers restore from backup only before setup is complete`
 - Supersedes: none
 
 ## Manual Backup
@@ -73,6 +73,12 @@ Restore replaces active source folders from the selected backup:
 - `files/`
 - `templates/`
 - `config/`
+
+## First Launch Restore From Backup
+
+When Homeschool Manager has not completed required setup yet, the Setup page should offer a parent/admin a way to set up from an existing full backup. This startup restore path supports the same plain full-backup ZIP files and encrypted `.hsmbak` files as Backup & Restore. It must validate the backup, preview the restore, require explicit confirmation, and create a pre-restore safety backup before replacing records.
+
+After required setup is complete, the startup restore option should no longer appear on Setup. Ongoing backup and restore actions belong in Backup & Restore only.
 
 ## Synced Folder Backup
 

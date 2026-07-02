@@ -3,6 +3,7 @@ using HomeschoolManager.Application.Persistence;
 using HomeschoolManager.Application.Backups;
 using HomeschoolManager.Application.Submissions;
 using HomeschoolManager.Infrastructure;
+using HomeschoolManager.Infrastructure.Production;
 using HomeschoolManager.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -23,7 +24,7 @@ var dataProtectionDirectory = builder.Environment.IsDevelopment()
     ? Path.Combine(builder.Environment.ContentRootPath, ".dev-data", "DataProtection-Keys")
     : Path.Combine(
         builder.Configuration["HomeschoolManager:DataRoot"]
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HomeschoolManager"),
+            ?? ProductionPathProvider.GetDefaultRoot(ProductionHostMode.Desktop),
         "config",
         "DataProtection-Keys");
 Directory.CreateDirectory(dataProtectionDirectory);

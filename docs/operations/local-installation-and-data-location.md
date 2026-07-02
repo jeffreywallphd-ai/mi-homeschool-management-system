@@ -1,7 +1,7 @@
 # Local Installation and Data Location
 
 - Status: accepted
-- Last reviewed: 2026-06-13
+- Last reviewed: 2026-07-01
 - Canonical for: local running mode and family data location
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0007](../adr/ADR-0007-background-service-mode-and-machine-data-root.md)
 - Related docs: [ASP.NET Blazor SQLite Stack](../architecture/aspnet-blazor-sqlite-stack.md), [Local Data and File Storage](../architecture/local-data-and-file-storage.md)
@@ -19,7 +19,7 @@ For family use, the app should be able to run locally on the parent PC without r
 The default desktop-mode family-data root is:
 
 ```text
-%LOCALAPPDATA%/HomeschoolManager
+%LOCALAPPDATA%/HomeschoolManagerData
 ```
 
 The optional background-service family-data root is:
@@ -29,6 +29,8 @@ The optional background-service family-data root is:
 ```
 
 Family data must remain separate from application binaries.
+
+Older prerelease desktop builds may have stored records under `%LOCALAPPDATA%/HomeschoolManager`, which can also be used by the installer for application files. Current desktop builds copy known family-data folders from that legacy location into `%LOCALAPPDATA%/HomeschoolManagerData` on first launch when the new folder is empty. The old folder is left in place as a safety copy.
 
 ## Data Root Contents
 
@@ -63,7 +65,7 @@ student portal as separate local web processes and opens the parent/admin portal
 Desktop-mode production runtime settings are stored at:
 
 ```text
-%LOCALAPPDATA%/HomeschoolManager/config/production-settings.json
+%LOCALAPPDATA%/HomeschoolManagerData/config/production-settings.json
 ```
 
 Service-mode production runtime settings are stored at:

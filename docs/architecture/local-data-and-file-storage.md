@@ -1,7 +1,7 @@
 # Local Data and File Storage
 
 - Status: accepted
-- Last reviewed: 2026-06-13
+- Last reviewed: 2026-07-01
 - Canonical for: local data ownership, database, and file-storage shape
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md)
 - Related docs: [File and Artifact Taxonomy](../domain/file-and-artifact-taxonomy.md), [Backup Restore and Export Architecture](backup-restore-and-export-architecture.md)
@@ -13,7 +13,7 @@
 Family data should be stored separately from application binaries. Desktop mode stores family data under the parent-user local application data folder:
 
 ```text
-%LOCALAPPDATA%/HomeschoolManager
+%LOCALAPPDATA%/HomeschoolManagerData
 ```
 
 Optional background service mode stores family data under the computer-level application data folder:
@@ -23,6 +23,8 @@ Optional background service mode stores family data under the computer-level app
 ```
 
 Production installer and update flows must keep these folders outside the installed application binaries. Updating the application replaces the installed program files, not the family data folder.
+
+Prerelease desktop builds may have stored records under `%LOCALAPPDATA%/HomeschoolManager`. Current desktop builds copy known family-data folders from that legacy location into `%LOCALAPPDATA%/HomeschoolManagerData` when the new folder is empty, leave the legacy folder in place, and skip installer-owned binary folders.
 
 ## Data Layout
 

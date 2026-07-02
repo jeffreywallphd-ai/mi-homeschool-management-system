@@ -145,7 +145,7 @@ For service mode:
 
 ### Migration From Desktop Mode
 
-If the family already uses desktop mode under `%LOCALAPPDATA%/HomeschoolManager`, provide a guided move:
+If the family already uses desktop mode under `%LOCALAPPDATA%/HomeschoolManagerData`, provide a guided move. If that folder is not present, fall back to the legacy prerelease desktop folder under `%LOCALAPPDATA%/HomeschoolManager`:
 
 - Show the current data location.
 - Show the new protected service data location.
@@ -219,7 +219,7 @@ Exit criteria:
 
 ## Phase 6: Migration From Existing Production Data
 
-- Add a guided move from `%LOCALAPPDATA%/HomeschoolManager` to `%PROGRAMDATA%/HomeschoolManager`.
+- Add a guided move from `%LOCALAPPDATA%/HomeschoolManagerData` to `%PROGRAMDATA%/HomeschoolManager`, with fallback support for the legacy `%LOCALAPPDATA%/HomeschoolManager` folder.
 - Require or create a backup first.
 - Verify copied files.
 - Keep the original folder as a fallback until the parent chooses cleanup.

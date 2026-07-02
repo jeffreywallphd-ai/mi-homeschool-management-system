@@ -47,9 +47,9 @@ Do not commit generated release output. The release output stays ignored by git.
 2. Code-sign the release on the release machine before public distribution.
 3. Run `artifacts\release\packages\HomeschoolManager-stable-Setup.exe` on the target Windows computer.
 4. Start Homeschool Manager from the Start menu or desktop shortcut.
-5. In normal desktop mode, the app data stays outside the installed binaries at `%LOCALAPPDATA%\HomeschoolManager`.
+5. In normal desktop mode, the app data stays outside the installed binaries at `%LOCALAPPDATA%\HomeschoolManagerData`.
 
-The first launch creates `%LOCALAPPDATA%\HomeschoolManager\config\production-settings.json`. That file controls the two portals independently:
+The first launch creates `%LOCALAPPDATA%\HomeschoolManagerData\config\production-settings.json`. That file controls the two portals independently:
 
 ```json
 {
@@ -130,12 +130,14 @@ bash tools/release/build-windows-release.sh -Version 1.0.1
 
 4. Publish the contents of `artifacts\release\packages` to the same update feed location used by installed copies.
 5. Keep all generated files together in that feed location; the installer/update metadata and `.nupkg` package work as a set.
-6. On the installed computer, make sure `%LOCALAPPDATA%\HomeschoolManager\config\production-settings.json` has `updateFeedUrl` pointed at that feed.
+6. On the installed computer, make sure `%LOCALAPPDATA%\HomeschoolManagerData\config\production-settings.json` has `updateFeedUrl` pointed at that feed.
 7. Restart Homeschool Manager. The desktop host checks the feed on launch, downloads the update when one is available, applies it, and restarts.
 
 For troubleshooting, launch the desktop host with `--skip-update-check` to start the app without checking the feed. To inspect portal binding without starting the web portals, run `HomeschoolManager.exe --dry-run`.
 
-Updates replace installed application binaries only. Family records, uploaded evidence, exports, backups, logs, and production settings remain under `%LOCALAPPDATA%\HomeschoolManager`.
+Updates replace installed application binaries only. Family records, uploaded evidence, exports, backups, logs, and production settings remain under `%LOCALAPPDATA%\HomeschoolManagerData`.
+
+If an older prerelease copy stored records under `%LOCALAPPDATA%\HomeschoolManager`, the current desktop host copies known family-data folders into `%LOCALAPPDATA%\HomeschoolManagerData` on first launch when the new folder is empty. It leaves the old folder in place and does not copy app binary folders such as `current`.
 
 For background service installations:
 
