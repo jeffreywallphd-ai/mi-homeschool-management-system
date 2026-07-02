@@ -4,6 +4,8 @@ public sealed class ProductionRuntimeSettings
 {
     public ProductionHostMode HostMode { get; set; } = ProductionHostMode.Desktop;
 
+    public ProductionAvailabilityMode AvailabilityMode { get; set; } = ProductionAvailabilityMode.AlwaysAvailable;
+
     public PortalLaunchSettings AdminPortal { get; set; } = new()
     {
         Enabled = true,

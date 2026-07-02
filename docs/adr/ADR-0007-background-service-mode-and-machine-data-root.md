@@ -13,13 +13,15 @@ The family also prefers records to live in one protected location. Roaming profi
 
 ## Decision
 
-Homeschool Manager will support an optional Windows background service production mode.
+Homeschool Manager production installs will prefer an Always Available mode for family use. Always Available is implemented as a Windows background service so the student portal can remain available while the family PC is on and awake, even when no parent is signed in.
 
-In service mode:
+The Open Only desktop mode remains available for families who do not want Windows to run Homeschool Manager in the background.
 
-- The service starts with Windows and can run when no Windows user is signed in.
+In Always Available mode:
+
+- The Windows background runner starts with Windows and can run when no Windows user is signed in.
 - Family data is stored under `%PROGRAMDATA%/HomeschoolManager`.
-- The service data folder is the one authoritative family data root for service mode.
+- The service data folder is the one authoritative family data root for Always Available mode.
 - Installer and setup tooling should protect the folder with Windows permissions so normal student Windows accounts do not browse or edit the database directly.
 - Parent/admin and student portal sharing settings remain independent.
 - Parent/admin sharing defaults to `Localhost`.
@@ -28,11 +30,12 @@ In service mode:
 
 ## Consequences
 
-- Production code must distinguish desktop mode from background service mode.
+- Production code must distinguish the parent-facing availability preference from the actual host mode currently running.
 - Service mode cannot rely on an interactive desktop session or per-user local app data.
 - Installer tooling must register the Windows Service and create protected machine-level folders.
-- Updates in service mode must stop the service before replacing binaries and restart it afterward.
+- Updates in Always Available mode must stop the Windows background runner before replacing binaries and restart it afterward.
 - Parent-facing UI and docs must explain that the PC must be on and awake for student Wi-Fi access.
+- Setup must not imply student access is truly Always Available until the Windows background runner is installed and active.
 
 ## Guardrails
 
@@ -41,4 +44,4 @@ In service mode:
 - Do not enable student Wi-Fi sharing automatically.
 - Do not expose parent/admin routes through the student portal.
 - Do not rely on folder permissions as the only parent/admin authorization boundary.
-- Preserve backups before moving data from desktop mode to service mode.
+- Preserve backups before moving data from Open Only mode to Always Available mode.

@@ -16,7 +16,7 @@ Family data should be stored separately from application binaries. Desktop mode 
 %LOCALAPPDATA%/HomeschoolManagerData
 ```
 
-Optional background service mode stores family data under the computer-level application data folder:
+Recommended Always Available mode stores family data under the computer-level application data folder:
 
 ```text
 %PROGRAMDATA%/HomeschoolManager

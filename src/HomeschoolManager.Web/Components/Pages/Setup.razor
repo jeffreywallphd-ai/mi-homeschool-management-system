@@ -158,6 +158,10 @@ else
         {
             <div class="production-status-grid">
                 <div>
+                    <span>Student access</span>
+                    <strong>@productionStatus.AvailabilityMode</strong>
+                </div>
+                <div>
                     <span>Mode</span>
                     <strong>@productionStatus.HostMode</strong>
                 </div>
@@ -182,13 +186,20 @@ else
                     }
                 </div>
             </div>
-            @if (productionStatus.IsServiceMode)
+            @if (productionStatus.StudentAccessIsAlwaysAvailable)
             {
-                <div class="alert alert-info">Background service mode can keep the student portal available while the computer is on, even when no parent is signed in.</div>
+                <div class="alert alert-success">@productionStatus.StudentAccessSummary</div>
+            }
+            else if (productionStatus.IsAlwaysAvailablePreferred)
+            {
+                <div class="alert alert-warning">
+                    @productionStatus.StudentAccessSummary
+                    Run <strong>HomeschoolManager-Family-Setup.exe</strong> again and choose Always Available, or use the advanced helper at <strong>tools\service\enable-always-available.ps1</strong> from an Administrator PowerShell window.
+                </div>
             }
             else
             {
-                <div class="alert alert-info">Desktop launcher mode runs while the parent starts Homeschool Manager from Windows.</div>
+                <div class="alert alert-info">@productionStatus.StudentAccessSummary</div>
             }
         }
     </section>

@@ -36,6 +36,7 @@ var servicePlan = command.HostMode == ProductionHostMode.Service
     : null;
 var summary = new HostSummary(
     command.HostMode,
+    settings.AvailabilityMode,
     command.ServiceName,
     paths.Root,
     paths.RuntimeSettingsPath,
@@ -174,6 +175,7 @@ static async Task<string> CreatePreUpdateBackupAsync(ProductionPathProvider prod
 
 internal sealed record HostSummary(
     ProductionHostMode HostMode,
+    ProductionAvailabilityMode AvailabilityMode,
     string ServiceName,
     string DataRoot,
     string SettingsPath,
@@ -380,6 +382,16 @@ internal sealed class HostCommand
     public void Apply(ProductionRuntimeSettings settings)
     {
         settings.HostMode = HostMode;
+        if (HostMode == ProductionHostMode.Service)
+        {
+            settings.AvailabilityMode = ProductionAvailabilityMode.AlwaysAvailable;
+        }
+        else if (values.TryGetValue("availability-mode", out var availabilityMode)
+            && Enum.TryParse<ProductionAvailabilityMode>(availabilityMode, ignoreCase: true, out var parsedAvailabilityMode))
+        {
+            settings.AvailabilityMode = parsedAvailabilityMode;
+        }
+
         ApplyPortal("admin", settings.AdminPortal);
         ApplyPortal("student", settings.StudentPortal);
         if (values.TryGetValue("update-feed", out var feed))
@@ -515,6 +527,7 @@ internal sealed class PortalProcessLocator
             ["HomeschoolManager__DataRoot"] = context.Paths.Root,
             ["HomeschoolManager__UseDevelopmentDataRoot"] = "false",
             ["HomeschoolManager__ProductionHostMode"] = context.HostMode.ToString(),
+            ["HomeschoolManager__ProductionAvailabilityMode"] = context.Settings.AvailabilityMode.ToString(),
             ["HomeschoolManager__ProductionSettingsPath"] = context.Paths.RuntimeSettingsPath,
             ["HomeschoolManager__ProductionServiceName"] = context.ServiceName
         };

@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Tests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.DesktopHost", "src\HomeschoolManager.DesktopHost\HomeschoolManager.DesktopHost.csproj", "{031AE266-9FB9-44C8-B607-991530C7E5E0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeschoolManager.Setup", "src\HomeschoolManager.Setup\HomeschoolManager.Setup.csproj", "{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +58,10 @@ Global
 		{031AE266-9FB9-44C8-B607-991530C7E5E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{031AE266-9FB9-44C8-B607-991530C7E5E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{031AE266-9FB9-44C8-B607-991530C7E5E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{26E82016-BEF0-41DF-B182-65BD26375547} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
@@ -65,5 +71,6 @@ Global
 		{412E240B-0FED-4296-BB59-7C1123417F2F} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 		{E730B178-1595-4DBE-861B-C4C30B248145} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 		{031AE266-9FB9-44C8-B607-991530C7E5E0} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
+		{1D2D1750-74D2-4A33-BEAA-D85C0B3D41D2} = {D575896A-CE8F-4C45-A36A-DFBE61AD61D9}
 	EndGlobalSection
 EndGlobal

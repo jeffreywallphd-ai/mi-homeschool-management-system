@@ -11,7 +11,7 @@ The application needs a production-friendly Windows installation path with updat
 
 ## Decision
 
-The first production distribution path uses a small desktop host plus Velopack release packaging.
+The first production distribution path uses a small desktop host plus Velopack release packaging, wrapped by the Homeschool Manager family setup and maintenance tool described in ADR-0009. The production default preference is Always Available student access, implemented through the Windows background runner described in ADR-0007. Open Only desktop launching remains available when the parent does not want Windows to run Homeschool Manager in the background.
 
 The desktop host:
 
@@ -21,8 +21,11 @@ The desktop host:
 - Keeps family data under `%LOCALAPPDATA%/HomeschoolManagerData`, separate from installed application binaries.
 - Passes the configured data root and portal URLs into the web processes.
 - Opens the parent/admin portal in the default browser when configured.
+- Carries the parent-facing availability preference into each portal so Setup can report whether student access is actually always available or only available while the parent has the app open.
 
 Velopack is the first installer/update packaging target because it supports a traditional Windows installer, release feed files, and update packages around an ordinary compiled application layout. MSIX/App Installer remains a possible future distribution target, but it is not the first implementation.
+
+The first Velopack one-click installer does not provide a custom question page for choosing Always Available or Open Only during install. The family-facing installer is therefore `HomeschoolManager-Family-Setup.exe`, which runs the Velopack package installer and then performs Homeschool Manager setup/maintenance steps.
 
 Earlier prerelease desktop builds used `%LOCALAPPDATA%/HomeschoolManager` for family data. Current desktop builds copy known family-data folders from that legacy location into `%LOCALAPPDATA%/HomeschoolManagerData` the first time the new host starts, leave the legacy folder in place, and avoid copying installer-owned binary folders such as `current/`.
 
@@ -34,6 +37,9 @@ Earlier prerelease desktop builds used `%LOCALAPPDATA%/HomeschoolManager` for fa
 - Desktop update checks create a local automatic safety backup before applying an available update when backup-before-update is enabled.
 - Release packaging requires a release machine with the Velopack CLI and code-signing setup before public distribution.
 - Wi-Fi sharing is explicit per portal and must be paired with clear parent/admin access controls.
+- The installer package must include Always Available setup/removal helpers so the default production recommendation can be completed without asking parents to edit configuration files.
+- Release output must clearly separate the family setup wrapper from the raw Velopack package installer.
+- The family setup wrapper is responsible for parent-facing uninstall data-retention prompts when it has registered the maintenance uninstall command.
 
 ## Guardrails
 

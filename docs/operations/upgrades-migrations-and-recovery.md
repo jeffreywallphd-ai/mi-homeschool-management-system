@@ -52,6 +52,14 @@ Background service installations should be updated intentionally:
 
 Service-mode updates must not delete or overwrite `%PROGRAMDATA%/HomeschoolManager`.
 
+## Repair and Uninstall Through Maintenance
+
+The family-facing setup and maintenance wrapper owns parent-visible repair and uninstall choices. Repair may refresh app binaries and reapply Always Available or Open Only mode while preserving family records.
+
+Uninstall defaults to keeping family records. Removing family records is a destructive maintenance action that must require exact parent confirmation and should create a safety archive first. The safety archive is a last-chance copy for uninstall recovery; normal full backups remain the preferred portable restore format.
+
+Windows Add/Remove should invoke the maintenance wrapper when the app was installed through `HomeschoolManager-Family-Setup.exe` and the wrapper successfully registered the maintenance uninstall command. Raw Velopack uninstall remains an advanced path and cannot show parent-facing data-retention prompts.
+
 ## Desktop To Service Migration
 
 Switching from desktop mode to service mode is a data-location migration. The migration helper must copy records from `%LOCALAPPDATA%/HomeschoolManagerData` to `%PROGRAMDATA%/HomeschoolManager`, create a backup first, and leave the original folder in place. If the newer desktop data folder is not present, the helper may fall back to the legacy prerelease desktop folder at `%LOCALAPPDATA%/HomeschoolManager`.

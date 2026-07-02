@@ -18,6 +18,7 @@
 - [ADR-0006: Production Installer Update and Local Sharing](ADR-0006-production-installer-update-and-local-sharing.md)
 - [ADR-0007: Background Service Mode and Machine Data Root](ADR-0007-background-service-mode-and-machine-data-root.md)
 - [ADR-0008: Parent-Authorized Encrypted External Backups](ADR-0008-parent-authorized-encrypted-external-backups.md)
+- [ADR-0009: Family Setup and Maintenance Wrapper](ADR-0009-family-setup-maintenance-wrapper.md)
 
 ## Rule
 

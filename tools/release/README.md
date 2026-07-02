@@ -1,6 +1,6 @@
 # Release Tools
 
-Use `build-windows-release.ps1` from the repository root to create the production publish layout and, when the Velopack CLI is available, a Windows installer/update feed.
+Use `build-windows-release.ps1` from the repository root to create the production publish layout, the family-facing setup and maintenance tool, and, when the Velopack CLI is available, a Windows installer/update feed.
 
 ## Create A Production Package
 
@@ -9,6 +9,8 @@ Use `build-windows-release.ps1` from the repository root to create the productio
 ```
 
 The command above creates only the self-contained application layout for inspection.
+
+If a development machine cannot reach NuGet vulnerability-audit services while smoke-testing the layout, add `-DisableNuGetAudit`. Use the normal audited release command on the release machine.
 
 Remove `-SkipVelopack` on a release machine to create the installer and update feed:
 
@@ -24,10 +26,14 @@ bash tools/release/build-windows-release.sh -Version 1.0.0
 
 The script uses `vpk` from PATH when present, otherwise it restores the repository-pinned local tool from `.config/dotnet-tools.json`.
 
+The release machine must be able to restore the Windows Desktop publish/runtime support packages used by the self-contained family setup app. If NuGet cannot be reached, normal builds may still pass but the self-contained family setup publish can fail.
+
 The layout places the desktop host at the app root and the two portals in `admin/` and `student/` subfolders. The host expects that layout when installed.
 
-The layout also includes optional background-service helpers under `tools\service`:
+The layout also includes Always Available helpers under `tools\service`:
 
+- `enable-always-available.ps1`
+- `disable-always-available.ps1`
 - `move-to-service-data-root.ps1`
 - `install-homeschool-service.ps1`
 - `uninstall-homeschool-service.ps1`
@@ -35,7 +41,8 @@ The layout also includes optional background-service helpers under `tools\servic
 The generated files are written under `artifacts/release` by default:
 
 - `layout/app`: the unpackaged production app layout.
-- `packages/HomeschoolManager-stable-Setup.exe`: the installer to give to the family.
+- `packages/HomeschoolManager-Family-Setup/HomeschoolManager-Family-Setup.exe`: the installer/maintenance tool to give to the family.
+- `packages/HomeschoolManager-stable-Setup.exe`: the raw Velopack package installer used by the family setup tool and advanced troubleshooting.
 - `packages/HomeschoolManager-<version>-stable-full.nupkg`: the full update package.
 - `packages/RELEASES-stable`, `packages/releases.stable.json`, and `packages/assets.stable.json`: update-feed metadata.
 
@@ -45,9 +52,10 @@ Do not commit generated release output. The release output stays ignored by git.
 
 1. Build a package with a real version number, for example `1.0.0`.
 2. Code-sign the release on the release machine before public distribution.
-3. Run `artifacts\release\packages\HomeschoolManager-stable-Setup.exe` on the target Windows computer.
-4. Start Homeschool Manager from the Start menu or desktop shortcut.
-5. In normal desktop mode, the app data stays outside the installed binaries at `%LOCALAPPDATA%\HomeschoolManagerData`.
+3. Give the family the `artifacts\release\packages` folder.
+4. Run `artifacts\release\packages\HomeschoolManager-Family-Setup\HomeschoolManager-Family-Setup.exe` on the target Windows computer.
+5. Choose the default **Always Available** option unless the parent intentionally wants **Open Only**.
+6. The setup tool runs the raw Velopack package installer, turns on Always Available when selected, and registers the Homeschool Manager maintenance uninstall prompt when possible.
 
 The first launch creates `%LOCALAPPDATA%\HomeschoolManagerData\config\production-settings.json`. That file controls the two portals independently:
 
@@ -73,32 +81,28 @@ The first launch creates `%LOCALAPPDATA%\HomeschoolManagerData\config\production
 
 Use `Localhost` for same-computer access only. Use `Wifi` only when that portal should be reachable from another household device on the local network. Admin and student sharing can be configured differently.
 
-## Optional Background Service Install
+Do not give nontechnical families `HomeschoolManager-stable-Setup.exe` as the primary installer. That file is intentionally one-click and cannot ask Homeschool Manager setup or uninstall data-retention questions.
 
-Background service mode is optional. It lets Homeschool Manager start with Windows and keep the student portal available while the computer is on, even when the parent is not signed in.
+## Always Available Student Access
 
-Service mode stores family records at:
+Always Available is the recommended production setup. It lets Homeschool Manager start with Windows and keep the student portal available while the computer is on and awake, even when the parent is not signed in.
+
+Always Available stores family records at:
 
 ```text
 %PROGRAMDATA%\HomeschoolManager
 ```
 
-If the family already used desktop mode, first copy records into the service data folder from an Administrator PowerShell window:
+From the installed app folder, run the friendly helper from an Administrator PowerShell window:
 
 ```powershell
-.\tools\service\move-to-service-data-root.ps1
-```
-
-Then install and start the service:
-
-```powershell
-.\tools\service\install-homeschool-service.ps1 -ParentWindowsAccount "FAMILYPC\Parent" -Start
+.\tools\service\enable-always-available.ps1
 ```
 
 To share only the student portal over home Wi-Fi:
 
 ```powershell
-.\tools\service\install-homeschool-service.ps1 -ParentWindowsAccount "FAMILYPC\Parent" -StudentMode Wifi -StudentWifiHost "192.168.1.25" -Start
+.\tools\service\enable-always-available.ps1 -StudentMode Wifi -StudentWifiHost "192.168.1.25"
 ```
 
 Recommended default:
@@ -106,11 +110,27 @@ Recommended default:
 - Keep the parent/admin portal on `Localhost`.
 - Keep the student portal on `Localhost` until the parent intentionally enables Wi-Fi sharing.
 
-To remove the service without deleting family records:
+To turn off Always Available without deleting family records:
 
 ```powershell
+.\tools\service\disable-always-available.ps1
+```
+
+The lower-level helpers remain available for advanced troubleshooting:
+
+```powershell
+.\tools\service\move-to-service-data-root.ps1
+.\tools\service\install-homeschool-service.ps1 -ParentWindowsAccount "FAMILYPC\Parent" -Start
 .\tools\service\uninstall-homeschool-service.ps1
 ```
+
+## Uninstall And Family Records
+
+When installed through `HomeschoolManager-Family-Setup.exe`, Windows Add/Remove should open the Homeschool Manager maintenance prompt. The default uninstall choice keeps family records on the computer.
+
+The parent can choose to remove family records from the computer. That choice requires typing `Remove Family Records` and can create a safety archive under the parent's Documents folder before deleting the active Homeschool Manager data folders.
+
+If the parent installed by running raw `HomeschoolManager-stable-Setup.exe` directly, Windows Add/Remove uses Velopack's default uninstall behavior and does not show Homeschool Manager's data-retention prompt. Family records still live outside the app binaries and remain on disk unless the parent removes them through the maintenance tool or manually deletes the data folders.
 
 ## Update A Production Installation
 

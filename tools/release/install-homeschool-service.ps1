@@ -48,6 +48,7 @@ New-Item -ItemType Directory -Force -Path `
 $configureArgs = @(
     "--dry-run",
     "--host-mode", "Service",
+    "--availability-mode", "AlwaysAvailable",
     "--service-name", $ServiceName,
     "--admin-mode", $AdminMode,
     "--admin-port", $AdminPort,
@@ -101,7 +102,7 @@ if ($Start) {
 }
 
 Write-Host ""
-Write-Host "Homeschool Manager background service is installed."
-Write-Host "Family records for service mode are stored at: $dataRoot"
+Write-Host "Homeschool Manager Always Available access is installed."
+Write-Host "Family records for Always Available access are stored at: $dataRoot"
 Write-Host "Parent/Admin portal mode: $AdminMode on port $AdminPort"
 Write-Host "Student portal mode: $StudentMode on port $StudentPort"

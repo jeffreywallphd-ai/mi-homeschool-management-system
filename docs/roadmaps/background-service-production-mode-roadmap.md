@@ -1,8 +1,8 @@
 # Background Service Production Mode Roadmap
 
 - Status: accepted
-- Last reviewed: 2026-06-13
-- Canonical for: planned Windows background service mode, machine-level data storage, and always-available household student access
+- Last reviewed: 2026-07-02
+- Canonical for: Always Available production mode, machine-level data storage, and household student access
 - Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0006](../adr/ADR-0006-production-installer-update-and-local-sharing.md), [ADR-0007](../adr/ADR-0007-background-service-mode-and-machine-data-root.md)
 - Related docs: [Local Data and File Storage](../architecture/local-data-and-file-storage.md), [Identity and Access Architecture](../architecture/identity-and-access-architecture.md), [Local Installation and Data Location](../operations/local-installation-and-data-location.md), [Background Service Mode](../operations/background-service-mode.md), [Production Installer Update Roadmap](production-installer-update-roadmap.md)
 - Related tests: `Production service mode uses ProgramData and persists protected-root intent`, `Service data protection plan excludes broad student-facing Windows access`, `Windows release script preserves data outside the app layout and invokes Velopack packaging`
@@ -10,7 +10,7 @@
 
 ## Parent-Friendly Goal
 
-Add an optional "household background service" install mode. In this mode, Homeschool Manager can keep the student portal available while the family PC is turned on, even when no one is signed in to Windows.
+Add a recommended "Always Available" production mode. In this mode, Homeschool Manager can keep the student portal available while the family PC is turned on and awake, even when no one is signed in to Windows.
 
 The parent/admin still owns the records. The student can use the student portal from another household device only when the parent has turned on student Wi-Fi sharing.
 
@@ -25,7 +25,7 @@ The parent/admin still owns the records. The student can use the student portal 
 
 ## Data Location
 
-For background service mode, use a machine-level family data folder:
+For Always Available mode, use a machine-level family data folder:
 
 ```text
 %PROGRAMDATA%/HomeschoolManager
@@ -46,14 +46,14 @@ The folder should be protected with Windows file permissions. Normal student Win
 
 Allowed access:
 
-- The Homeschool Manager background service.
+- The Homeschool Manager Windows background runner.
 - The parent/admin Windows account selected during setup.
 - Local Administrators.
 - Windows SYSTEM.
 
 ## Scope
 
-- Add an optional Windows Service install mode.
+- Add a recommended Windows background install mode with an Open Only fallback.
 - Add service-safe data-root handling under `%PROGRAMDATA%/HomeschoolManager`.
 - Add installer support for creating the service and protected folder.
 - Add parent-facing controls for service status and portal sharing.
@@ -75,13 +75,13 @@ Allowed access:
 
 Offer two parent-facing choices:
 
-- "Run when I open Homeschool Manager": current desktop-host mode.
-- "Keep student access available while this PC is on": background service mode.
+- "Always Available": recommended production mode that keeps student access available while this PC is on.
+- "Open Only": current desktop-host mode.
 
 The installer should explain the practical difference:
 
-- Desktop mode is simpler and runs only while the parent starts the app.
-- Background service mode can keep the student portal available from household devices while the PC is on and awake.
+- Open Only is simpler and runs only while the parent starts the app.
+- Always Available can keep the student portal available from household devices while the PC is on and awake.
 
 ### Service Shape
 
@@ -134,7 +134,7 @@ The parent-facing explanation should say:
 
 ### Update Flow
 
-For service mode:
+For Always Available mode:
 
 - Check for updates from the configured feed.
 - Stop the service before replacing application files.
@@ -145,7 +145,7 @@ For service mode:
 
 ### Migration From Desktop Mode
 
-If the family already uses desktop mode under `%LOCALAPPDATA%/HomeschoolManagerData`, provide a guided move. If that folder is not present, fall back to the legacy prerelease desktop folder under `%LOCALAPPDATA%/HomeschoolManager`:
+If the family already uses Open Only mode under `%LOCALAPPDATA%/HomeschoolManagerData`, provide a guided move. If that folder is not present, fall back to the legacy prerelease desktop folder under `%LOCALAPPDATA%/HomeschoolManager`:
 
 - Show the current data location.
 - Show the new protected service data location.
@@ -156,10 +156,10 @@ If the family already uses desktop mode under `%LOCALAPPDATA%/HomeschoolManagerD
 
 ## Phase 1: Decision and Safety Review
 
-- Create or update an ADR for service mode and machine-level storage.
+- Create or update an ADR for Always Available mode and machine-level storage.
 - Confirm `%PROGRAMDATA%/HomeschoolManager` as the service-mode data root.
 - Confirm folder permission strategy.
-- Confirm whether service mode is optional or the recommended production default.
+- Confirm that Always Available is the recommended production default and Open Only remains available.
 
 Exit criteria:
 
@@ -181,7 +181,7 @@ Exit criteria:
 
 ## Phase 3: Windows Service Host
 
-- Add a service-host entry point or service mode to the production host.
+- Add a service-host entry point or Always Available mode to the production host.
 - Start admin and student portals from the service.
 - Log service startup, shutdown, and portal status without logging private student content.
 - Keep desktop shortcuts for opening the parent/admin portal.
@@ -193,7 +193,7 @@ Exit criteria:
 
 ## Phase 4: Installer Integration
 
-- Add installer support for "background service mode."
+- Add installer support for Always Available mode.
 - Register the Windows Service.
 - Create Start menu and desktop shortcuts.
 - Create protected data folders.
@@ -201,7 +201,7 @@ Exit criteria:
 
 Exit criteria:
 
-- Fresh install can choose service mode.
+- Fresh install can complete Always Available setup.
 - Installed service starts after reboot.
 - Parent can open the admin portal from the shortcut.
 
@@ -226,7 +226,7 @@ Exit criteria:
 
 Exit criteria:
 
-- Existing desktop-mode families can move to service mode without losing records.
+- Existing Open Only families can move to Always Available mode without losing records.
 - The app clearly shows which data location is active.
 
 ## Phase 7: Service-Aware Updates and Recovery
@@ -239,24 +239,24 @@ Exit criteria:
 
 Exit criteria:
 
-- Update flow works while service mode is installed.
+- Update flow works while Always Available mode is installed.
 - Family data remains separate from application binaries.
 
 ## Phase 8: Verification
 
-- Test service-mode path selection.
+- Test Always Available path selection.
 - Test protected folder creation intent.
 - Test portal URL settings.
 - Test installer package creation.
 - Test service start/stop/status commands.
-- Test migration from desktop-mode data to service-mode data.
+- Test migration from Open Only data to Always Available data.
 - Test update package creation and service restart behavior.
 
 Exit criteria:
 
 - Tests pass.
 - Installer package can be built.
-- Manual service-mode smoke test passes on Windows.
+- Manual Always Available smoke test passes on Windows.
 
 ## Implementation Status
 
@@ -267,7 +267,7 @@ Implemented:
 - Protected-folder intent contract.
 - Service install, uninstall, and desktop-to-service data copy helpers.
 - Setup status panel that shows host mode, active records folder, and portal sharing.
-- Parent-friendly service-mode operations docs.
+- Parent-friendly Always Available operations docs.
 
 Verification note:
 
@@ -276,7 +276,7 @@ Verification note:
 
 ## Resolved Direction
 
-- Background service mode remains optional.
+- Always Available is the recommended production setup; Open Only remains available.
 - The parent supplies the Windows account to grant direct support-folder access during install.
 - Administrator elevation is required for service install, uninstall, protected-folder setup, and desktop-to-service copy.
 - Student Wi-Fi sharing remains off by default.

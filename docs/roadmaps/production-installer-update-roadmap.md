@@ -1,9 +1,9 @@
 # Production Installer Update Roadmap
 
 - Status: accepted
-- Last reviewed: 2026-06-13
-- Canonical for: production installer, update, desktop host, and local sharing implementation
-- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0006](../adr/ADR-0006-production-installer-update-and-local-sharing.md)
+- Last reviewed: 2026-07-02
+- Canonical for: production installer, setup/maintenance, update, desktop host, and local sharing implementation
+- Related ADRs: [ADR-0004](../adr/ADR-0004-local-first-parent-pc-data-ownership.md), [ADR-0006](../adr/ADR-0006-production-installer-update-and-local-sharing.md), [ADR-0009](../adr/ADR-0009-family-setup-maintenance-wrapper.md)
 - Related docs: [Local Data and File Storage](../architecture/local-data-and-file-storage.md), [Identity and Access Architecture](../architecture/identity-and-access-architecture.md), [Upgrades Migrations and Recovery](../operations/upgrades-migrations-and-recovery.md)
 - Related tests: `src/HomeschoolManager.Tests/Program.cs`
 - Supersedes: none
@@ -90,3 +90,18 @@ Exit criteria:
 
 - Tests and builds pass.
 - Release layout contains host, admin portal, student portal, and manifest.
+
+## Phase 7: Family Setup and Maintenance Wrapper
+
+- Add `HomeschoolManager-Family-Setup.exe` as the parent-facing installer.
+- Keep Velopack `Setup.exe` as the package/update engine.
+- Present Always Available as the default and Open Only as an alternative.
+- Register the maintenance uninstall prompt after installation when possible.
+- Prompt before removing family records and require exact confirmation for deletion.
+- Create a safety archive before destructive data removal when selected.
+
+Exit criteria:
+
+- Release output includes the family setup wrapper next to package artifacts.
+- Windows Add/Remove can invoke Homeschool Manager's maintenance uninstall prompt for installs completed through the wrapper.
+- Raw Velopack installer is documented as advanced/internal packaging output, not the recommended family installer.
